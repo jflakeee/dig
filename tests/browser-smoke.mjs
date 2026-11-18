@@ -16,7 +16,7 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  if(name==='mobile'){await page.locator('#dig').tap()}else{await page.keyboard.down(' ');await page.waitForTimeout(550);await page.keyboard.up(' ')}
  // Hold the dig control for multiple frames; mobile tap alone may be shorter than a frame.
  if(name==='mobile'){const box=await page.locator('#dig').boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.waitForTimeout(550);await page.mouse.up()}
- await page.waitForFunction(()=>{const raw=localStorage.getItem('dig-mines-v2');return raw&&JSON.parse(raw).mines[0].length>0},{},{timeout:15000});
+ try{await page.waitForFunction(()=>{const raw=localStorage.getItem('dig-mines-v2');return raw&&JSON.parse(raw).mines[0].length>0},{},{timeout:15000})}catch(e){console.error('Dig diagnostic',await page.locator('#hud').textContent(),errors);await page.screenshot({path:'artifacts/'+name+'-dig-failed.png'});throw e}
  const saved=await page.evaluate(()=>localStorage.getItem('dig-mines-v2'));
  await page.getByRole('button',{name:'Surface',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Returned'));
  await page.screenshot({path:'artifacts/'+name+'-dug.png'});
