@@ -1,0 +1,1 @@
+export function joystick(dx:number,dy:number,radius=48,dead=.15){const distance=Math.hypot(dx,dy);if(distance<=radius*dead)return {x:0,y:0};const strength=Math.min(1,(distance/radius-dead)/(1-dead));return {x:dx/distance*strength,y:dy/distance*strength}}

@@ -1,0 +1,5 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {initialLevels,upgrade,spent,upgradedTool} from '../src/upgrades.ts';
+import {openSave} from '../src/save.ts';import {inventoryFromTerrain} from '../src/inventory.ts';
+test('upgrade budget and max level',()=>{assert.equal(upgrade(initialLevels(),0,39),null);assert.deepEqual(upgrade(initialLevels(),0,40),[1,0,0]);assert.equal(spent([5,0,0]),600);assert.equal(upgrade([5,0,0],0,99999),null);assert.ok(upgradedTool(0,[5,0,0]).radius>upgradedTool(0,initialLevels()).radius)});
+test('upgrade persists only after successful write',()=>{const store={raw:null,fail:false,getItem(){return this.raw},setItem(k,v){if(this.fail)throw Error('quota');this.raw=v}};const a=openSave(store);a.data.fill(0);const total=inventoryFromTerrain(a.data);assert.equal(a.write(a.data,total),'saved');store.fail=true;assert.equal(a.write(a.data,total,[1,0,0]),'failed');assert.deepEqual(a.levels,[0,0,0]);store.fail=false;assert.equal(a.write(a.data,total,[1,0,0]),'saved');assert.deepEqual(openSave(store).levels,[1,0,0]);assert.equal(a.write(a.data,total,[0,0,0]),'failed')});

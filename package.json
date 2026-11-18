@@ -7,11 +7,12 @@
     "dev": "vite"
   },
   "dependencies": {
-    "three": "0.179.1"
+    "three": "0.179.1",
+    "plinkfx": "0.3.0"
   },
   "devDependencies": {
     "@types/three": "0.179.0",
     "typescript": "5.8.3",
-    "vite": "6.3.5"
+    "vite": "6.4.6"
   }
 }
