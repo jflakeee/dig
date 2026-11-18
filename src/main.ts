@@ -1,3 +1,4 @@
+import {createCamp} from './camp';
 import {installOreGlow,glowStrength} from './oreGlow';
 import {ViewTool} from './viewTool';
 import {recipes,craft,remaining,consumed} from './crafting';
@@ -20,7 +21,7 @@ import { unlockAudio, muted } from 'plinkfx';
 addEventListener('pointerdown',()=>{unlockAudio()},{once:true});
 addEventListener('keydown',()=>{unlockAudio()},{once:true});
 prepareAudio();const muteButton=document.createElement('button');muteButton.textContent=muted()?'Sound off':'Sound on';muteButton.style.cssText='position:fixed;top:12px;right:12px;z-index:2';document.body.append(muteButton);muteButton.onclick=()=>{const off=toggleMute();muteButton.textContent=off?'Sound off':'Sound on'};
-const scene=new T.Scene();const debris=new Debris(scene);scene.background=new T.Color(0xadc7ce);scene.fog=new T.FogExp2(0xadc7ce,.018);
+const scene=new T.Scene();const debris=new Debris(scene);scene.background=new T.Color(0xadc7ce);scene.fog=new T.FogExp2(0xadc7ce,.018);createCamp(scene);
 const camera=new T.PerspectiveCamera(70,innerWidth/innerHeight,.05,80);
 const renderer=new T.WebGLRenderer({antialias:false});renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.setSize(innerWidth,innerHeight);document.body.prepend(renderer.domElement);
 const ambient=new T.HemisphereLight(0xffffff,0x725037,2);scene.add(ambient);const sun=new T.DirectionalLight(0xffffff,2);sun.position.set(5,10,3);scene.add(sun);
