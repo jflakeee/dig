@@ -1,4 +1,5 @@
-import {N,H,S,decode,encode,solid as isSolid,excavate} from './terrain';
+import {openSave,SAVE} from './save';
+import {N,H,S,solid as isSolid,excavate} from './terrain';
 import * as T from 'three';
 import { play, unlockAudio, muted } from 'plinkfx';
 addEventListener('pointerdown',()=>{unlockAudio()},{once:true});
@@ -8,11 +9,11 @@ const scene=new T.Scene();scene.background=new T.Color(0x9bc8e4);
 const camera=new T.PerspectiveCamera(70,innerWidth/innerHeight,.05,80);
 const renderer=new T.WebGLRenderer({antialias:false});renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.setSize(innerWidth,innerHeight);document.body.prepend(renderer.domElement);
 scene.add(new T.HemisphereLight(0xffffff,0x725037,2));const sun=new T.DirectionalLight(0xffffff,2);sun.position.set(5,10,3);scene.add(sun);
-let data=decode(null);
-const SAVE='dig-p0-v1';let saveStatus='';
-try{data=decode(localStorage.getItem(SAVE))}catch{saveStatus=' · Load failed'}
+const session=openSave({getItem:k=>localStorage.getItem(k),setItem:(k,v)=>localStorage.setItem(k,v)});
+const data=session.data;let saveStatus=session.readable?'':' · Load failed (protected)';
 let count=data.reduce((n,v)=>n+Number(v===0),0);
-function save(){try{localStorage.setItem(SAVE,encode(data));saveStatus=' · Saved'}catch{saveStatus=' · Save failed'}}
+let saving=false,pending=false;
+async function save(){pending=true;if(saving)return;saving=true;try{while(pending){pending=false;const write=()=>session.write(data);const result=navigator.locks?await navigator.locks.request(SAVE,write):write();saveStatus=' · '+({saved:'Saved',failed:'Save failed',conflict:'Save conflict — reload',protected:'Save protected'}[result]);if(result==='conflict'||result==='protected'){pending=false;break}}}catch{saveStatus=' · Save failed'}finally{saving=false}}
 const solid=(x:number,y:number,z:number)=>isSolid(data,x,y,z);
 const mat=new T.MeshStandardMaterial({vertexColors:true,flatShading:true});const chunks=new Map<string,T.Mesh>();
 const faces=[{n:[1,0,0],v:[[1,0,0],[1,1,0],[1,1,1],[1,0,1]]},{n:[-1,0,0],v:[[0,0,1],[0,1,1],[0,1,0],[0,0,0]]},{n:[0,1,0],v:[[0,1,1],[1,1,1],[1,1,0],[0,1,0]]},{n:[0,-1,0],v:[[0,0,0],[1,0,0],[1,0,1],[0,0,1]]},{n:[0,0,1],v:[[1,0,1],[1,1,1],[0,1,1],[0,0,1]]},{n:[0,0,-1],v:[[0,0,0],[0,1,0],[1,1,0],[1,0,0]]}];
