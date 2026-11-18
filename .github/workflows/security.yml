@@ -1,0 +1,29 @@
+name: Dependency audit
+on:
+  push:
+    branches: [chore/toolchain-integration]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Collect audit reports
+        run: |
+          mkdir -p audits
+          npm audit --omit=dev --json > audits/runtime.json || true
+          npm audit --json > audits/all.json || true
+          node -e 'for(const f of ["runtime","all"]){const r=require("./audits/"+f+".json");if(!r.metadata)throw Error("Audit unavailable: "+f);console.log(f,JSON.stringify(r.metadata.vulnerabilities));for(const [name,v] of Object.entries(r.vulnerabilities||{}))console.log(name,v.severity,JSON.stringify(v.via),JSON.stringify(v.fixAvailable))}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-audit
+          path: audits/
+      - name: Runtime high severity gate
+        run: npm audit --omit=dev --audit-level=high
