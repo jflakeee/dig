@@ -13,7 +13,7 @@ const session=openSave({getItem:k=>localStorage.getItem(k),setItem:(k,v)=>localS
 const data=session.data;let saveStatus=session.readable?'':' · Load failed (protected)';
 let count=data.reduce((n,v)=>n+Number(v===0),0);
 let saving=false,pending=false;
-async function save(){pending=true;if(saving)return;saving=true;try{while(pending){pending=false;const write=()=>session.write(data);const result=navigator.locks?await navigator.locks.request(SAVE,write):write();saveStatus=' · '+({saved:'Saved',failed:'Save failed',conflict:'Save conflict — reload',protected:'Save protected'}[result]);if(result==='conflict'||result==='protected'){pending=false;break}}}catch{saveStatus=' · Save failed'}finally{saving=false}}
+async function save(){pending=true;if(saving)return;saving=true;try{while(pending){pending=false;const write=()=>session.write(data);let result:ReturnType<typeof session.write>='failed';if(navigator.locks){await navigator.locks.request(SAVE,()=>{result=write()})}else{result=write()}saveStatus=' · '+({saved:'Saved',failed:'Save failed',conflict:'Save conflict — reload',protected:'Save protected'}[result]);if(result==='conflict'||result==='protected'){pending=false;break}}}catch{saveStatus=' · Save failed'}finally{saving=false}}
 const solid=(x:number,y:number,z:number)=>isSolid(data,x,y,z);
 const mat=new T.MeshStandardMaterial({vertexColors:true,flatShading:true});const chunks=new Map<string,T.Mesh>();
 const faces=[{n:[1,0,0],v:[[1,0,0],[1,1,0],[1,1,1],[1,0,1]]},{n:[-1,0,0],v:[[0,0,1],[0,1,1],[0,1,0],[0,0,0]]},{n:[0,1,0],v:[[0,1,1],[1,1,1],[1,1,0],[0,1,0]]},{n:[0,-1,0],v:[[0,0,0],[1,0,0],[1,0,1],[0,0,1]]},{n:[0,0,1],v:[[1,0,1],[1,1,1],[0,1,1],[0,0,1]]},{n:[0,0,-1],v:[[0,0,0],[0,1,0],[1,1,0],[1,0,0]]}];
