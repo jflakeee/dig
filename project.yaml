@@ -1,0 +1,11 @@
+schema_version: 1
+framework:
+  version: 1.3.0
+  last_upgraded: 2026-11-09
+project:
+  name: DIG
+engine:
+  name: Web
+  code_root: src/
+modes:
+  rigor: standard
