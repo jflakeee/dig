@@ -30,5 +30,5 @@ export function density(data:Uint8Array,x:number,y:number,z:number){
 export function surfaceSpawn(data:Uint8Array){
  for(let z=1;z<N-1;z++)for(let x=1;x<N-1;x++){
  if(solid(data,x,H-1,z)&&solid(data,x-1,H-1,z)&&solid(data,x+1,H-1,z)&&solid(data,x,H-1,z-1)&&solid(data,x,H-1,z+1))return {x:(x+.5)*S,y:H*S+1.65,z:(z+.5)*S};
- }return {x:N*S/2,y:H*S+1.65,z:N*S/2};
+ }return null;
 }
