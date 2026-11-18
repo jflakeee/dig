@@ -6,12 +6,12 @@ export function encode(data:Uint8Array){const removed:number[]=[];data.forEach((
 export function excavate(data:Uint8Array,a:{x:number;y:number;z:number}){const dirty=new Set<string>();let removed=0;for(let x=a.x-1;x<=a.x+1;x++)for(let y=a.y-1;y<=a.y+1;y++)for(let z=a.z-1;z<=a.z+1;z++){if(!solid(data,x,y,z))continue;data[index(x,y,z)]=0;removed++;for(const [dx,dy,dz] of [[0,0,0],[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]])dirty.add([Math.floor((x+dx)/8),Math.floor((y+dy)/8),Math.floor((z+dz)/8)].join(','))}return {dirty,removed}}
 
 export function excavateSphere(data:Uint8Array,p:{x:number;y:number;z:number},radius=.85){
- const dirty=new Set<string>();let removed=0;
+ const dirty=new Set<string>();let removed=0;const indices:number[]=[];
  for(let y=Math.max(0,Math.floor((p.y-radius)/S));y<Math.min(H,Math.ceil((p.y+radius)/S));y++)for(let z=Math.max(0,Math.floor((p.z-radius)/S));z<Math.min(N,Math.ceil((p.z+radius)/S));z++)for(let x=Math.max(0,Math.floor((p.x-radius)/S));x<Math.min(N,Math.ceil((p.x+radius)/S));x++){
  if(!solid(data,x,y,z)||((x+.5)*S-p.x)**2+((y+.5)*S-p.y)**2+((z+.5)*S-p.z)**2>radius**2)continue;
- data[index(x,y,z)]=0;removed++;
+ const i=index(x,y,z);data[i]=0;indices.push(i);removed++;
  for(let dx=-1;dx<=0;dx++)for(let dy=-1;dy<=0;dy++)for(let dz=-1;dz<=0;dz++)dirty.add([Math.floor((x+dx)/8),Math.floor((y+dy)/8),Math.floor((z+dz)/8)].join(','));
- }return {dirty,removed}
+ }return {dirty,removed,indices}
 }
 // Piecewise linear interpolation matching the six tetrahedra around the cube diagonal.
 export function density(data:Uint8Array,x:number,y:number,z:number){
