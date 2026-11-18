@@ -1,0 +1,6 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {openSave} from '../src/save.ts';import {excavateSphere} from '../src/terrain.ts';import {inventoryFromTerrain} from '../src/inventory.ts';import {wallet,available} from '../src/economy.ts';
+function setup(){const store={raw:null,fail:false,getItem(){return this.raw},setItem(k,v){if(this.fail)throw Error('quota');this.raw=v}};const a=openSave(store);excavateSphere(a.data,{x:4,y:2,z:4},1.1);const total=inventoryFromTerrain(a.data);return {store,a,total}}
+test('sale persists and cannot duplicate on reload',()=>{const {store,a,total}=setup();assert.equal(a.write(a.data,total),'saved');const b=openSave(store);assert.ok(wallet(b.sold)>0);assert.ok(Object.values(available(total,b.sold)).every(n=>n===0));assert.equal(b.write(b.data,total),'saved');assert.equal(wallet(openSave(store).sold),wallet(total))});
+test('failed sale does not credit wallet',()=>{const {store,a,total}=setup();store.fail=true;assert.equal(a.write(a.data,total),'failed');assert.equal(wallet(a.sold),0);store.fail=false;assert.equal(a.write(a.data,total),'saved')});
+test('stale sale and invalid ledger rejected',()=>{const {store,a,total}=setup(),b=openSave(store);assert.equal(a.write(a.data,{...total,gem:999999}),'failed');assert.equal(a.write(a.data,total),'saved');assert.equal(b.write(b.data),'conflict')});
