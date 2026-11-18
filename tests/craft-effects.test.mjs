@@ -1,0 +1,3 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {craftEffects,craftedTool} from '../src/craftEffects.ts';import {upgradedTool} from '../src/upgrades.ts';
+test('zero crafted items preserve original tool stats',()=>{assert.deepEqual(craftedTool(0,[0,0,0],[0,0,0,0]),upgradedTool(0,[0,0,0]))});
+test('bonuses are bounded and combine with upgrades',()=>{assert.deepEqual(craftEffects([100,100,100,100]),{speed:1.2,reach:1.25,radius:1.25,lamp:1.75});const a=upgradedTool(1,[0,5,0]),b=craftedTool(1,[0,5,0],[10,10,10,5]);assert.ok(b.interval<a.interval&&b.radius>a.radius&&b.reach>a.reach)});
