@@ -15,11 +15,20 @@ export function excavateSphere(data:Uint8Array,p:{x:number;y:number;z:number},ra
 }
 // Piecewise linear interpolation matching the six tetrahedra around the cube diagonal.
 export function density(data:Uint8Array,x:number,y:number,z:number){
- const q=[x/S-.5,y/S-.5,z/S-.5],b=q.map(Math.floor),f=q.map((v,i)=>v-b[i]);
- const order=[0,1,2].sort((a,c)=>f[c]-f[a]);const v=b.slice();
- const sample=()=>Number(solid(data,v[0],v[1],v[2]));
- let d=(1-f[order[0]])*sample();v[order[0]]++;
- d+=(f[order[0]]-f[order[1]])*sample();v[order[1]]++;
- d+=(f[order[1]]-f[order[2]])*sample();v[order[2]]++;
- return d+f[order[2]]*sample();
+ const X=x/S-.5,Y=y/S-.5,Z=z/S-.5;
+ const i=Math.floor(X),j=Math.floor(Y),k=Math.floor(Z),a=X-i,b=Y-j,c=Z-k;
+ const v=(dx:number,dy:number,dz:number)=>Number(solid(data,i+dx,j+dy,k+dz));
+ const low=v(0,0,0),high=v(1,1,1);
+ if(a>=b){if(b>=c)return (1-a)*low+(a-b)*v(1,0,0)+(b-c)*v(1,1,0)+c*high;
+ if(a>=c)return (1-a)*low+(a-c)*v(1,0,0)+(c-b)*v(1,0,1)+b*high;
+ return (1-c)*low+(c-a)*v(0,0,1)+(a-b)*v(1,0,1)+b*high}
+ if(a>=c)return (1-b)*low+(b-a)*v(0,1,0)+(a-c)*v(1,1,0)+c*high;
+ if(b>=c)return (1-b)*low+(b-c)*v(0,1,0)+(c-a)*v(0,1,1)+a*high;
+ return (1-c)*low+(c-b)*v(0,0,1)+(b-a)*v(0,1,1)+a*high;
+}
+
+export function surfaceSpawn(data:Uint8Array){
+ for(let z=1;z<N-1;z++)for(let x=1;x<N-1;x++){
+ if(solid(data,x,H-1,z)&&solid(data,x-1,H-1,z)&&solid(data,x+1,H-1,z)&&solid(data,x,H-1,z-1)&&solid(data,x,H-1,z+1))return {x:(x+.5)*S,y:H*S+1.65,z:(z+.5)*S};
+ }return {x:N*S/2,y:H*S+1.65,z:N*S/2};
 }
