@@ -7,6 +7,7 @@ try{
 for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mobile',{...devices['iPhone 13'],viewport:{width:844,height:390},screen:{width:844,height:390}}]]){
  const context=await browser.newContext(options);const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error'&&/shader|webgl|three/i.test(m.text()))errors.push(m.text())});
  await page.goto('http://127.0.0.1:4173/dig/');await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Removed 0'));
+ const boxes=await page.locator('#actions button').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {top:r.top,bottom:r.bottom,height:r.height,left:r.left,right:r.right}}));assert.equal(boxes.length,5);for(let i=0;i<boxes.length;i++){const b=boxes[i];assert.ok(b.height>=44&&b.left>=0&&b.right<=options.viewport.width&&b.bottom<=options.viewport.height);if(i)assert.ok(b.top>=boxes[i-1].bottom)}
  await page.screenshot({path:'artifacts/'+name+'-initial.png'});
  for(const tool of ['Pickaxe','Drill','Shovel']){const button=page.getByRole('button',{name:tool,exact:true});await button.click();assert.equal(await button.getAttribute('aria-pressed'),'true')}
  await page.getByRole('button',{name:'Lamp on',exact:true}).click();await page.getByRole('button',{name:'Lamp off',exact:true}).click();
@@ -42,8 +43,8 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  await page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('dig-mines-v2'));p.mines[1]=Array.from({length:12442},(_,i)=>i);localStorage.setItem('dig-mines-v2',JSON.stringify(p))});
  await page.reload();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.getByRole('button',{name:'Mine 3',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 3 · Removed 0'),{},{timeout:60000});
  await page.screenshot({path:'artifacts/'+name+'-mine3.png'});
- const timings=await page.evaluate(async()=>{const samples=[];let last=performance.now();for(let i=0;i<120;i++){const now=await new Promise(resolve=>requestAnimationFrame(resolve));samples.push(now-last);last=now}samples.sort((a,b)=>a-b);return {mean:samples.reduce((a,b)=>a+b,0)/samples.length,p95:samples[Math.ceil(samples.length*.95)-1],max:samples.at(-1)}});
- console.log(JSON.stringify({profile:name,mine:3,mode:'headless software WebGL',...timings}));
+ for(let trial=1;trial<=3;trial++){const timings=await page.evaluate(async()=>{const samples=[];let last=performance.now();for(let i=0;i<120;i++){const now=await new Promise(resolve=>requestAnimationFrame(resolve));samples.push(now-last);last=now}samples.sort((a,b)=>a-b);return {mean:samples.reduce((a,b)=>a+b,0)/samples.length,p95:samples[Math.ceil(samples.length*.95)-1],max:samples.at(-1)}});
+ console.log(JSON.stringify({profile:name,mine:3,trial,mode:'headless software WebGL',...timings}));}
  await page.keyboard.down('w');await page.waitForTimeout(500);await page.keyboard.up('w');
  await page.reload();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 3 · Removed 0'),{},{timeout:60000});
  assert.deepEqual(errors,[]);await page.evaluate(()=>localStorage.setItem('dig-mines-v2','invalid-save'));await page.reload();await page.getByRole('alert').waitFor();assert.equal(await page.evaluate(()=>localStorage.getItem('dig-mines-v2')),'invalid-save');console.log(name+' gameplay and corrupt-save protection passed');await context.close();
