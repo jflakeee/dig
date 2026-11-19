@@ -1,3 +1,4 @@
+import {naturalVoidMask} from '../src/caves.ts';
 import {chromium,devices} from 'playwright';
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
@@ -8,6 +9,7 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  const context=await browser.newContext(options);const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error'&&/shader|webgl|three/i.test(m.text()))errors.push(m.text())});
  await page.goto('http://127.0.0.1:4173/dig/');await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Removed 0'));
  const boxes=await page.locator('#actions button').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {top:r.top,bottom:r.bottom,height:r.height,left:r.left,right:r.right}}));assert.equal(boxes.length,5);for(let i=0;i<boxes.length;i++){const b=boxes[i];assert.ok(b.height>=44&&b.left>=0&&b.right<=options.viewport.width&&b.bottom<=options.viewport.height);if(i)assert.ok(b.top>=boxes[i-1].bottom)}
+ const leftControls=await page.locator('#craft-toggle,#travel-toggle,#journal-toggle,#move').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {id:e.id,x:r.x,y:r.y,w:r.width,h:r.height}}));for(let i=0;i<leftControls.length;i++)for(let j=i+1;j<leftControls.length;j++){const a=leftControls[i],b=leftControls[j];assert.ok(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y,a.id+' overlaps '+b.id)}
  await page.screenshot({path:'artifacts/'+name+'-initial.png'});
  for(const tool of ['Pickaxe','Drill','Shovel']){const button=page.getByRole('button',{name:tool,exact:true});await button.click();assert.equal(await button.getAttribute('aria-pressed'),'true')}
  await page.getByRole('button',{name:'Lamp on',exact:true}).click();await page.getByRole('button',{name:'Lamp off',exact:true}).click();
@@ -38,9 +40,10 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  assert.equal(await page.evaluate(()=>localStorage.getItem('dig-mines-v2')),saved);
  await page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('dig-mines-v2'));p.mines[0]=Array.from({length:2458},(_,i)=>i);p.legacy=JSON.stringify({version:1,removed:p.mines[0]});localStorage.setItem('dig-mines-v2',JSON.stringify(p))});
  await page.reload();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.getByRole('button',{name:'Mine 2',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 2 · Removed 0'),{},{timeout:60000});
+ await page.getByRole('button',{name:'Journal',exact:true}).click();await page.locator('#journal-panel').getByRole('heading',{name:/Exploration 0/}).waitFor();await page.screenshot({path:'artifacts/'+name+'-journal.png'});await page.locator('#journal-panel').getByRole('button',{name:'Close',exact:true}).click();
  await page.screenshot({path:'artifacts/'+name+'-mine2.png'});
  await page.getByRole('button',{name:'Mine 2',exact:true}).click();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 1 · Removed 2458'),{},{timeout:60000});
- await page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('dig-mines-v2'));p.mines[1]=Array.from({length:12442},(_,i)=>i);localStorage.setItem('dig-mines-v2',JSON.stringify(p))});
+ const mask=naturalVoidMask(2),removed=Array.from(mask.keys()).filter(i=>!mask[i]).slice(0,12442);assert.equal(removed.length,12442);await page.evaluate(removed=>{const p=JSON.parse(localStorage.getItem('dig-mines-v2'));p.mines[1]=removed;localStorage.setItem('dig-mines-v2',JSON.stringify(p))},removed);
  await page.reload();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.getByRole('button',{name:'Mine 3',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 3 · Removed 0'),{},{timeout:60000});
  await page.screenshot({path:'artifacts/'+name+'-mine3.png'});
  for(let trial=1;trial<=3;trial++){const timings=await page.evaluate(async()=>{const samples=[];let last=performance.now();for(let i=0;i<120;i++){const now=await new Promise(resolve=>requestAnimationFrame(resolve));samples.push(now-last);last=now}samples.sort((a,b)=>a-b);return {mean:samples.reduce((a,b)=>a+b,0)/samples.length,p95:samples[Math.ceil(samples.length*.95)-1],max:samples.at(-1)}});

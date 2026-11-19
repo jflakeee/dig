@@ -1,3 +1,4 @@
+import {discoveryGold} from './journal.ts';
 import {parseProfile,type Profile,PROFILE} from './mineProfile.ts';
 import {profileInventory} from './mineOres.ts';
 import {openSave,SAVE,type Store} from './save.ts';
@@ -12,7 +13,7 @@ export function ledgerFor(p:UnifiedProfile):Ledger{
  if(!old.readable)throw Error('Invalid legacy');
  const l=p.ledger??{sold:old.sold,levels:old.levels,crafted:old.crafted},total=profileInventory(p),sold=emptyInventory();
  for(const k of oreKeys){const n=l.sold[k];if(!Number.isSafeInteger(n)||n<old.sold[k]||n>total[k])throw Error('Invalid sold');sold[k]=n}
- const levels=validateLevels(l.levels,wallet(sold)),crafted=validateCrafted(l.crafted,total,sold);
+ const levels=validateLevels(l.levels,wallet(sold)+discoveryGold(p.journal??[])),crafted=validateCrafted(l.crafted,total,sold);
  if(levels.some((n,i)=>n<old.levels[i])||crafted.some((n,i)=>n<old.crafted[i]))throw Error('Legacy regression');
  return {sold,levels,crafted};
 }
