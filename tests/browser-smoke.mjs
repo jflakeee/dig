@@ -26,6 +26,10 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  await page.reload();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.getByRole('button',{name:'Mine 2',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 2 · Removed 0'),{},{timeout:60000});
  await page.screenshot({path:'artifacts/'+name+'-mine2.png'});
  await page.getByRole('button',{name:'Mine 2',exact:true}).click();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 1 · Removed 2458'),{},{timeout:60000});
+ await page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('dig-mines-v2'));p.mines[1]=Array.from({length:12442},(_,i)=>i);localStorage.setItem('dig-mines-v2',JSON.stringify(p))});
+ await page.reload();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.getByRole('button',{name:'Mine 3',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 3 · Removed 0'),{},{timeout:60000});
+ await page.screenshot({path:'artifacts/'+name+'-mine3.png'});
+ await page.reload();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 3 · Removed 0'),{},{timeout:60000});
  assert.deepEqual(errors,[]);console.log(name+' gameplay passed');await context.close();
 }
 }finally{await browser.close()}
