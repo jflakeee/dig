@@ -1,0 +1,2 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {caveCandidates,naturalVoidMask} from '../src/caves.ts';import {discoveries} from '../src/journal.ts';
+test('cached generation does not expose mutable shared state',()=>{const a=caveCandidates(2),b=caveCandidates(2);a[0].x=-1;assert.deepEqual(caveCandidates(2),b);const mask=naturalVoidMask(2),copy=mask.slice();mask.fill(0);assert.deepEqual(naturalVoidMask(2),copy);const d=discoveries(),e=discoveries();d[0].reward=999;assert.deepEqual(discoveries(),e)});

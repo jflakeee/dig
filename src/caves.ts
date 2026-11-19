@@ -1,7 +1,8 @@
 import {mines} from './mineProfile.ts';
 import {veinHash} from './veins.ts';
 export type Cave={id:string;x:number;y:number;z:number;rx:number;ry:number;rz:number};
-export function caveCandidates(id:number):Cave[]{
+const caveCache=new Map<number,Cave[]>();
+export function caveCandidates(id:number):Cave[]{const cached=caveCache.get(id);if(cached)return cached.map(c=>({...c}));
  const m=mines[id-1];if(!m||id===1)return [];
  const result:Cave[]=[];
  for(let k=0;k<(id===2?4:8);k++){
@@ -11,10 +12,11 @@ export function caveCandidates(id:number):Cave[]{
  const y=ry+2+Math.floor(h(6)*(m.h-2*ry-14));
  const c={id:'cave-'+id+'-'+k,x,y,z,rx,ry,rz};
  if(result.every(b=>Math.hypot(b.x-x,b.z-z,b.y-y)>Math.max(b.rx,b.ry,b.rz)+Math.max(rx,ry,rz)+2))result.push(c);
- }return result;
+ }caveCache.set(id,result);return result.map(c=>({...c}));
 }
-export function naturalVoidMask(id:number):Uint8Array{
+const maskCache=new Map<number,Uint8Array>();
+export function naturalVoidMask(id:number):Uint8Array{const cached=maskCache.get(id);if(cached)return cached.slice();
  const m=mines[id-1];if(!m)return new Uint8Array(0);const mask=new Uint8Array(m.n*m.n*m.h);
  for(const c of caveCandidates(id))for(let y=c.y-c.ry;y<=c.y+c.ry;y++)for(let z=c.z-c.rz;z<=c.z+c.rz;z++)for(let x=c.x-c.rx;x<=c.x+c.rx;x++)if(((x-c.x)/c.rx)**2+((y-c.y)/c.ry)**2+((z-c.z)/c.rz)**2<=1)mask[x+z*m.n+y*m.n*m.n]=1;
- return mask;
+ maskCache.set(id,mask);return mask.slice();
 }
