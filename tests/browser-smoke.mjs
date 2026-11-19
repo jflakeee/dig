@@ -26,7 +26,7 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  await touch('touchStart',[j]);await touch('touchMove',[{...j,x:j.x+30}]);
  await page.waitForFunction(v=>document.querySelector('#stick').style.transform!==v,initial);
  await touch('touchStart',[{...j,x:j.x+30},d]);await page.waitForTimeout(350);
- await touch('touchCancel',[]);await page.waitForFunction(v=>document.querySelector('#stick').style.transform===v,initial);
+ await touch('touchCancel',[]);try{await page.waitForFunction(v=>document.querySelector('#stick').style.transform===v,initial,{timeout:5000})}catch(e){console.error('Touch cancellation diagnostic',await page.locator('#stick').evaluate(e=>({inline:e.style.transform,computed:getComputedStyle(e).transform})));await page.screenshot({path:'artifacts/mobile-cancel-failed.png'});throw e}
  await cdp.detach();console.log('mobile multi-pointer cancellation passed');
  }
  await page.getByRole('button',{name:'Surface',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Returned'));
