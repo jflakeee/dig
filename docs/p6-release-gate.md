@@ -1,0 +1,2 @@
+# P6 release gate
+Reviewed eae0890: Integration CI 44477070108 passed 70/70; Dependency audit 44477070213 passed with zero runtime and development dependency vulnerabilities. Browser smoke 44477070091 must pass before merging. Prior mobile cancellation test timed out; computed-transform fix pending verification. Physical device, full depletion end-to-end, visual inspection of current build, and performance acceptance remain open. Main deployment unchanged. No production-readiness claim.
