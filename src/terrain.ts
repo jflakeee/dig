@@ -36,3 +36,7 @@ export function surfaceSpawn(data:Uint8Array,shape:MineShape=originalShape){
  if(solid(data,x,H-1,z,shape)&&solid(data,x-1,H-1,z,shape)&&solid(data,x+1,H-1,z,shape)&&solid(data,x,H-1,z-1,shape)&&solid(data,x,H-1,z+1,shape))return {x:(x+.5)*S,y:H*S+1.65,z:(z+.5)*S};
  }return null;
 }
+
+// Permanent rescue platform outside the excavatable volume, on the north edge.
+export function rescueSpawn(shape:MineShape=originalShape){return {x:shape.n*S/2,y:shape.h*S+1.65,z:-1.5}}
+export function rescueFloor(x:number,z:number,shape:MineShape=originalShape){return x>=.25&&x<=shape.n*S-.25&&z>=-2.75&&z<=.25?shape.h*S:null}
