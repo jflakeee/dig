@@ -1,0 +1,2 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {excavationFeedback} from '../src/excavationFeedback.ts';
+test('feedback reports actual gains and rare priority',()=>{assert.equal(excavationFeedback(0,{}),null);assert.deepEqual(excavationFeedback(4,{}),{text:'Dug 4 blocks',rare:false});assert.deepEqual(excavationFeedback(5,{coal:2,gem:1}),{text:'+1 gem · +2 coal',rare:true});assert.deepEqual(excavationFeedback(3,{iron:1}),{text:'+1 iron',rare:false})});

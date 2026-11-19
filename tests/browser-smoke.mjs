@@ -10,7 +10,7 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  await page.goto('http://127.0.0.1:4173/dig/?perf=1');await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Removed 0'));
  const boxes=await page.locator('#actions button').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {top:r.top,bottom:r.bottom,height:r.height,left:r.left,right:r.right}}));assert.equal(boxes.length,5);for(let i=0;i<boxes.length;i++){const b=boxes[i];assert.ok(b.height>=44&&b.left>=0&&b.right<=options.viewport.width&&b.bottom<=options.viewport.height);if(i)assert.ok(b.top>=boxes[i-1].bottom)}
  const leftControls=await page.locator('#craft-toggle,#travel-toggle,#journal-toggle,#move').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {id:e.id,x:r.x,y:r.y,w:r.width,h:r.height}}));for(let i=0;i<leftControls.length;i++)for(let j=i+1;j<leftControls.length;j++){const a=leftControls[i],b=leftControls[j];assert.ok(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y,a.id+' overlaps '+b.id)}
- await page.screenshot({path:'artifacts/'+name+'-initial.png'});
+ assert.match(await page.locator('#upgrade-preview').textContent(),/Radius .*180.*169ms/);await page.screenshot({path:'artifacts/'+name+'-initial.png'});
  for(const tool of ['Pickaxe','Drill','Shovel']){const button=page.getByRole('button',{name:tool,exact:true});await button.click();assert.equal(await button.getAttribute('aria-pressed'),'true')}
  await page.getByRole('button',{name:'Lamp on',exact:true}).click();await page.getByRole('button',{name:'Lamp off',exact:true}).click();
  await page.getByRole('button',{name:'Craft',exact:true}).click();assert.equal(await page.getByRole('button',{name:/Coal fuel/}).isDisabled(),true);await page.getByRole('button',{name:'Close',exact:true}).click();
@@ -20,6 +20,7 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  // Hold the dig control for multiple frames; mobile tap alone may be shorter than a frame.
  if(name==='mobile'){const box=await page.locator('#dig').boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.waitForTimeout(550);await page.mouse.up()}
  try{await page.waitForFunction(()=>{const raw=localStorage.getItem('dig-mines-v2');return raw&&JSON.parse(raw).mines[0].length>0},{},{timeout:15000})}catch(e){console.error('Dig diagnostic',await page.locator('#hud').textContent(),errors);await page.screenshot({path:'artifacts/'+name+'-dig-failed.png'});throw e}
+ assert.match(await page.locator('#excavation-feedback').textContent(),/Dug|\+/);await page.screenshot({path:'artifacts/'+name+'-feedback.png'});
  if(name==='mobile'){
  const cdp=await context.newCDPSession(page),joy=await page.locator('#move').boundingBox(),dig=await page.locator('#dig').boundingBox();
  const j={x:joy.x+joy.width/2,y:joy.y+joy.height/2,id:1},d={x:dig.x+dig.width/2,y:dig.y+dig.height/2,id:2};
@@ -40,7 +41,7 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  assert.equal(await page.evaluate(()=>localStorage.getItem('dig-mines-v2')),saved);
  await page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('dig-mines-v2'));p.mines[0]=Array.from({length:2458},(_,i)=>i);p.legacy=JSON.stringify({version:1,removed:p.mines[0]});localStorage.setItem('dig-mines-v2',JSON.stringify(p))});
  await page.reload();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.getByRole('button',{name:'Mine 2',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 2 · Removed 0'),{},{timeout:60000});
- await page.getByRole('button',{name:'Journal',exact:true}).click();await page.locator('#journal-panel').getByRole('heading',{name:/Exploration 0/}).waitFor();await page.screenshot({path:'artifacts/'+name+'-journal.png'});await page.locator('#journal-panel').getByRole('button',{name:'Close',exact:true}).click();
+ await page.getByRole('button',{name:'Journal',exact:true}).click();await page.locator('#journal-panel').getByRole('heading',{name:/Exploration 0/}).waitFor();await page.locator('#journal-panel').getByRole('heading',{name:'Objectives'}).waitFor();assert.equal(await page.locator('#journal-panel progress').first().getAttribute('value'),'2458');await page.screenshot({path:'artifacts/'+name+'-journal.png'});await page.locator('#journal-panel').getByRole('button',{name:'Close',exact:true}).click();
  await page.screenshot({path:'artifacts/'+name+'-mine2.png'});
  await page.getByRole('button',{name:'Mine 2',exact:true}).click();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 1 · Removed 2458'),{},{timeout:60000});
  const mask=naturalVoidMask(2),removed=Array.from(mask.keys()).filter(i=>!mask[i]).slice(0,12442);assert.equal(removed.length,12442);await page.evaluate(removed=>{const p=JSON.parse(localStorage.getItem('dig-mines-v2'));p.mines[1]=removed;localStorage.setItem('dig-mines-v2',JSON.stringify(p))},removed);
