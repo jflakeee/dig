@@ -16,3 +16,5 @@ export function claimDiscovery(ids:readonly string[],mine:number,id:string){
  return {ids:[...ids,id],reward:d.reward};
 }
 export function journalProgress(ids:readonly string[]){if(!validateJournal(ids))throw Error('Invalid journal');const all=discoveries();return {found:ids.length,total:all.length,categories:['cave','crystal','relic','cache'].map(category=>{const items=all.filter(d=>d.category===category);return {category,total:items.length,found:items.filter(d=>ids.includes(d.id)).length}})}}
+
+export function discoveryGold(ids:readonly string[]){return discoveries().reduce((n,d)=>n+(ids.includes(d.id)?d.reward:0),0)}
