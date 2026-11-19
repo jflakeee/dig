@@ -1,0 +1,2 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {discoveries} from '../src/journal.ts';import {discoveryFeedback} from '../src/discoveryFeedback.ts';
+test('every discovery has presentation and cache rewards match catalog',()=>{for(const d of discoveries()){const f=discoveryFeedback(d.mine,d.id);assert.ok(f);assert.ok(f.title.length);if(d.category==='cache')assert.equal(f.detail,'+'+d.reward+' Gold');assert.equal(discoveryFeedback(1,d.id),null)}assert.equal(discoveryFeedback(2,'unknown'),null)});
