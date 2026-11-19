@@ -21,12 +21,12 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  const cdp=await context.newCDPSession(page),joy=await page.locator('#move').boundingBox(),dig=await page.locator('#dig').boundingBox();
  const j={x:joy.x+joy.width/2,y:joy.y+joy.height/2,id:1},d={x:dig.x+dig.width/2,y:dig.y+dig.height/2,id:2};
  const touch=(type,touchPoints)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints});
- const initial='translate(-50%,-50%)';
  await page.getByRole('button',{name:'Surface',exact:true}).click();
+ const initial=await page.locator('#stick').evaluate(e=>getComputedStyle(e).transform);
  await touch('touchStart',[j]);await touch('touchMove',[{...j,x:j.x+30}]);
- await page.waitForFunction(v=>document.querySelector('#stick').style.transform!==v,initial);
+ await page.waitForFunction(v=>getComputedStyle(document.querySelector('#stick')).transform!==v,initial);
  await touch('touchStart',[{...j,x:j.x+30},d]);await page.waitForTimeout(350);
- await touch('touchCancel',[]);try{await page.waitForFunction(v=>document.querySelector('#stick').style.transform===v,initial,{timeout:5000})}catch(e){console.error('Touch cancellation diagnostic',await page.locator('#stick').evaluate(e=>({inline:e.style.transform,computed:getComputedStyle(e).transform})));await page.screenshot({path:'artifacts/mobile-cancel-failed.png'});throw e}
+ await touch('touchCancel',[]);try{await page.waitForFunction(v=>getComputedStyle(document.querySelector('#stick')).transform===v,initial,{timeout:5000})}catch(e){console.error('Touch cancellation diagnostic',await page.locator('#stick').evaluate(e=>({inline:e.style.transform,computed:getComputedStyle(e).transform})));await page.screenshot({path:'artifacts/mobile-cancel-failed.png'});throw e}
  await cdp.detach();console.log('mobile multi-pointer cancellation passed');
  }
  await page.getByRole('button',{name:'Surface',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Returned'));
