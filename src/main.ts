@@ -1,3 +1,4 @@
+import {createExplorationModels} from './explorationModels';
 import {craftedTool,craftEffects} from './craftEffects';
 import {AdaptiveQuality,renderCeiling} from './quality';
 import {createCamp} from './camp';
@@ -37,8 +38,9 @@ const store={getItem:(k:string)=>localStorage.getItem(k),setItem:(k:string,v:str
 const world:ReturnType<typeof openWorld>=await (async()=>{try{return navigator.locks?await navigator.locks.request(SAVE,()=>openWorld(store)):openWorld(store)}catch{const hud=document.querySelector('#hud')!;hud.textContent='Save protected — reload after checking browser storage';hud.setAttribute('role','alert');throw Error('Save protected')}})();const shape=world.shape,N=shape.n,H=shape.h;createCamp(scene,shape);const rescue=new T.Mesh(new T.BoxGeometry(N*S,.3,3),new T.MeshStandardMaterial({color:0x77736c}));rescue.position.set(N*S/2,H*S-.15,-1.5);scene.add(rescue);
 let ledger=world.ledger;
 const session={readable:true,get sold(){return ledger.sold},get levels(){return ledger.levels},get crafted(){return ledger.crafted},write(data:Uint8Array,sold=ledger.sold,levels=ledger.levels,crafted=ledger.crafted){const result=world.write(data,{sold,levels,crafted});if(result==='saved')ledger=world.ledger;return result as 'saved'|'failed'|'conflict'|'protected'}};
+const explorationModels=world.profile.worldgen===1?createExplorationModels(scene,shape.id):new Map<string,T.Group>();
 const data=world.terrain();const inventory=profileInventory(world.profile);const bag=document.createElement('div');bag.id='inventory';bag.style.cssText='position:fixed;left:12px;top:64px;z-index:2;color:white;background:#18221cbb;padding:6px;border-radius:6px;font:12px system-ui;pointer-events:none';document.body.append(bag);function updateBag(){bag.textContent=Object.entries(remaining(inventory,session.sold,session.crafted)).map(([k,v])=>k+': '+v).join(' · ')+' · Gold '+(wallet(session.sold)-spent(session.levels))}updateBag();let saveStatus=session.readable?'':' · Load failed (protected)';
-let count=data.reduce((n,v)=>n+Number(v===0),0);
+let count=world.profile.mines[shape.id-1].length;
 let saving=false,pending=false,trading=false;
 async function save(){pending=true;if(saving)return;saving=true;try{while(pending){pending=false;const write=()=>session.write(data);let result:ReturnType<typeof session.write>='failed';if(navigator.locks){await navigator.locks.request(SAVE,()=>{result=write()})}else{result=write()}saveStatus=' · '+({saved:'Saved',failed:'Save failed',conflict:'Save conflict — reload',protected:'Save protected'}[result]);if(result==='conflict'||result==='protected'){pending=false;break}}}catch{saveStatus=' · Save failed'}finally{saving=false}}
 
