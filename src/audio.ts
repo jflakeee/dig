@@ -5,3 +5,5 @@ export function uiSound(kind:'click'|'confirm'|'error'|'toggle-on'){play(kind,{v
 export function prepareAudio(){preload(['hit','hit-heavy','ratchet','click','confirm','error','toggle-on']);try{muted(localStorage.getItem('dig-muted')==='1')}catch{}}
 export function toggleMute(){const off=!muted();muted(off);if(off)stopAll();try{localStorage.setItem('dig-muted',off?'1':'0')}catch{}return off}
 export function suspendAudio(){stopAll()}
+
+export function rareSound(){play('confirm',{volume:.33,rate:1.3,voices:1})}
