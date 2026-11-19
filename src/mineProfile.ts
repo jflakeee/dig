@@ -18,6 +18,6 @@ export function parseProfile(raw:string):Profile{
 export function migrateProfile(store:Store):Profile{
  const existing=store.getItem(PROFILE);if(existing!==null){const p=parseProfile(existing);const source=store.getItem(SAVE);if(p.legacySource!==undefined&&p.legacySource!==source)throw Error('Legacy source conflict');return p}
  const legacy=store.getItem(SAVE);const old=openSave({getItem:()=>legacy,setItem:()=>{throw Error('Read only')}});if(!old.readable)throw Error('Invalid legacy');
- const p:Profile={version:2,legacy,legacySource:legacy,active:1,mines:[Array.from(old.data.keys()).filter(i=>old.data[i]===0),[],[]]};
+ const p:Profile={version:2,legacy,legacySource:legacy,...(legacy===null?{worldgen:1 as const}:{}),active:1,mines:[Array.from(old.data.keys()).filter(i=>old.data[i]===0),[],[]]};
  const raw=JSON.stringify(p);parseProfile(raw);if(store.getItem(SAVE)!==legacy||store.getItem(PROFILE)!==null)throw Error('Migration conflict');store.setItem(PROFILE,raw);return p;
 }

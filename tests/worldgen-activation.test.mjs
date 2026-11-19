@@ -1,0 +1,3 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {migrateProfile,PROFILE} from '../src/mineProfile.ts';import {SAVE} from '../src/save.ts';
+const store=(entries=[])=>{const m=new Map(entries);return {getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,v)}};
+test('only fresh profiles activate exploration automatically',()=>{assert.equal(migrateProfile(store()).worldgen,1);assert.equal(migrateProfile(store([[SAVE,JSON.stringify({version:1,removed:[]})]])).worldgen,undefined);assert.equal(migrateProfile(store([[PROFILE,JSON.stringify({version:2,legacy:null,active:1,mines:[[],[],[]]})]])).worldgen,undefined)});
