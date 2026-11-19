@@ -1,0 +1,2 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {rareAt,rareDistribution} from '../src/rareResources.ts';
+test('rare distribution is deterministic and bounded',()=>{const a=rareDistribution();assert.deepEqual(a,rareDistribution());assert.equal(rareAt(-1),null);assert.equal(rareAt(196608),null);assert.ok(a.solid<196608);for(const n of Object.values(a.counts))assert.ok(n>0);console.log('RARE_DISTRIBUTION '+JSON.stringify(a))});
