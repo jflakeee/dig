@@ -7,7 +7,7 @@ const browser=await chromium.launch({headless:true,args:['--use-gl=angle','--use
 try{
 for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mobile',{...devices['iPhone 13'],viewport:{width:844,height:390},screen:{width:844,height:390}}]]){
  const context=await browser.newContext(options);const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error'&&/shader|webgl|three/i.test(m.text()))errors.push(m.text())});
- await page.goto('http://127.0.0.1:4173/dig/');await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Removed 0'));
+ await page.goto('http://127.0.0.1:4173/dig/?perf=1');await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Removed 0'));
  const boxes=await page.locator('#actions button').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {top:r.top,bottom:r.bottom,height:r.height,left:r.left,right:r.right}}));assert.equal(boxes.length,5);for(let i=0;i<boxes.length;i++){const b=boxes[i];assert.ok(b.height>=44&&b.left>=0&&b.right<=options.viewport.width&&b.bottom<=options.viewport.height);if(i)assert.ok(b.top>=boxes[i-1].bottom)}
  const leftControls=await page.locator('#craft-toggle,#travel-toggle,#journal-toggle,#move').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {id:e.id,x:r.x,y:r.y,w:r.width,h:r.height}}));for(let i=0;i<leftControls.length;i++)for(let j=i+1;j<leftControls.length;j++){const a=leftControls[i],b=leftControls[j];assert.ok(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y,a.id+' overlaps '+b.id)}
  await page.screenshot({path:'artifacts/'+name+'-initial.png'});
@@ -47,7 +47,7 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  await page.reload();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.getByRole('button',{name:'Mine 3',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 3 · Removed 0'),{},{timeout:60000});
  await page.screenshot({path:'artifacts/'+name+'-mine3.png'});
  for(let trial=1;trial<=3;trial++){const timings=await page.evaluate(async()=>{const samples=[];let last=performance.now();for(let i=0;i<120;i++){const now=await new Promise(resolve=>requestAnimationFrame(resolve));samples.push(now-last);last=now}samples.sort((a,b)=>a-b);return {mean:samples.reduce((a,b)=>a+b,0)/samples.length,p95:samples[Math.ceil(samples.length*.95)-1],max:samples.at(-1)}});
- console.log(JSON.stringify({profile:name,mine:3,trial,mode:'headless software WebGL',...timings}));}
+ const perf=JSON.parse(await page.locator('#hud').getAttribute('data-perf'));assert.ok(perf.frames>0&&perf.rebuilds>0&&perf.drawCalls>0&&perf.triangles>0);console.log(JSON.stringify({profile:name,mine:3,trial,mode:'headless software WebGL',...timings,perf}));}
  await page.keyboard.down('w');await page.waitForTimeout(500);await page.keyboard.up('w');
  await page.reload();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 3 · Removed 0'),{},{timeout:60000});
  assert.deepEqual(errors,[]);await page.evaluate(()=>localStorage.setItem('dig-mines-v2','invalid-save'));await page.reload();await page.getByRole('alert').waitFor();assert.equal(await page.evaluate(()=>localStorage.getItem('dig-mines-v2')),'invalid-save');console.log(name+' gameplay and corrupt-save protection passed');await context.close();
