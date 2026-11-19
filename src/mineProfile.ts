@@ -2,7 +2,8 @@ import {validateJournal} from './journal.ts';
 import {naturalVoidMask} from './caves.ts';
 import {openSave,SAVE,type Store} from './save.ts';
 export const PROFILE='dig-mines-v2';
-export const mines=[{id:1,n:32,h:24},{id:2,n:48,h:36},{id:3,n:64,h:48}] as const;
+import {mines} from './mineCatalog.ts';
+export {mines} from './mineCatalog.ts';
 export type Profile={version:2;legacy:string|null;legacySource?:string|null;worldgen?:1;journal?:string[];active: number;mines:number[][]};
 export function parseProfile(raw:string):Profile{
  const p=JSON.parse(raw);if(p?.version!==2||!Number.isInteger(p.active)||p.active<1||p.active>3||!Array.isArray(p.mines)||p.mines.length!==3||(p.legacy!==null&&typeof p.legacy!=='string'))throw Error('Invalid profile');
