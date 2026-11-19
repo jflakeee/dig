@@ -1,3 +1,4 @@
+import {naturalVoidMask} from '../src/caves.ts';
 import {chromium,devices} from 'playwright';
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
@@ -38,9 +39,10 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  assert.equal(await page.evaluate(()=>localStorage.getItem('dig-mines-v2')),saved);
  await page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('dig-mines-v2'));p.mines[0]=Array.from({length:2458},(_,i)=>i);p.legacy=JSON.stringify({version:1,removed:p.mines[0]});localStorage.setItem('dig-mines-v2',JSON.stringify(p))});
  await page.reload();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.getByRole('button',{name:'Mine 2',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 2 · Removed 0'),{},{timeout:60000});
+ await page.getByRole('button',{name:'Journal',exact:true}).click();await page.locator('#journal-panel').getByRole('heading',{name:/Exploration 0/}).waitFor();await page.screenshot({path:'artifacts/'+name+'-journal.png'});await page.locator('#journal-panel').getByRole('button',{name:'Close',exact:true}).click();
  await page.screenshot({path:'artifacts/'+name+'-mine2.png'});
  await page.getByRole('button',{name:'Mine 2',exact:true}).click();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 1 · Removed 2458'),{},{timeout:60000});
- await page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('dig-mines-v2'));p.mines[1]=Array.from({length:12442},(_,i)=>i);localStorage.setItem('dig-mines-v2',JSON.stringify(p))});
+ const mask=naturalVoidMask(2),removed=Array.from(mask.keys()).filter(i=>!mask[i]).slice(0,12442);assert.equal(removed.length,12442);await page.evaluate(removed=>{const p=JSON.parse(localStorage.getItem('dig-mines-v2'));p.mines[1]=removed;localStorage.setItem('dig-mines-v2',JSON.stringify(p))},removed);
  await page.reload();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.getByRole('button',{name:'Mine 3',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 3 · Removed 0'),{},{timeout:60000});
  await page.screenshot({path:'artifacts/'+name+'-mine3.png'});
  for(let trial=1;trial<=3;trial++){const timings=await page.evaluate(async()=>{const samples=[];let last=performance.now();for(let i=0;i<120;i++){const now=await new Promise(resolve=>requestAnimationFrame(resolve));samples.push(now-last);last=now}samples.sort((a,b)=>a-b);return {mean:samples.reduce((a,b)=>a+b,0)/samples.length,p95:samples[Math.ceil(samples.length*.95)-1],max:samples.at(-1)}});
