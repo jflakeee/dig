@@ -51,6 +51,12 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  const perf=JSON.parse(await page.locator('#hud').getAttribute('data-perf'));assert.ok(perf.frames>0&&perf.rebuilds>0&&perf.drawCalls>0&&perf.triangles>0);console.log(JSON.stringify({profile:name,mine:3,trial,mode:'headless software WebGL',...timings,perf}));}
  await page.keyboard.down('w');await page.waitForTimeout(500);await page.keyboard.up('w');
  await page.reload();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 3 · Removed 0'),{},{timeout:60000});
+ const naturalVoidMask3=naturalVoidMask(3);const fourthSeed=Array.from(naturalVoidMask3.keys()).filter(i=>!naturalVoidMask3[i]).slice(0,39322);
+ await page.evaluate(removed=>{const p=JSON.parse(localStorage.getItem('dig-mines-v2'));p.mines[2]=removed;localStorage.setItem('dig-mines-v2',JSON.stringify(p))},fourthSeed);
+ await page.reload();await page.getByRole('button',{name:'Mine 3',exact:true}).click();await page.getByRole('button',{name:'Mine 4',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 4 · Removed 0'),{},{timeout:60000});
+ assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('dig-mines-v2')).version),3);await page.screenshot({path:'artifacts/'+name+'-mine4.png'});
+ await page.reload();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 4 · Removed 0'),{},{timeout:60000});
+ await page.getByRole('button',{name:'Mine 4',exact:true}).click();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 1 · Removed 2458'),{},{timeout:60000});console.log(name+' fourth mine migration and return passed');
  assert.deepEqual(errors,[]);await page.evaluate(()=>localStorage.setItem('dig-mines-v2','invalid-save'));await page.reload();await page.getByRole('alert').waitFor();assert.equal(await page.evaluate(()=>localStorage.getItem('dig-mines-v2')),'invalid-save');console.log(name+' gameplay and corrupt-save protection passed');await context.close();
 }
 }finally{await browser.close()}
