@@ -28,9 +28,10 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  await touch('touchCancel',[]);await page.waitForFunction(v=>document.querySelector('#stick').style.transform===v,initial);
  await cdp.detach();console.log('mobile multi-pointer cancellation passed');
  }
- const saved=await page.evaluate(()=>localStorage.getItem('dig-mines-v2'));
  await page.getByRole('button',{name:'Surface',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Returned'));
  await page.screenshot({path:'artifacts/'+name+'-dug.png'});
+ await page.waitForFunction(()=>JSON.parse(localStorage.getItem('dig-mines-v2')).mines[0].length===Number(document.querySelector('#hud')?.textContent?.match(/Removed (\d+)/)?.[1]));
+ const saved=await page.evaluate(()=>localStorage.getItem('dig-mines-v2'));
  await page.reload();await page.waitForFunction(()=>Number(document.querySelector('#hud')?.textContent?.match(/Removed (\d+)/)?.[1])>0);
  assert.equal(await page.evaluate(()=>localStorage.getItem('dig-mines-v2')),saved);
  await page.evaluate(()=>{const p=JSON.parse(localStorage.getItem('dig-mines-v2'));p.mines[0]=Array.from({length:2458},(_,i)=>i);p.legacy=JSON.stringify({version:1,removed:p.mines[0]});localStorage.setItem('dig-mines-v2',JSON.stringify(p))});
