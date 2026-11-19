@@ -1,6 +1,6 @@
 import {discoveryGold} from './journal.ts';
 import {parseProfile,type Profile,PROFILE} from './mineProfile.ts';
-import {profileInventory} from './mineOres.ts';
+import {expandedInventory,profileInventory} from './mineOres.ts';
 import {openSave,SAVE,type Store} from './save.ts';
 import {emptyInventory,type Inventory} from './inventory.ts';
 import {initialLevels,validateLevels,type Levels} from './upgrades.ts';
@@ -8,10 +8,10 @@ import {initialCrafted,validateCrafted,type Crafted} from './crafting.ts';
 import {oreKeys,wallet} from './economy.ts';
 export type Ledger={sold:Inventory;levels:Levels;crafted:Crafted};
 export type UnifiedProfile=Profile&{ledger?:Ledger};
-export function ledgerFor(p:UnifiedProfile):Ledger{
+export function ledgerFor(p:UnifiedProfile|(import('./expandedProfile.ts').ExpandedProfile&{ledger?:Ledger})):Ledger{
  const old=openSave({getItem:()=>p.legacy,setItem:()=>{throw Error('Read only')}});
  if(!old.readable)throw Error('Invalid legacy');
- const l=p.ledger??{sold:old.sold,levels:old.levels,crafted:old.crafted},total=profileInventory(p),sold=emptyInventory();
+ const l=p.ledger??{sold:old.sold,levels:old.levels,crafted:old.crafted},total=p.version===3?expandedInventory(p):profileInventory(p),sold=emptyInventory();
  for(const k of oreKeys){const n=l.sold[k];if(!Number.isSafeInteger(n)||n<old.sold[k]||n>total[k])throw Error('Invalid sold');sold[k]=n}
  const levels=validateLevels(l.levels,wallet(sold)+discoveryGold(p.journal??[])),crafted=validateCrafted(l.crafted,total,sold);
  if(levels.some((n,i)=>n<old.levels[i])||crafted.some((n,i)=>n<old.crafted[i]))throw Error('Legacy regression');
