@@ -17,6 +17,17 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  // Hold the dig control for multiple frames; mobile tap alone may be shorter than a frame.
  if(name==='mobile'){const box=await page.locator('#dig').boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.waitForTimeout(550);await page.mouse.up()}
  try{await page.waitForFunction(()=>{const raw=localStorage.getItem('dig-mines-v2');return raw&&JSON.parse(raw).mines[0].length>0},{},{timeout:15000})}catch(e){console.error('Dig diagnostic',await page.locator('#hud').textContent(),errors);await page.screenshot({path:'artifacts/'+name+'-dig-failed.png'});throw e}
+ if(name==='mobile'){
+ const cdp=await context.newCDPSession(page),joy=await page.locator('#move').boundingBox(),dig=await page.locator('#dig').boundingBox();
+ const j={x:joy.x+joy.width/2,y:joy.y+joy.height/2,id:1},d={x:dig.x+dig.width/2,y:dig.y+dig.height/2,id:2};
+ const touch=(type,touchPoints)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints});
+ const initial=await page.locator('#stick').evaluate(e=>e.style.transform);
+ await touch('touchStart',[j]);await touch('touchMove',[{...j,x:j.x+30}]);
+ await page.waitForFunction(v=>document.querySelector('#stick').style.transform!==v,initial);
+ await touch('touchStart',[{...j,x:j.x+30},d]);await page.waitForTimeout(350);
+ await touch('touchCancel',[]);await page.waitForFunction(v=>document.querySelector('#stick').style.transform===v,initial);
+ await cdp.detach();console.log('mobile multi-pointer cancellation passed');
+ }
  const saved=await page.evaluate(()=>localStorage.getItem('dig-mines-v2'));
  await page.getByRole('button',{name:'Surface',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Returned'));
  await page.screenshot({path:'artifacts/'+name+'-dug.png'});
