@@ -1,7 +1,7 @@
 name: Dependency audit
 on:
   push:
-    branches: [chore/toolchain-integration, feature/p4-exploration, feature/p7-visuals, main]
+    branches: [chore/toolchain-integration, feature/p4-exploration, feature/p7-visuals, feature/p8-exploration, main]
   workflow_dispatch:
 permissions:
   contents: read
