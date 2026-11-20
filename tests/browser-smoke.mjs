@@ -31,6 +31,7 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  await page.getByRole('button',{name:'Surface',exact:true}).click();
  const initial=await page.locator('#stick').evaluate(e=>getComputedStyle(e).transform);
  await touch('touchStart',[j]);await touch('touchMove',[{...j,x:j.x+30}]);
+ const thumb=await page.locator('#stick').boundingBox();assert.ok(thumb.x>=joy.x-1&&thumb.y>=joy.y-1&&thumb.x+thumb.width<=joy.x+joy.width+1&&thumb.y+thumb.height<=joy.y+joy.height+1,'joystick thumb must remain inside pad');
  await page.waitForFunction(v=>getComputedStyle(document.querySelector('#stick')).transform!==v,initial);
  await touch('touchStart',[{...j,x:j.x+30},d]);await page.waitForTimeout(350);
  await touch('touchCancel',[]);try{await page.waitForFunction(v=>getComputedStyle(document.querySelector('#stick')).transform===v,initial,{timeout:5000})}catch(e){console.error('Touch cancellation diagnostic',await page.locator('#stick').evaluate(e=>({inline:e.style.transform,computed:getComputedStyle(e).transform})));await page.screenshot({path:'artifacts/mobile-cancel-failed.png'});throw e}
