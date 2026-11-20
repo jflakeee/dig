@@ -9,7 +9,7 @@ export const legendaryRecipes={
 export type LegendaryId=keyof typeof legendaryRecipes;
 export const legendaryIds=Object.keys(legendaryRecipes) as LegendaryId[];
 export type LegendaryState={unlocked:LegendaryId[];equipped:LegendaryId|null};
-type LegendaryProfile=ExpandedProfile&{legendary?:LegendaryState;ledger?:{levels:number[]}};
+export type LegendaryProfile=ExpandedProfile&{legendary?:LegendaryState;ledger?:import('./profileEconomy.ts').Ledger};
 const validId=(v:unknown):v is LegendaryId=>typeof v==='string'&&Object.hasOwn(legendaryRecipes,v);
 export function validateLegendary(p:LegendaryProfile):LegendaryState{
  const raw=p.legendary;

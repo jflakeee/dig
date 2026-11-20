@@ -1,6 +1,6 @@
 import {parseProfile,type Profile} from './mineProfile.ts';
 export const expansionMine={id:4,n:64,h:48,unlockFraction:.20} as const;
-export type ExpandedProfile=Omit<Profile,'version'>&{version:3};
+export type ExpandedProfile=Omit<Profile,'version'>&{version:3;legendary?:import('./legendary.ts').LegendaryState};
 export function prepareExpansion(raw:string):ExpandedProfile{
  const old=parseProfile(raw);
  return {...old,version:3,mines:[...old.mines,[]]};
