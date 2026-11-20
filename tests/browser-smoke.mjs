@@ -8,6 +8,17 @@ import {mkdir} from 'node:fs/promises';
 await mkdir('artifacts',{recursive:true});
 const browser=await chromium.launch({headless:true,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 try{
+// P14: verify portrait controls independently of landscape-only gameplay flows.
+{
+ const context=await browser.newContext({...devices['iPhone 13'],viewport:{width:390,height:844},screen:{width:390,height:844}});
+ const page=await context.newPage();
+ await page.goto('http://127.0.0.1:4173/dig/?perf=1');
+ await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Removed 0'));
+ const controls=await page.locator('#actions button,#move,#dig').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {id:e.id||e.textContent?.trim(),left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height}}));
+ for(const c of controls)assert.ok(c.left>=0&&c.right<=390&&c.top>=0&&c.bottom<=844&&c.width>=44&&c.height>=44,'portrait control must be visible and touchable: '+JSON.stringify(c));
+ await page.screenshot({path:'artifacts/mobile-portrait.png'});
+ await context.close();console.log('mobile portrait control bounds passed');
+}
 for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mobile',{...devices['iPhone 13'],viewport:{width:844,height:390},screen:{width:844,height:390}}]]){
  const context=await browser.newContext(options);const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error'&&/shader|webgl|three/i.test(m.text()))errors.push(m.text())});
  await page.goto('http://127.0.0.1:4173/dig/?perf=1');await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Removed 0'));
