@@ -2,6 +2,9 @@
 
 **모바일 우선 3D 채굴·탐험 게임** · Three.js + TypeScript · 브라우저에서 바로 플레이
 
+[![Build and deploy](https://github.com/jflakeee/dig/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/jflakeee/dig/actions/workflows/build.yml)
+[![Dependency audit](https://github.com/jflakeee/dig/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/jflakeee/dig/actions/workflows/security.yml)
+
 [🎮 게임 플레이](https://jflakeee.github.io/dig/) · [📋 개발 기록](docs/map-systems-20261118.md) · [🐛 문제 제보](https://github.com/jflakeee/dig/issues) · [⚙️ GitHub Actions](https://github.com/jflakeee/dig/actions)
 
 > 설치 없이 실행하는 1인칭 복셀 채굴 프로토타입입니다. 개발 중인 게임으로, 모바일 기기별 성능과 조작감은 달라질 수 있습니다.
@@ -36,6 +39,16 @@
 - WebGL 사용 가능 환경 필요
 - 모바일 터치 조작 지원
 - 진행 상황은 **현재 브라우저·기기**의 로컬 저장소에 보관됩니다. 브라우저 데이터를 삭제하거나 다른 기기에서 접속하면 저장 기록이 이어지지 않을 수 있습니다.
+
+## 자주 묻는 질문
+
+**게임이 검은 화면으로 표시되나요?** WebGL을 지원하는 최신 브라우저에서 다시 열고, 브라우저의 하드웨어 가속 설정을 확인해 보세요. 기기·브라우저 정보와 함께 문제를 제보하면 도움이 됩니다.
+
+**저장 데이터는 어디에 있나요?** 현재 접속한 브라우저의 로컬 저장소에 저장됩니다. 시크릿 모드, 사이트 데이터 삭제, 다른 브라우저·기기에서는 기존 진행 상황이 보이지 않을 수 있습니다. 중요한 진행 상황이 있다면 브라우저 저장 데이터를 지우지 마세요.
+
+**광물을 팔거나 장비를 제작할 수 없나요?** 일부 판매·제작 기능은 지상에서만 사용할 수 있습니다. 먼저 지상으로 이동한 뒤 다시 시도하세요.
+
+**휴대전화에서 조작이 불편한가요?** 왼쪽 조이스틱으로 이동하고 화면을 드래그해 시점을 돌립니다. 화면을 가로로 돌리면 조작 공간을 더 확보할 수 있지만 기기별 차이가 있습니다.
 
 ## 개발 환경
 
