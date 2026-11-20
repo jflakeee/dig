@@ -40,6 +40,9 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  await cdp.send('Emulation.setDeviceMetricsOverride',{width:700,height:500,deviceScaleFactor:3,mobile:true,screenWidth:700,screenHeight:500});
  const spacious=await page.locator('#move').boundingBox();
  await cdp.send('Emulation.setDeviceMetricsOverride',{width:700,height:360,deviceScaleFactor:3,mobile:true,screenWidth:700,screenHeight:360});
+ await page.reload({waitUntil:'networkidle'});
+ const compactViewport=await page.evaluate(()=>({innerWidth,innerHeight,visualWidth:visualViewport?.width,documentWidth:document.documentElement.clientWidth,screenWidth:screen.width}));
+ assert.ok(compactViewport.innerWidth<=700,'compact layout viewport should fit emulated screen: '+JSON.stringify(compactViewport));
  const compact=await page.locator('#move').boundingBox();assert.ok(compact.width<spacious.width,'compact joystick should shrink when crossing the 450px height breakpoint');
  const compactButtons=await page.locator('#actions button').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,height:r.height}}));
  for(const b of compactButtons)assert.ok(b.left>=0&&b.right<=700&&b.top>=0&&b.bottom<=360&&b.height>=44,'compact action button must remain usable: '+JSON.stringify({button:b,all:compactButtons}));
