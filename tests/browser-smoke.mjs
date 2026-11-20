@@ -1,3 +1,6 @@
+import {rareAt} from '../src/rareResources.ts';
+import {expandedInventory} from '../src/mineOres.ts';
+import {volcanicMask} from '../src/volcanicTerrain.ts';
 import {naturalVoidMask} from '../src/caves.ts';
 import {chromium,devices} from 'playwright';
 import assert from 'node:assert/strict';
@@ -55,6 +58,27 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  await page.evaluate(removed=>{const p=JSON.parse(localStorage.getItem('dig-mines-v2'));p.mines[2]=removed;localStorage.setItem('dig-mines-v2',JSON.stringify(p))},fourthSeed);
  await page.reload();await page.getByRole('button',{name:'Mine 3',exact:true}).click();await page.getByRole('button',{name:'Mine 4',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 4 · Removed 0'),{},{timeout:60000});
  assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('dig-mines-v2')).version),3);await page.getByRole('button',{name:'Craft',exact:true}).click();for(const name of ['seismic-shovel','ember-pickaxe','core-drill']){const b=page.locator('#craft-menu button').filter({hasText:name});assert.equal(await b.count(),1);assert.equal(await b.isDisabled(),true)}await page.locator('#craft-menu').getByRole('button',{name:'Close',exact:true}).click();await page.screenshot({path:'artifacts/'+name+'-mine4.png'});
+ // Seed a legitimate fully funded late-game state; the game still validates it on reload.
+ const mask4=volcanicMask(),rareCells=Array.from(mask4.keys()).filter(i=>!mask4[i]&&rareAt(i));
+ await page.evaluate(cells=>{const p=JSON.parse(localStorage.getItem('dig-mines-v2'));p.mines[3]=cells;localStorage.setItem('dig-mines-v2',JSON.stringify(p))},rareCells);
+ const funded=await page.evaluate(()=>JSON.parse(localStorage.getItem('dig-mines-v2')));
+ funded.ledger={sold:expandedInventory(funded),levels:[5,5,5],crafted:[0,0,0,0]};
+ await page.evaluate(p=>localStorage.setItem('dig-mines-v2',JSON.stringify(p)),funded);
+ await page.reload();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 4'),{},{timeout:60000});
+ await page.getByRole('button',{name:'Surface',exact:true}).click();
+ await page.getByRole('button',{name:'Craft',exact:true}).click();
+ const seismic=page.locator('#craft-menu button').filter({hasText:'seismic-shovel'});
+ assert.equal(await seismic.isDisabled(),false);await seismic.click();
+ await page.waitForFunction(()=>JSON.parse(localStorage.getItem('dig-mines-v2')).legendary?.equipped==='seismic-shovel');
+ assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('dig-mines-v2')).legendary.unlocked),['seismic-shovel']);
+ await page.locator('#craft-menu').getByRole('button',{name:'Close',exact:true}).click();
+ await page.reload();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 4'),{},{timeout:60000});
+ assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('dig-mines-v2')).legendary.equipped),'seismic-shovel');
+ await page.getByRole('button',{name:'Craft',exact:true}).click();
+ await page.locator('#craft-menu').getByRole('button',{name:'Unequip legendary'}).click();
+ await page.waitForFunction(()=>JSON.parse(localStorage.getItem('dig-mines-v2')).legendary?.equipped===null);
+ await page.locator('#craft-menu').getByRole('button',{name:'Close',exact:true}).click();
+ console.log(name+' legendary craft, equip, reload and unequip passed');
  await page.reload();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 4 · Removed 0'),{},{timeout:60000});
  await page.getByRole('button',{name:'Mine 4',exact:true}).click();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 1 · Removed 2458'),{},{timeout:60000});console.log(name+' fourth mine migration and return passed');
  assert.deepEqual(errors,[]);await page.evaluate(()=>localStorage.setItem('dig-mines-v2','invalid-save'));await page.reload();await page.getByRole('alert').waitFor();assert.equal(await page.evaluate(()=>localStorage.getItem('dig-mines-v2')),'invalid-save');console.log(name+' gameplay and corrupt-save protection passed');await context.close();
