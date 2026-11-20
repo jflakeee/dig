@@ -78,7 +78,7 @@ for(let x=0;x<N/8;x++)for(let y=0;y<Math.ceil(H/8);y++)for(let z=0;z<N/8;z++)reb
 const spawn=surfaceSpawn(data,shape)??rescueSpawn(shape);camera.position.set(count===0?N*S/2:spawn?.x??N*S/2,spawn.y,count===0?N*S/2:spawn?.z??N*S/2);let yaw=0,pitch=-.65;camera.rotation.order='YXZ';const keys=new Set<string>();addEventListener('keydown',e=>keys.add(e.key.toLowerCase()));addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));addEventListener('blur',()=>keys.clear());
 const pad=document.querySelector<HTMLElement>('#move')!,stick=document.querySelector<HTMLElement>('#stick')!;let joyId=-1,joyX=0,joyY=0;
 function resetJoy(){joyId=-1;joyX=joyY=0;stick.style.transform='translate(-50%,-50%)'}
-function updateJoy(e:PointerEvent){const r=pad.getBoundingClientRect();const q=joystick(e.clientX-r.left-r.width/2,e.clientY-r.top-r.height/2);joyX=q.x;joyY=q.y;stick.style.transform='translate(-50%,-50%) translate('+q.x*36+'px,'+q.y*36+'px)'}
+function updateJoy(e:PointerEvent){const r=pad.getBoundingClientRect();const q=joystick(e.clientX-r.left-r.width/2,e.clientY-r.top-r.height/2);joyX=q.x;joyY=q.y;const travel=Math.max(0,(Math.min(r.width,r.height)-stick.offsetWidth)/2);stick.style.transform='translate(-50%,-50%) translate('+q.x*travel+'px,'+q.y*travel+'px)'}
 pad.onpointerdown=e=>{if(joyId!==-1)return;joyId=e.pointerId;pad.setPointerCapture(joyId);updateJoy(e)};
 pad.onpointermove=e=>{if(e.pointerId===joyId)updateJoy(e)};
 pad.onpointerup=pad.onpointercancel=pad.onlostpointercapture=e=>{if(e.pointerId===joyId)resetJoy()};
