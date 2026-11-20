@@ -79,7 +79,7 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('dig-mines-v2')).legendary?.equipped===null);
  await page.locator('#craft-menu').getByRole('button',{name:'Close',exact:true}).click();
  console.log(name+' legendary craft, equip, reload and unequip passed');
- await page.reload();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 4 · Removed 0'),{},{timeout:60000});
+ await page.reload();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 4 · Removed '+JSON.parse(localStorage.getItem('dig-mines-v2')).mines[3].length),{},{timeout:60000});
  await page.getByRole('button',{name:'Mine 4',exact:true}).click();await page.getByRole('button',{name:'Mine 1',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('DIG 1 · Removed 2458'),{},{timeout:60000});console.log(name+' fourth mine migration and return passed');
  assert.deepEqual(errors,[]);await page.evaluate(()=>localStorage.setItem('dig-mines-v2','invalid-save'));await page.reload();await page.getByRole('alert').waitFor();assert.equal(await page.evaluate(()=>localStorage.getItem('dig-mines-v2')),'invalid-save');console.log(name+' gameplay and corrupt-save protection passed');await context.close();
 }
