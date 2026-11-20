@@ -36,8 +36,10 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  await touch('touchStart',[{...j,x:j.x+30},d]);await page.waitForTimeout(350);
  await touch('touchCancel',[]);try{await page.waitForFunction(v=>getComputedStyle(document.querySelector('#stick')).transform===v,initial,{timeout:5000})}catch(e){console.error('Touch cancellation diagnostic',await page.locator('#stick').evaluate(e=>({inline:e.style.transform,computed:getComputedStyle(e).transform})));await page.screenshot({path:'artifacts/mobile-cancel-failed.png'});throw e}
  // Verify compact landscape layouts and joystick travel after a viewport resize.
+ await page.setViewportSize({width:700,height:500});
+ const spacious=await page.locator('#move').boundingBox();
  await page.setViewportSize({width:700,height:360});
- const compact=await page.locator('#move').boundingBox();assert.ok(compact.width<joy.width,'compact joystick should shrink');
+ const compact=await page.locator('#move').boundingBox();assert.ok(compact.width<spacious.width,'compact joystick should shrink when crossing the 450px height breakpoint');
  const compactButtons=await page.locator('#actions button').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,height:r.height}}));
  for(const b of compactButtons)assert.ok(b.left>=0&&b.right<=700&&b.top>=0&&b.bottom<=360&&b.height>=44,'compact action button must remain usable');
  const compactLeft=await page.locator('#craft-toggle,#travel-toggle,#journal-toggle,#move').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {id:e.id,x:r.x,y:r.y,w:r.width,h:r.height}}));
