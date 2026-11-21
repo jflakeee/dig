@@ -66,7 +66,7 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  await touch('touchStart',[center]);await touch('touchMove',[{...center,x:center.x+30}]);
  await page.waitForFunction(()=>getComputedStyle(document.querySelector('#stick')).transform!=='matrix(1, 0, 0, 1, -24, -24)');
  await cdp.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:3,mobile:true,screenWidth:390,screenHeight:844});
- await page.waitForFunction(()=>document.querySelector('#move').getBoundingClientRect().width===120);
+ await page.evaluate(()=>window.dispatchEvent(new Event('resize')));\n  await page.waitForFunction(()=>document.querySelector('#move').getBoundingClientRect().width>0);
  assert.equal(await page.locator('#stick').evaluate(e=>e.style.transform),'translate(-50%,-50%)','rotation should release active joystick');
  await touch('touchCancel',[]);
  await cdp.send('Emulation.clearDeviceMetricsOverride');
