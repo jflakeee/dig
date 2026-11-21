@@ -1,7 +1,7 @@
 name: Integration CI
 on:
   push:
-    branches: [chore/toolchain-integration, feature/p4-exploration, feature/p7-visuals, feature/p8-exploration, feature/p9-performance, feature/p10-gameplay, feature/p11-world, feature/p12-mobile, feature/p13-mobile-ux]
+    branches: [chore/toolchain-integration, feature/p4-exploration, feature/p7-visuals, feature/p8-exploration, feature/p9-performance, feature/p10-gameplay, feature/p11-world, feature/p12-mobile, feature/p13-mobile-ux, feature/p14-portrait-smoke]
   workflow_dispatch:
 permissions:
   contents: read
