@@ -1,0 +1,34 @@
+name: Mining balance simulation
+on:
+  push:
+    branches:
+      - feat/infinite-chunks-shop-protection-20261122
+    paths:
+      - 'scripts/mining-balance.mjs'
+      - 'tests/mining-balance.test.mjs'
+      - '.github/workflows/mining-balance.yml'
+  workflow_dispatch:
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test mining simulator
+        run: node --test tests/mining-balance.test.mjs
+      - name: Run 7200-scenario simulation
+        run: node scripts/mining-balance.mjs --hours=0 --seeds=100 --base-seconds=1 > mining-balance-results.json
+      - name: Summarize
+        run: |
+          node --input-type=module -e "import fs from 'node:fs'; const d=JSON.parse(fs.readFileSync('mining-balance-results.json')); console.log(JSON.stringify({config:d.config,summaries:d.summaries},null,2))" > mining-balance-summary.json
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: mining-balance-results
+          path: |
+            mining-balance-results.json
+            mining-balance-summary.json
+          retention-days: 14
