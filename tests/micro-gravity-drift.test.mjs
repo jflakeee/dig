@@ -71,3 +71,10 @@ test('displacement is zero when delta is zero even with existing velocity',()=>{
   assert.deepEqual(result.displacement,[0,0,0]);
   assert.equal(result.state,state);
 });
+
+test('invalid drift velocity is rejected even when paused',()=>{
+  for(const dt of [0,0.04]){
+    assert.throws(()=>microGravityDrift({velocity:[NaN,0,0]},42,[0,0,0],dt),/Invalid velocity/);
+    assert.throws(()=>microGravityDrift({velocity:[0,Infinity,0]},42,[0,0,0],dt),/Invalid velocity/);
+  }
+});
