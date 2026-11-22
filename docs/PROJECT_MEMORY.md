@@ -118,3 +118,9 @@
 - `--hours=0 --seeds=100`으로 1/10/100시간 전체 7,200회 실행 지원, 장비/강화/시간별 평균 요약 JSON 추가.
 - 현재 순수익은 광물 전량 판매, 추가 드롭 판매액/강화 비용/이동시간 제외라는 제한된 모형임을 출력에 명시.
 - **실제 테스트 실행 및 7,200회 결과 검증은 미완료**, 게임 적용·배포 미완료.
+
+## GitHub Actions 채굴 경제 검증 워크플로 (2026-11-22)
+- `.github/workflows/mining-balance.yml` 추가: feature 브랜치의 시뮬레이터/테스트/워크플로 변경 시 Node 22에서 `node --test tests/mining-balance.test.mjs` 후 7,200개 시나리오 실행.
+- 실행 결과 `mining-balance-results.json` 및 요약 `mining-balance-summary.json`을 GitHub Actions artifact로 업로드하도록 설정.
+- 현재 CI의 `--base-seconds=1`은 임시 실험 입력이며 실제 게임 채굴 시간 확인 후 교체 필요.
+- **워크플로 파일 커밋 완료, Actions 실행 상태/성공 여부 미확인. 게임 본체와 Pages 배포 미적용.**
