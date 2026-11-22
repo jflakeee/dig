@@ -1,3 +1,5 @@
+> **SUPERSEDED (2026-11-22):** 매점 건물·보호구역을 제거하고 메뉴형 상점으로 변경했습니다. 최신 설계: [무한 지하 월드](infinite-underground-world-20261122.md). 이 문서는 이전 설계 이력으로만 보존합니다.
+
 # Infinite chunks and shop protection — implementation contract (2026-11-22)
 
 Status: design specification; runtime implementation and validation pending. Branch: `feat/infinite-chunks-shop-protection-20261122`.
