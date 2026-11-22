@@ -1,3 +1,4 @@
+import { lookDirection } from './zeroGravityMovement';
 import { initialAutoMineState, stepAutoMine } from './autoMineController';
 import type { AutoMineState } from './autoMineController';
 import {legendaryIds,legendaryRecipes,legendaryAvailable,validateLegendary} from './legendary';
@@ -116,7 +117,8 @@ actions.append(autoMineToggle);
 autoMineToggle.onclick=()=>{autoMineEnabled=!autoMineEnabled;autoMineState=initialAutoMineState();autoMineToggle.textContent=autoMineEnabled?'Auto: On':'Auto: Off'};
 let last=performance.now(),next=0,vy=0;const hud=document.querySelector('#hud')!;let hudAt=0,notice='';const ret=document.createElement('button');ret.textContent='Surface';ret.style.cssText='position:fixed;right:12px;top:50px;z-index:2';actions.append(ret);function returnSurface(){const p=surfaceSpawn(data,shape)??rescueSpawn(shape);camera.position.set(p.x,p.y,p.z);vy=0;held=false;digId=-1;keys.clear();resetJoy();look=-1;notice=' · Returned';uiSound('confirm')}ret.onclick=returnSurface;addEventListener('keydown',e=>{if(e.key.toLowerCase()==='r'&&!e.repeat)returnSurface()});renderer.domElement.onlostpointercapture=e=>{if(e.pointerId===look)look=-1};b.onlostpointercapture=e=>{if(e.pointerId===digId){digId=-1;held=false}};addEventListener('blur',()=>{look=-1});const moveVec=new T.Vector3(),up=new T.Vector3(0,1,0),probe=new T.Vector3();let previousOpacity='';function frame(now:number){requestAnimationFrame(frame);const frameMs=now-last;const dt=Math.min(.04,frameMs/1000);last=now;if(!discoveryBanner.hidden&&now>=discoveryUntil)discoveryBanner.hidden=true;if(!gain.hidden&&now>=gainUntil)gain.hidden=true;if(!rareNotice.hidden&&now>=rareUntil)rareNotice.hidden=true;if(!document.hidden&&quality.sample(frameMs))renderer.setPixelRatio(quality.scale);impactPower=Math.max(0,impactPower-dt*1.7);const opacity=reducedMotion.matches||impactPower===0?'0':String(impactPower);if(opacity!==previousOpacity){impact.style.opacity=opacity;previousOpacity=opacity}camera.rotation.set(pitch,yaw,0,'YXZ');const d=moveVec.set(Number(keys.has('d'))-Number(keys.has('a'))+joyX,0,Number(keys.has('s'))-Number(keys.has('w'))+joyY);if(d.lengthSq()>1)d.normalize();d.applyAxisAngle(up,yaw).multiplyScalar(3*dt);
 if(autoMineEnabled){
-  const forward=probe.set(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch));
+  const [fx,fy,fz]=lookDirection(yaw,pitch);
+  const forward=probe.set(fx,fy,fz);
   if(!zeroGravityEnabled)forward.y=0;
   const ahead=camera.position.clone().addScaledVector(forward,.5);
   const safe={menuOpen:journalPanel.style.display!=='none'||trading,
