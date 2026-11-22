@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/mining-balance.mjs'
       - 'tests/mining-balance.test.mjs'
+      - 'src/miningDurability.ts'
       - '.github/workflows/mining-balance.yml'
   workflow_dispatch:
 jobs:
@@ -17,6 +18,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Type-check and build
+        run: npm run build
       - name: Test mining simulator
         run: node --test tests/mining-balance.test.mjs
       - name: Run 7200-scenario simulation
