@@ -17,6 +17,6 @@ export function microGravityDrift(
   });
   const speed = Math.hypot(...next);
   const scale = speed > 0.12 ? 0.12 / speed : 1;
-  const velocity = next.map(v => v * scale) as Vec3;
-  return { state: { velocity }, displacement: velocity.map(v => v * dt) as Vec3 };
+  const velocity = next.map(v => v * scale) as unknown as Vec3;
+  return { state: { velocity }, displacement: velocity.map(v => v * dt) as unknown as Vec3 };
 }
