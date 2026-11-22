@@ -332,3 +332,7 @@
 - `.github/workflows/mining-balance.yml`: micro-gravity-seed 테스트 명령이 이전 `run:` 아래 잘못 들여쓰기되어 있던 문제를 수정.
 - `Test world-specific microgravity seed` 독립 단계로 분리.
 - GitHub Actions 실제 실행 결과는 아직 확인되지 않음. main/Pages 미변경.
+
+## 중력 방향과 카메라 전방 벡터 일치 검증 (2026-11-22)
+- `tests/micro-gravity-orientation.test.mjs`: 6개 중력 방향에 대해 600프레임 자동 회전 후 `lookDirection`과 정규화된 중력 벡터 내적 >0.999 확인하는 회귀 테스트 추가.
+- yaw/pitch 부호·축 방향 불일치 감지 목적. CI 실행/전체 빌드/모바일 실기기 결과는 미확인. main/Pages 유지.
