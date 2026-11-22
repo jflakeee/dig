@@ -113,6 +113,8 @@ let memoryState=INITIAL_MEMORY;
 function showMemoryLine(line:string,now:number){
   machineVoice.textContent=line;
   machineVoice.style.color='#ffdbb8';
+  machineVoice.style.borderColor='#c78c6e';
+  machineVoice.setAttribute('aria-label','기억 모듈 오류: '+line);
   machineVoice.hidden=false;
   machineVoiceUntil=now+3800;
 }
@@ -126,6 +128,8 @@ const impact=document.createElement('div');impact.style.cssText='position:fixed;
   if(reaction&&performance.now()>=machineVoiceUntil){
     machineVoice.textContent=reaction.line;
     machineVoice.style.color=reaction.humanEcho?'#ffdbb8':reaction.tier===3?'#ffe18a':'#b8f7fa';
+    machineVoice.style.borderColor=reaction.humanEcho?'#c78c6e':'#456b74';
+    machineVoice.setAttribute('aria-label',reaction.humanEcho?'기억 모듈 오류: '+reaction.line:reaction.line);
     machineVoice.hidden=false;
     machineVoiceUntil=performance.now()+(reaction.humanEcho?3600:1900);
   }
