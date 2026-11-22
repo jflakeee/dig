@@ -8,6 +8,7 @@ export function microGravityDrift(
   state: DriftState, seed: number, position: Vec3, dt: number,
 ): { state: DriftState; displacement: Vec3 } {
   if (!Number.isFinite(dt) || dt < 0 || dt > 0.1) throw Error('Invalid delta');
+  if (!state.velocity.every(Number.isFinite)) throw Error('Invalid velocity');
   if (dt === 0) return { state, displacement: [0, 0, 0] };
   const g = microGravityAt(seed, position);
   // Exact solution for constant acceleration with linear damping over one frame.
@@ -15,7 +16,6 @@ export function microGravityDrift(
   const decay = Math.exp(-2.5 * dt);
   const accelerationWeight = -Math.expm1(-2.5 * dt) / 2.5;
   const next = state.velocity.map((v, i) => {
-    if (!Number.isFinite(v)) throw Error('Invalid velocity');
     return v * decay + g[i] * accelerationWeight;
   });
   const speed = Math.hypot(...next);
