@@ -57,3 +57,17 @@ test('integrated displacement is consistent across frame rates',()=>{
     assert.ok(Math.abs(b[axis]-c[axis])<1e-9);
   }
 });
+
+test('zero initial velocity produces positive displacement under local acceleration',()=>{
+  const step=microGravityDrift(INITIAL_DRIFT,42,[5,7,9],0.04);
+  for(let axis=0;axis<3;axis++){
+    if(Math.abs(step.state.velocity[axis])>1e-12)
+      assert.ok(step.displacement[axis]*step.state.velocity[axis]>0);
+  }
+});
+test('displacement is zero when delta is zero even with existing velocity',()=>{
+  const state={velocity:[0.02,-0.03,0.01]};
+  const result=microGravityDrift(state,42,[5,7,9],0);
+  assert.deepEqual(result.displacement,[0,0,0]);
+  assert.equal(result.state,state);
+});
