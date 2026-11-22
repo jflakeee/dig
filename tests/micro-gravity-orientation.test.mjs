@@ -16,7 +16,7 @@ test('near-zero gravity and zero time preserve orientation',()=>{
   assert.equal(faceMicroGravity(old,[0.1,0,0],0),old);
 });
 test('wraps yaw along shortest path',()=>{
-  const v=faceMicroGravity({yaw:Math.PI-0.02,pitch:0},[0.001,0,-0.1],0.04);
+  const v=faceMicroGravity({yaw:Math.PI-0.02,pitch:0},[0.001,0,0.1],0.04);
   assert.ok(Math.abs(v.yaw-(Math.PI-0.02))<0.1);
 });
 test('rejects invalid input',()=>assert.throws(()=>faceMicroGravity({yaw:0,pitch:0},[0,0,0],-1)));
