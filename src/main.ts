@@ -251,11 +251,11 @@ if(autoMineEnabled){
     microGravityIndicatorAt=now+250;
     const g=microGravityAt(20261122,[camera.position.x,camera.position.y,camera.position.z]);
     const strength=Math.hypot(...g);
-    const arrows=['→','←','↑','↓','↗','↙'];
+    const directions=['+X','−X','+Y','−Y','+Z','−Z'];
     const dominant=Math.abs(g[0])>=Math.abs(g[1])&&Math.abs(g[0])>=Math.abs(g[2])
       ?(g[0]>=0?0:1):Math.abs(g[1])>=Math.abs(g[2])
       ?(g[1]>=0?2:3):(g[2]>=0?4:5);
-    microGravityIndicator.textContent='Micro G '+(strength/MICRO_GRAVITY_MAX*100).toFixed(0)+'% '+arrows[dominant];
+    microGravityIndicator.textContent='Micro G '+(strength/MICRO_GRAVITY_MAX*100).toFixed(0)+'% '+directions[dominant];
   }
   const drift=microGravityDrift(microDrift,20261122,
     [camera.position.x,camera.position.y,camera.position.z],dt);
