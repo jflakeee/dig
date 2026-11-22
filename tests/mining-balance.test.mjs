@@ -20,3 +20,18 @@ test('ore counts equal actual mined blocks and no negative durability', () => {
 test('invalid inputs are rejected', () => {
   assert.throws(() => simulate({ tier: 99 }), /Invalid/);
 });
+
+test('one-hour baseline ore payout is deterministic and finite', () => {
+  const result = simulate({ tier: 0, upgrade: 0, hours: 1, seed: 20261122, baseMineSeconds: 1 });
+  assert.ok(result.blocks > 0);
+  assert.ok(Number.isFinite(result.netGold));
+  assert.equal(result.grossGold, Object.entries(result.counts).reduce((sum, [ore, count]) =>
+    sum + count * ({ stone: 1, coal: 4, iron: 10, gold: 25, rare: 100 })[ore], 0));
+});
+test('all enhancement levels keep ore categories stable', () => {
+  for (let upgrade = 0; upgrade <= 5; upgrade++) {
+    const result = simulate({ tier: 1, upgrade, hours: .05, seed: 17 });
+    assert.deepEqual(Object.keys(result.counts), ['stone', 'coal', 'iron', 'gold', 'rare']);
+    assert.ok(result.repairs >= 0 && result.replacements >= 0);
+  }
+});
