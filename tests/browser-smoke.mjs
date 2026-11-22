@@ -68,7 +68,7 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  await cdp.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:3,mobile:true,screenWidth:390,screenHeight:844});
  await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
   await page.waitForFunction(()=>document.querySelector('#move').getBoundingClientRect().width>0);
- assert.equal(await page.locator('#stick').evaluate(e=>e.style.transform),'translate(-50%,-50%)','rotation should release active joystick');
+ assert.equal((await page.locator('#stick').evaluate(e=>e.style.transform)).replaceAll(' ',''),'translate(-50%,-50%)','rotation should release active joystick');
  await touch('touchCancel',[]);
  await cdp.send('Emulation.clearDeviceMetricsOverride');
  await cdp.detach();console.log('mobile multi-pointer cancellation and compact landscape passed');
