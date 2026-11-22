@@ -24,7 +24,10 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 export function microGravityAt(seed: number, position: Vec3): Vec3 {
   if (!position.every(Number.isFinite)) throw Error('Invalid position');
   const cells = position.map(v => Math.floor(v / MICRO_GRAVITY_CHUNK_METERS));
-  if (!cells.every(Number.isSafeInteger)) throw Error('Position exceeds chunk coordinate range');
+  // Eight-corner interpolation also reads the next cell on each axis.
+  // Reject edge coordinates before an unsafe +1 silently aliases another chunk.
+  if (!cells.every(v => Number.isSafeInteger(v) && Number.isSafeInteger(v + 1)))
+    throw Error('Position exceeds chunk coordinate range');
   // Interpolate between neighboring chunk centers, avoiding discontinuities at chunk edges.
   const weights = position.map((v, axis) =>
     smooth(v / MICRO_GRAVITY_CHUNK_METERS - cells[axis])) as number[];
