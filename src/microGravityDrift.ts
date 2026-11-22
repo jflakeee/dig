@@ -21,5 +21,10 @@ export function microGravityDrift(
   const speed = Math.hypot(...next);
   const scale = speed > 0.12 ? 0.12 / speed : 1;
   const velocity = next.map(v => v * scale) as unknown as Vec3;
-  return { state: { velocity }, displacement: velocity.map(v => v * dt) as unknown as Vec3 };
+  // Integrate the velocity curve, rather than treating end-of-frame velocity
+  // as the average. Apply the same speed-cap scale if the endpoint is capped.
+  const displacement = state.velocity.map((v, i) =>
+    (v * accelerationWeight + g[i] * (dt - accelerationWeight) / 2.5) * scale,
+  ) as unknown as Vec3;
+  return { state: { velocity }, displacement };
 }
