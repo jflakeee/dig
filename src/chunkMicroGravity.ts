@@ -3,7 +3,6 @@ import type { Vec3 } from './zeroGravityMovement.ts';
 /** Deterministic, bounded SF gravity anomalies; no terrain or save mutations. */
 export const MICRO_GRAVITY_MAX = 0.12; // m/s², ~1.2% of Earth's surface gravity
 export const MICRO_GRAVITY_CHUNK_METERS = 16;
-export const MICRO_GRAVITY_BLEND_METERS = 4;
 
 function hash(seed: number, x: number, y: number, z: number, channel: number) {
   let h = (seed | 0) ^ Math.imul(x, 73856093) ^ Math.imul(y, 19349663)
@@ -24,7 +23,8 @@ export function chunkMicroGravity(seed: number, x: number, y: number, z: number)
 const smooth = (t: number) => t * t * (3 - 2 * t);
 export function microGravityAt(seed: number, position: Vec3): Vec3 {
   if (!position.every(Number.isFinite)) throw Error('Invalid position');
-  const cells = position.map(v => Math.floor(v / MICRO_GRAVITY_CHUNK_METERS)) as number[];
+  const cells = position.map(v => Math.floor(v / MICRO_GRAVITY_CHUNK_METERS));
+  if (!cells.every(Number.isSafeInteger)) throw Error('Position exceeds chunk coordinate range');
   // Interpolate between neighboring chunk centers, avoiding discontinuities at chunk edges.
   const weights = position.map((v, axis) =>
     smooth(v / MICRO_GRAVITY_CHUNK_METERS - cells[axis])) as number[];
