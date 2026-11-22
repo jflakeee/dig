@@ -194,7 +194,7 @@ const gravityToggle=document.createElement('button');
 gravityToggle.textContent='Gravity: On';
 gravityToggle.style.cssText='position:fixed;right:12px;top:138px;z-index:3;min-height:44px';
 actions.append(gravityToggle);
-gravityToggle.onclick=()=>{zeroGravityEnabled=!zeroGravityEnabled;vy=0;verticalTouch=0;ascendButton.style.display=descendButton.style.display=zeroGravityEnabled?'block':'none';boostButton.style.display=zeroGravityEnabled?'block':'none';boostHeld=false;miningMachineView.setActive(zeroGravityEnabled);microGravityToggle.style.display=zeroGravityEnabled?'block':'none';microDrift=INITIAL_DRIFT;memoryLogButton.style.display=zeroGravityEnabled?'block':'none';if(!zeroGravityEnabled)memoryLogPanel.hidden=true;gravityToggle.textContent=zeroGravityEnabled?'Gravity: Off':'Gravity: On'};
+gravityToggle.onclick=()=>{zeroGravityEnabled=!zeroGravityEnabled;vy=0;verticalTouch=0;ascendButton.style.display=descendButton.style.display=zeroGravityEnabled?'block':'none';boostButton.style.display=zeroGravityEnabled?'block':'none';boostHeld=false;miningMachineView.setActive(zeroGravityEnabled);microGravityToggle.style.display=zeroGravityEnabled?'block':'none';microGravityIndicator.style.display=zeroGravityEnabled&&microGravityEnabled?'block':'none';microDrift=INITIAL_DRIFT;memoryLogButton.style.display=zeroGravityEnabled?'block':'none';if(!zeroGravityEnabled)memoryLogPanel.hidden=true;gravityToggle.textContent=zeroGravityEnabled?'Gravity: Off':'Gravity: On'};
 let microGravityEnabled=false;
 let microDrift=INITIAL_DRIFT;
 const microGravityIndicator=document.createElement('div');
@@ -246,7 +246,7 @@ if(autoMineEnabled){
   if(!blocked(vertical))camera.position.copy(vertical);
   vy=0;
   d.y=0;
-}for(const axis of ['x','z'] as const){if(d[axis]===0)continue;const p=probe.copy(camera.position);p[axis]+=d[axis];if(!blocked(p))camera.position.copy(p)}if(zeroGravityEnabled&&microGravityEnabled&&!document.hidden){
+}for(const axis of ['x','z'] as const){if(d[axis]===0)continue;const p=probe.copy(camera.position);p[axis]+=d[axis];if(!blocked(p))camera.position.copy(p)}if(zeroGravityEnabled&&microGravityEnabled&&!document.hidden&&document.hasFocus()&&journalPanel.style.display==='none'&&!trading){
   if(now>=microGravityIndicatorAt){
     microGravityIndicatorAt=now+250;
     const g=microGravityAt(20261122,[camera.position.x,camera.position.y,camera.position.z]);
