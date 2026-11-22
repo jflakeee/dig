@@ -34,3 +34,17 @@ test('rotation converges toward gravity without overshoot',()=>{
   assert.ok(Math.abs(facing.yaw-Math.PI/2)<0.001);
   assert.ok(Math.abs(facing.pitch-Math.asin(0.02/Math.hypot(0.1,0.02)))<0.001);
 });
+
+test('auto-facing is stable across mobile frame rates',()=>{
+  const simulate=dt=>{
+    let facing={yaw:0,pitch:0};
+    for(let i=0;i<Math.round(2/dt);i++)
+      facing=faceMicroGravity(facing,[-0.1,0.02,0],dt);
+    return facing;
+  };
+  const a=simulate(1/30),b=simulate(1/60),c=simulate(1/120);
+  for(const axis of ['yaw','pitch']){
+    assert.ok(Math.abs(a[axis]-b[axis])<1e-10);
+    assert.ok(Math.abs(b[axis]-c[axis])<1e-10);
+  }
+});
