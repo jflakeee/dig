@@ -33,7 +33,7 @@ export function collapseDistantChunks(
   const collapsed: ChunkKey[] = [];
   if (!context.saveHealthy || context.pendingRewards) return { chunks: next, collapsed };
   for (const [key, chunk] of chunks) {
-    if (context.visibleKeys.has(key)) continue;
+    if (context.visibleKeys.has(key) || chunk.edits.size === 0) continue;
     if (distanceToChunkCenter(chunk.center, context.player) <= threshold) continue;
     // Never touch persistent inventory, tool or reward records.
     next.set(key, { ...chunk, epoch: chunk.epoch + 1, edits: new Set<number>() });
