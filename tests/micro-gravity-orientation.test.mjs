@@ -20,3 +20,15 @@ test('wraps yaw along shortest path',()=>{
   assert.ok(Math.abs(v.yaw-(Math.PI-0.02))<0.1);
 });
 test('rejects invalid input',()=>assert.throws(()=>faceMicroGravity({yaw:0,pitch:0},[0,0,0],-1)));
+
+test('near-vertical gravity preserves yaw instead of spinning',()=>{
+  const v=faceMicroGravity({yaw:1.2,pitch:0},[0.00001,0.1,0.00001],0.04);
+  assert.equal(v.yaw,1.2);
+  assert.ok(v.pitch>0);
+});
+test('rotation converges toward gravity without overshoot',()=>{
+  let facing={yaw:0,pitch:0};
+  for(let i=0;i<300;i++)facing=faceMicroGravity(facing,[-0.1,0.02,0],0.04);
+  assert.ok(Math.abs(facing.yaw-Math.PI/2)<0.001);
+  assert.ok(Math.abs(facing.pitch-Math.asin(0.02/Math.hypot(0.1,0.02)))<0.001);
+});
