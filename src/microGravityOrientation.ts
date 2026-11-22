@@ -13,7 +13,8 @@ export function faceMicroGravity(
   const targetYaw=horizontal<length*0.05?current.yaw:Math.atan2(-gravity[0],-gravity[2]);
   const targetPitch=Math.asin(Math.max(-1,Math.min(1,gravity[1]/length)));
   const shortest=Math.atan2(Math.sin(targetYaw-current.yaw),Math.cos(targetYaw-current.yaw));
-  const turn=Math.min(1,dt*1.2);
+  // Exponential smoothing keeps the turn rate consistent across 30/60/120 FPS.
+  const turn=-Math.expm1(-1.2*dt);
   return {
     yaw:current.yaw+shortest*turn,
     pitch:Math.max(-1.5,Math.min(1.5,current.pitch+(targetPitch-current.pitch)*turn)),
