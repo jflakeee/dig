@@ -12,6 +12,8 @@ on:
       - 'src/chunkMicroGravity.ts'
       - 'src/microGravityDrift.ts'
       - 'src/microGravityOrientation.ts'
+      - 'src/microGravitySeed.ts'
+      - 'tests/micro-gravity-seed.test.mjs'
       - 'tests/micro-gravity-orientation.test.mjs'
       - 'tests/micro-gravity-drift.test.mjs'
       - 'tests/chunk-micro-gravity.test.mjs'
