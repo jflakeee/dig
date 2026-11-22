@@ -28,3 +28,10 @@ test('field interpolation stays bounded for varied 3D positions',()=>{
 test('out-of-range chunk coordinates are rejected',()=>{
   assert.throws(()=>microGravityAt(42,[Number.MAX_VALUE,0,0]));
 });
+
+test('neighboring chunk interpolation rejects safe-integer overflow',()=>{
+  const edge=Number.MAX_SAFE_INTEGER*16;
+  assert.throws(()=>microGravityAt(42,[edge,0,0]),/chunk coordinate range/);
+  assert.throws(()=>microGravityAt(42,[0,edge,0]),/chunk coordinate range/);
+  assert.throws(()=>microGravityAt(42,[0,0,edge]),/chunk coordinate range/);
+});
