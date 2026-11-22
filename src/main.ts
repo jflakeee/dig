@@ -246,7 +246,11 @@ if(autoMineEnabled){
   if(!blocked(vertical))camera.position.copy(vertical);
   vy=0;
   d.y=0;
-}for(const axis of ['x','z'] as const){if(d[axis]===0)continue;const p=probe.copy(camera.position);p[axis]+=d[axis];if(!blocked(p))camera.position.copy(p)}if(zeroGravityEnabled&&microGravityEnabled&&!document.hidden&&document.hasFocus()&&journalPanel.style.display==='none'&&!trading){
+}for(const axis of ['x','z'] as const){if(d[axis]===0)continue;const p=probe.copy(camera.position);p[axis]+=d[axis];if(!blocked(p))camera.position.copy(p)}if(zeroGravityEnabled&&microGravityEnabled&&
+  (document.hidden||!document.hasFocus()||journalPanel.style.display!=='none'||trading)){
+  microDrift=INITIAL_DRIFT;
+}
+if(zeroGravityEnabled&&microGravityEnabled&&!document.hidden&&document.hasFocus()&&journalPanel.style.display==='none'&&!trading){
   if(now>=microGravityIndicatorAt){
     microGravityIndicatorAt=now+250;
     const g=microGravityAt(20261122,[camera.position.x,camera.position.y,camera.position.z]);
