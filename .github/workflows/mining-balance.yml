@@ -13,6 +13,8 @@ on:
       - 'src/main.ts'
       - 'src/miningMachinePropulsion.ts'
       - 'src/miningMachineView.ts'
+      - 'src/mineralFuelTransaction.ts'
+      - 'tests/mineral-fuel-transaction.test.mjs'
       - 'tests/mining-machine-propulsion.test.mjs'
       - '.github/workflows/mining-balance.yml'
   workflow_dispatch:
@@ -33,6 +35,8 @@ jobs:
         run: node --test tests/mining-balance.test.mjs
       - name: Test mining machine propulsion
         run: node --experimental-strip-types --test tests/mining-machine-propulsion.test.mjs
+      - name: Test mineral fuel transactions
+        run: node --experimental-strip-types --test tests/mineral-fuel-transaction.test.mjs
       - name: Run 7200-scenario simulation
         run: node scripts/mining-balance.mjs --hours=0 --seeds=100 --base-seconds=1 > mining-balance-results.json
       - name: Summarize
