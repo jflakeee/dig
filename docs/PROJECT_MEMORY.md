@@ -367,3 +367,8 @@
 - `src/main.ts`: 카메라 pointerdown 순간 `lastManualLookAt` 갱신.
 - `look !== -1`인 전체 드래그 시간에는 자동 회전 금지. 드래그 종료 후 기존 1.8초 유예 유지.
 - UI 조작과 중력 표류/저장 동작은 그대로 유지. 실제 빌드·CI·모바일 검증은 미확인. main/Pages 유지.
+
+## 모바일 포인터 해제/포커스 복구 (2026-11-22)
+- `src/main.ts`: 카메라 pointerup, pointercancel, lostpointercapture에서 look 상태 해제와 수동 회전 유예 시각 갱신.
+- 창 blur 및 문서 hidden 전환에도 look 상태를 해제해 자동 회전 영구 정지 방지.
+- 실제 CI/빌드/모바일 실기기 검증은 미확인. 공개 main/Pages 미변경.
