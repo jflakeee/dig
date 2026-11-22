@@ -15,8 +15,12 @@ export function faceMicroGravity(
   const shortest=Math.atan2(Math.sin(targetYaw-current.yaw),Math.cos(targetYaw-current.yaw));
   // Exponential smoothing keeps the turn rate consistent across 30/60/120 FPS.
   const turn=-Math.expm1(-1.2*dt);
+  // A hard angular cap prevents sudden camera swings at a chunk transition.
+  const maxTurn=0.9*dt;
+  const yawStep=Math.max(-maxTurn,Math.min(maxTurn,shortest*turn));
+  const pitchStep=Math.max(-maxTurn,Math.min(maxTurn,(targetPitch-current.pitch)*turn));
   return {
-    yaw:current.yaw+shortest*turn,
-    pitch:Math.max(-1.5,Math.min(1.5,current.pitch+(targetPitch-current.pitch)*turn)),
+    yaw:current.yaw+yawStep,
+    pitch:Math.max(-1.5,Math.min(1.5,current.pitch+pitchStep)),
   };
 }
