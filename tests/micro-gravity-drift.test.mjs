@@ -25,3 +25,17 @@ test('diagonal velocity is limited by total speed, not each axis',()=>{
   const result=microGravityDrift({velocity:[0.12,0.12,0.12]},42,[5,7,9],0.04);
   assert.ok(Math.hypot(...result.state.velocity)<=0.12+1e-12);
 });
+
+test('drift velocity is frame-rate independent under a constant gravity field',()=>{
+  const run=dt=>{
+    let state=INITIAL_DRIFT;
+    for(let i=0;i<Math.round(2/dt);i++)
+      state=microGravityDrift(state,42,[5,7,9],dt).state;
+    return state.velocity;
+  };
+  const a=run(1/30),b=run(1/60),c=run(1/120);
+  for(let axis=0;axis<3;axis++){
+    assert.ok(Math.abs(a[axis]-b[axis])<1e-10);
+    assert.ok(Math.abs(b[axis]-c[axis])<1e-10);
+  }
+});
