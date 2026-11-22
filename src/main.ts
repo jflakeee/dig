@@ -1,3 +1,4 @@
+import { microGravityWorldSeed } from './microGravitySeed.ts';
 import { faceMicroGravity } from './microGravityOrientation';
 import { microGravityAt, MICRO_GRAVITY_MAX } from './chunkMicroGravity';
 import { INITIAL_DRIFT, microGravityDrift } from './microGravityDrift';
@@ -63,7 +64,7 @@ const ambient=new T.HemisphereLight(0xffffff,0x725037,2);scene.add(ambient);cons
 const lamp=new T.SpotLight(0xffecd0,35,13,Math.PI/5,.55,2);lamp.position.set(.1,-.08,0);lamp.target.position.set(0,0,-1);const fill=new T.PointLight(0xc9dcff,1.1,2.8,2);fill.position.set(0,.05,-.15);camera.add(fill);camera.add(lamp,lamp.target);scene.add(camera);const viewTool=new ViewTool(camera);const miningMachineView=createMiningMachineView(camera);let lampOn=true;const lampButton=document.createElement('button');lampButton.textContent='Lamp on';lampButton.style.cssText='position:fixed;right:12px;top:88px;z-index:2';actions.append(lampButton);function toggleLamp(){uiSound('toggle-on');lampOn=!lampOn;lamp.visible=lampOn;fill.visible=lampOn;lampButton.textContent=lampOn?'Lamp on':'Lamp off'}lampButton.onclick=toggleLamp;addEventListener('keydown',e=>{if(e.key.toLowerCase()==='l'&&!e.repeat)toggleLamp()});
 const store={getItem:(k:string)=>localStorage.getItem(k),setItem:(k:string,v:string)=>localStorage.setItem(k,v)};
 const world:ReturnType<typeof openWorld>=await (async()=>{try{return navigator.locks?await navigator.locks.request(SAVE,()=>openWorld(store)):openWorld(store)}catch{const hud=document.querySelector('#hud')!;hud.textContent='Save protected — reload after checking browser storage';hud.setAttribute('role','alert');throw Error('Save protected')}})();const shape=world.shape,N=shape.n,H=shape.h;
-const microGravitySeed=20261122 ^ (Number(shape.id)||0);createCamp(scene,shape);const rescue=new T.Mesh(new T.BoxGeometry(N*S,.3,3),new T.MeshStandardMaterial({color:0x77736c}));rescue.position.set(N*S/2,H*S-.15,-1.5);scene.add(rescue);
+const microGravitySeed=microGravityWorldSeed(shape.id);createCamp(scene,shape);const rescue=new T.Mesh(new T.BoxGeometry(N*S,.3,3),new T.MeshStandardMaterial({color:0x77736c}));rescue.position.set(N*S/2,H*S-.15,-1.5);scene.add(rescue);
 let ledger=world.ledger;
 const session={readable:true,get sold(){return ledger.sold},get levels(){return ledger.levels},get crafted(){return ledger.crafted},write(data:Uint8Array,sold=ledger.sold,levels=ledger.levels,crafted=ledger.crafted){const result=world.write(data,{sold,levels,crafted});if(result==='saved')ledger=world.ledger;return result as 'saved'|'failed'|'conflict'|'protected'}};
 const explorationModels=world.profile.worldgen===1?createExplorationModels(scene,shape.id,world.profile.journal??[]):new Map<string,T.Group>();
