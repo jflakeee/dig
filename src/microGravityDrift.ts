@@ -11,9 +11,12 @@ export function microGravityDrift(
   if (dt === 0) return { state, displacement: [0, 0, 0] };
   const g = microGravityAt(seed, position);
   const damping = Math.exp(-2.5 * dt);
-  const velocity = state.velocity.map((v, i) => {
+  const next = state.velocity.map((v, i) => {
     if (!Number.isFinite(v)) throw Error('Invalid velocity');
-    return Math.max(-0.12, Math.min(0.12, (v + g[i] * dt) * damping));
-  }) as unknown as Vec3;
-  return { state: { velocity }, displacement: velocity.map(v => v * dt) as unknown as Vec3 };
+    return (v + g[i] * dt) * damping;
+  });
+  const speed = Math.hypot(...next);
+  const scale = speed > 0.12 ? 0.12 / speed : 1;
+  const velocity = next.map(v => v * scale) as Vec3;
+  return { state: { velocity }, displacement: velocity.map(v => v * dt) as Vec3 };
 }
