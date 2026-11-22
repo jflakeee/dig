@@ -9,6 +9,16 @@ export function collectDust(state: PropulsionState, removedBlocks: number): Prop
   if (!Number.isFinite(removedBlocks) || removedBlocks < 0) throw Error('Invalid mined block count');
   return { ...state, dust: Math.min(100, state.dust + Math.floor(removedBlocks) * 0.5) };
 }
+/** Optional fuel conversion. Call only after a separate, successful inventory debit.
+ * No inventory or save data is mutated here.
+ */
+export function convertMineralFuel(
+  state: PropulsionState,
+  mineralUnits: number,
+): PropulsionState {
+  if (!Number.isSafeInteger(mineralUnits) || mineralUnits < 0) throw Error('Invalid mineral fuel amount');
+  return { ...state, energy: Math.min(100, state.energy + mineralUnits * 10) };
+}
 export function propulsionStep(
   state: PropulsionState, deltaSeconds: number, boosting: boolean,
 ): { state: PropulsionState; speed: number; emergency: boolean } {
