@@ -7,6 +7,7 @@ on:
       - 'scripts/mining-balance.mjs'
       - 'tests/mining-balance.test.mjs'
       - 'src/miningDurability.ts'
+      - 'src/autoMineController.ts'
       - '.github/workflows/mining-balance.yml'
   workflow_dispatch:
 jobs:
