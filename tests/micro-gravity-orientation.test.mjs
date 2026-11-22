@@ -74,3 +74,11 @@ test('camera forward vector converges to gravity direction in all octants',()=>{
     assert.ok(dot>0.999, 'forward direction should align with local gravity');
   }
 });
+
+test('automatic orientation never exceeds the safe pitch range',()=>{
+  for(const gravity of [[0,0.1,0],[0,-0.1,0]]){
+    let facing={yaw:0,pitch:0};
+    for(let i=0;i<400;i++)facing=faceMicroGravity(facing,gravity,0.04);
+    assert.ok(facing.pitch<=1.5&&facing.pitch>=-1.5);
+  }
+});
