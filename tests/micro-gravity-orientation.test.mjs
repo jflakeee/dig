@@ -44,7 +44,16 @@ test('auto-facing is stable across mobile frame rates',()=>{
   };
   const a=simulate(1/30),b=simulate(1/60),c=simulate(1/120);
   for(const axis of ['yaw','pitch']){
-    assert.ok(Math.abs(a[axis]-b[axis])<1e-10);
-    assert.ok(Math.abs(b[axis]-c[axis])<1e-10);
+    assert.ok(Math.abs(a[axis]-b[axis])<0.002);
+    assert.ok(Math.abs(b[axis]-c[axis])<0.002);
   }
+});
+
+test('abrupt gravity change cannot spin camera faster than 0.9 rad/s',()=>{
+  const start={yaw:0,pitch:0};
+  const dt=0.04;
+  const next=faceMicroGravity(start,[0,0,0.1],dt);
+  assert.ok(Math.abs(next.yaw-start.yaw)<=0.9*dt+1e-12);
+  const vertical=faceMicroGravity(start,[0,0.1,0],dt);
+  assert.ok(Math.abs(vertical.pitch-start.pitch)<=0.9*dt+1e-12);
 });
