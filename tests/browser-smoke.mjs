@@ -16,6 +16,8 @@ try{
  await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Removed 0'));
  const controls=await page.locator('#actions button,#move,#dig').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {id:e.id||e.textContent?.trim(),left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height}}));
  for(const c of controls)assert.ok(c.left>=0&&c.right<=390&&c.top>=0&&c.bottom<=844&&c.width>=44&&c.height>=44,'portrait control must be visible and touchable: '+JSON.stringify(c));
+ const portraitBoxes=await page.locator('#actions button,#move,#dig,#craft-toggle,#travel-toggle,#journal-toggle').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {id:e.id||e.textContent?.trim(),x:r.x,y:r.y,w:r.width,h:r.height}}));
+ for(let i=0;i<portraitBoxes.length;i++)for(let j=i+1;j<portraitBoxes.length;j++){const a=portraitBoxes[i],b=portraitBoxes[j];assert.ok(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y,a.id+' overlaps '+b.id+' in portrait')}
  await page.screenshot({path:'artifacts/mobile-portrait.png'});
  await context.close();console.log('mobile portrait control bounds passed');
 }
