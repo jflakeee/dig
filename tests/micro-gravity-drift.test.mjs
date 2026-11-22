@@ -81,6 +81,6 @@ test('invalid drift velocity is rejected even when paused',()=>{
 
 test('finite velocity components with overflowing combined magnitude are rejected',()=>{
   for(const dt of [0,0.04]){
-    assert.throws(()=>microGravityDrift({velocity:[1e308,1e308,1e308]},42,[0,0,0],dt),/Invalid velocity/);
+    assert.throws(()=>microGravityDrift({velocity:[1.1e308,1.1e308,1.1e308]},42,[0,0,0],dt),/Invalid velocity/);
   }
 });
