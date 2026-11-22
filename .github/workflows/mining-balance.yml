@@ -10,6 +10,8 @@ on:
       - 'src/autoMineController.ts'
       - 'src/chunkCollapse.ts'
       - 'src/chunkMicroGravity.ts'
+      - 'src/microGravityDrift.ts'
+      - 'tests/micro-gravity-drift.test.mjs'
       - 'tests/chunk-micro-gravity.test.mjs'
       - 'src/zeroGravityMovement.ts'
       - 'src/main.ts'
@@ -49,6 +51,8 @@ jobs:
         run: node --experimental-strip-types --test tests/mining-machine-memory.test.mjs
       - name: Test chunk micro gravity
         run: node --experimental-strip-types --test tests/chunk-micro-gravity.test.mjs
+      - name: Test microgravity drift
+        run: node --experimental-strip-types --test tests/micro-gravity-drift.test.mjs
       - name: Run 7200-scenario simulation
         run: node scripts/mining-balance.mjs --hours=0 --seeds=100 --base-seconds=1 > mining-balance-results.json
       - name: Summarize
