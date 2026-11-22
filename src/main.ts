@@ -1,3 +1,4 @@
+import { INITIAL_DRIFT, microGravityDrift } from './microGravityDrift';
 import { INITIAL_MEMORY, advanceMemory, memoryMiningEvent } from './miningMachineMemory';
 import { machineDropReaction } from './miningMachinePersonality';
 import { createMiningMachineView } from './miningMachineView';
@@ -192,7 +193,18 @@ const gravityToggle=document.createElement('button');
 gravityToggle.textContent='Gravity: On';
 gravityToggle.style.cssText='position:fixed;right:12px;top:138px;z-index:3;min-height:44px';
 actions.append(gravityToggle);
-gravityToggle.onclick=()=>{zeroGravityEnabled=!zeroGravityEnabled;vy=0;verticalTouch=0;ascendButton.style.display=descendButton.style.display=zeroGravityEnabled?'block':'none';boostButton.style.display=zeroGravityEnabled?'block':'none';boostHeld=false;miningMachineView.setActive(zeroGravityEnabled);memoryLogButton.style.display=zeroGravityEnabled?'block':'none';if(!zeroGravityEnabled)memoryLogPanel.hidden=true;gravityToggle.textContent=zeroGravityEnabled?'Gravity: Off':'Gravity: On'};
+gravityToggle.onclick=()=>{zeroGravityEnabled=!zeroGravityEnabled;vy=0;verticalTouch=0;ascendButton.style.display=descendButton.style.display=zeroGravityEnabled?'block':'none';boostButton.style.display=zeroGravityEnabled?'block':'none';boostHeld=false;miningMachineView.setActive(zeroGravityEnabled);microGravityToggle.style.display=zeroGravityEnabled?'block':'none';microDrift=INITIAL_DRIFT;memoryLogButton.style.display=zeroGravityEnabled?'block':'none';if(!zeroGravityEnabled)memoryLogPanel.hidden=true;gravityToggle.textContent=zeroGravityEnabled?'Gravity: Off':'Gravity: On'};
+let microGravityEnabled=false;
+let microDrift=INITIAL_DRIFT;
+const microGravityToggle=document.createElement('button');
+microGravityToggle.textContent='Micro G: Off';
+microGravityToggle.style.cssText='position:fixed;right:12px;top:182px;z-index:3;min-height:44px;display:none';
+actions.append(microGravityToggle);
+microGravityToggle.onclick=()=>{
+  microGravityEnabled=!microGravityEnabled;
+  microDrift=INITIAL_DRIFT;
+  microGravityToggle.textContent=microGravityEnabled?'Micro G: On':'Micro G: Off';
+};
 let autoMineState:AutoMineState=initialAutoMineState();
 const autoMineToggle=document.createElement('button');
 autoMineToggle.textContent='Auto: Off';
@@ -226,7 +238,22 @@ if(autoMineEnabled){
   if(!blocked(vertical))camera.position.copy(vertical);
   vy=0;
   d.y=0;
-}for(const axis of ['x','z'] as const){if(d[axis]===0)continue;const p=probe.copy(camera.position);p[axis]+=d[axis];if(!blocked(p))camera.position.copy(p)}if(!zeroGravityEnabled){vy=Math.max(-8,vy-9.8*dt);const p=probe.copy(camera.position);p.y+=vy*dt;if(!blocked(p))camera.position.copy(p);else{let lo=0,hi=1;for(let i=0;i<8;i++){const mid=(lo+hi)/2;const test=probe.copy(camera.position);test.y+=vy*dt*mid;if(blocked(test))hi=mid;else lo=mid}camera.position.y+=vy*dt*lo;vy=0;}}if((held||keys.has(' '))&&now>next){dig();next=now+legendaryTool(selected,session.levels,session.crafted,world.profile.version===3?world.profile.legendary:undefined).interval}if(now>=hudAt){hudAt=now+150;checkCave();hud.textContent='DIG '+shape.id+' · Removed '+count+' · Depth '+Math.max(0,H*S-camera.position.y+1.6).toFixed(1)+'m'+(zeroGravityEnabled?' · Machine '+(drive.emergency?'Cruise':'Boost')+' · Dust '+propulsion.dust.toFixed(0):'')+saveStatus+notice;}miningMachineView.update(zeroGravityEnabled&&(autoMineEnabled||d.lengthSq()>0||verticalTouch!==0||keys.has('e')||keys.has('q')),zeroGravityEnabled&&!drive.emergency,now/1000);const light=lighting(Math.max(0,H*S-camera.position.y+1.6));debris.update(dt);viewTool.update(dt);const atmosphere=caveAtmosphere(H*S-camera.position.y+1.6);fill.intensity=atmosphere.fill;lamp.intensity=atmosphere.lampIntensity;lamp.distance=13*craftEffects(session.crafted).lamp;ambient.intensity=light.ambient;sun.intensity=light.sun;const underground=atmosphere.blend;const fog=scene.fog as T.FogExp2;fog.density=atmosphere.fogDensity;fog.color.setRGB(.42*(1-underground)+.045*underground,.57*(1-underground)+.035*underground,.62*(1-underground)+.055*underground);(scene.background as T.Color).copy(fog.color);renderer.render(scene,camera);if(profiling){metrics.frames++;if(metrics.frames%30===1)hud.setAttribute('data-perf',JSON.stringify({...metrics,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,pixelRatio:renderer.getPixelRatio()}))}}requestAnimationFrame(frame);
+}for(const axis of ['x','z'] as const){if(d[axis]===0)continue;const p=probe.copy(camera.position);p[axis]+=d[axis];if(!blocked(p))camera.position.copy(p)}if(zeroGravityEnabled&&microGravityEnabled&&!document.hidden){
+  const drift=microGravityDrift(microDrift,20261122,
+    [camera.position.x,camera.position.y,camera.position.z],dt);
+  const offset=drift.displacement;
+  const velocity=[...drift.state.velocity] as [number,number,number];
+  for(const axis of [0,1,2] as const){
+    const name=(['x','y','z'] as const)[axis];
+    if(offset[axis]===0)continue;
+    const p=probe.copy(camera.position);
+    p[name]+=offset[axis];
+    if(!blocked(p))camera.position.copy(p);
+    else velocity[axis]=0;
+  }
+  microDrift={velocity};
+}
+if(!zeroGravityEnabled){vy=Math.max(-8,vy-9.8*dt);const p=probe.copy(camera.position);p.y+=vy*dt;if(!blocked(p))camera.position.copy(p);else{let lo=0,hi=1;for(let i=0;i<8;i++){const mid=(lo+hi)/2;const test=probe.copy(camera.position);test.y+=vy*dt*mid;if(blocked(test))hi=mid;else lo=mid}camera.position.y+=vy*dt*lo;vy=0;}}if((held||keys.has(' '))&&now>next){dig();next=now+legendaryTool(selected,session.levels,session.crafted,world.profile.version===3?world.profile.legendary:undefined).interval}if(now>=hudAt){hudAt=now+150;checkCave();hud.textContent='DIG '+shape.id+' · Removed '+count+' · Depth '+Math.max(0,H*S-camera.position.y+1.6).toFixed(1)+'m'+(zeroGravityEnabled?' · Machine '+(drive.emergency?'Cruise':'Boost')+' · Dust '+propulsion.dust.toFixed(0)+(microGravityEnabled?' · Micro G':''):'')+saveStatus+notice;}miningMachineView.update(zeroGravityEnabled&&(autoMineEnabled||d.lengthSq()>0||verticalTouch!==0||keys.has('e')||keys.has('q')),zeroGravityEnabled&&!drive.emergency,now/1000);const light=lighting(Math.max(0,H*S-camera.position.y+1.6));debris.update(dt);viewTool.update(dt);const atmosphere=caveAtmosphere(H*S-camera.position.y+1.6);fill.intensity=atmosphere.fill;lamp.intensity=atmosphere.lampIntensity;lamp.distance=13*craftEffects(session.crafted).lamp;ambient.intensity=light.ambient;sun.intensity=light.sun;const underground=atmosphere.blend;const fog=scene.fog as T.FogExp2;fog.density=atmosphere.fogDensity;fog.color.setRGB(.42*(1-underground)+.045*underground,.57*(1-underground)+.035*underground,.62*(1-underground)+.055*underground);(scene.background as T.Color).copy(fog.color);renderer.render(scene,camera);if(profiling){metrics.frames++;if(metrics.frames%30===1)hud.setAttribute('data-perf',JSON.stringify({...metrics,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,pixelRatio:renderer.getPixelRatio()}))}}requestAnimationFrame(frame);
 window.addEventListener('touchcancel',()=>{resetJoy();look=-1;held=false;digId=-1;keys.clear()},{capture:true,passive:true});
 document.addEventListener('visibilitychange',()=>{quality.reset();last=performance.now();if(document.hidden){discoveryBanner.hidden=true;gain.hidden=true;impactPower=0;suspendAudio();keys.clear();resetJoy();look=-1;held=false;digId=-1}});
 addEventListener('resize',()=>{resetJoy();look=-1;held=false;digId=-1;keys.clear();camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();quality=new AdaptiveQuality(renderCeiling(innerWidth,innerHeight,devicePixelRatio,mobile));renderer.setPixelRatio(quality.scale);renderer.setSize(innerWidth,innerHeight)});
