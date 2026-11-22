@@ -12,6 +12,7 @@ on:
       - 'src/zeroGravityMovement.ts'
       - 'src/main.ts'
       - 'src/miningMachinePropulsion.ts'
+      - 'src/miningMachineView.ts'
       - 'tests/mining-machine-propulsion.test.mjs'
       - '.github/workflows/mining-balance.yml'
   workflow_dispatch:
