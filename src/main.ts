@@ -122,7 +122,7 @@ document.body.append(memoryLogPanel);
 memoryLogButton.onclick=()=>{
   memoryLogPanel.hidden=!memoryLogPanel.hidden;
   memoryLogPanel.textContent=memoryLog.length
-    ? '외부 관측 기록 (기계는 이 기록을 인식하지 못함)\\n\\n'+memoryLog.map((line,i)=>(i+1)+'. '+line).join('\\n')
+    ? '외부 관측 기록 (기계는 이 기록을 인식하지 못함)\n\n'+memoryLog.map((line,i)=>(i+1)+'. '+line).join('\n')
     : '아직 기록된 기억 파편이 없습니다.';
 };
 let memoryState=INITIAL_MEMORY;
