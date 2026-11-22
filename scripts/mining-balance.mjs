@@ -90,11 +90,21 @@ function flag(name, fallback) {
 if (process.argv[1]?.endsWith('mining-balance.mjs')) {
   const hours = flag('hours', 1), seeds = flag('seeds', 10), baseMineSeconds = flag('base-seconds', 1);
   if (!Number.isInteger(seeds) || seeds < 1 || seeds > 1000) throw Error('seeds must be 1..1000');
-  if (![1, 10, 100].includes(hours)) throw Error('hours must be 1, 10, or 100');
+  if (hours !== 0 && ![1, 10, 100].includes(hours)) throw Error('hours must be 0 (all), 1, 10, or 100');
+  if (!Number.isFinite(baseMineSeconds) || baseMineSeconds <= 0) throw Error('base-seconds must be positive');
   const results = [];
-  for (let tier = 0; tier < equipment.length; tier++)
-    for (let upgrade = 0; upgrade < upgrades.length; upgrade++)
-      for (let seed = 1; seed <= seeds; seed++)
-        results.push(simulate({ tier, upgrade, hours, seed, baseMineSeconds }));
-  console.log(JSON.stringify({ config: { hours, seeds, baseMineSeconds, scenarios: results.length }, results }));
+  for (const duration of (hours === 0 ? [1, 10, 100] : [hours]))
+    for (let tier = 0; tier < equipment.length; tier++)
+      for (let upgrade = 0; upgrade < upgrades.length; upgrade++)
+        for (let seed = 1; seed <= seeds; seed++)
+          results.push(simulate({ tier, upgrade, hours: duration, seed, baseMineSeconds }));
+  const summaries = [];
+  for (const duration of (hours === 0 ? [1, 10, 100] : [hours]))
+    for (const tool of equipment)
+      for (let upgrade = 0; upgrade < upgrades.length; upgrade++) {
+        const rows = results.filter(row => row.hours === duration && row.tier === tool.name && row.upgrade === upgrade);
+        const average = key => rows.reduce((sum, row) => sum + row[key], 0) / rows.length;
+        summaries.push({ hours: duration, tier: tool.name, upgrade, avgBlocks: average('blocks'), avgNetGold: average('netGold'), avgRepairs: average('repairs'), avgReplacements: average('replacements') });
+      }
+  console.log(JSON.stringify({ config: { hours: hours || 'all', seeds, baseMineSeconds, scenarios: results.length, assumptions: ['all ores sold', 'no crafting ore costs', 'bonus drops have zero sale value', 'no upgrade costs', 'no movement or chunk loading time'] }, summaries, results }));
 }
