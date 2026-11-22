@@ -18,3 +18,13 @@ test('invalid positions and coordinates fail safely',()=>{
   assert.throws(()=>microGravityAt(42,[Infinity,0,0]));
   assert.throws(()=>chunkMicroGravity(42,0.1,0,0));
 });
+
+test('field interpolation stays bounded for varied 3D positions',()=>{
+  for(let i=0;i<100;i++){
+    const position=[i*1.31-48,i*0.73-37,18-i*1.9];
+    assert.ok(Math.hypot(...microGravityAt(42,position))<=MICRO_GRAVITY_MAX+1e-12);
+  }
+});
+test('out-of-range chunk coordinates are rejected',()=>{
+  assert.throws(()=>microGravityAt(42,[Number.MAX_VALUE,0,0]));
+});
