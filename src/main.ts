@@ -196,8 +196,9 @@ const gravityToggle=document.createElement('button');
 gravityToggle.textContent='Gravity: On';
 gravityToggle.style.cssText='position:fixed;right:12px;top:138px;z-index:3;min-height:44px';
 actions.append(gravityToggle);
-gravityToggle.onclick=()=>{zeroGravityEnabled=!zeroGravityEnabled;vy=0;verticalTouch=0;ascendButton.style.display=descendButton.style.display=zeroGravityEnabled?'block':'none';boostButton.style.display=zeroGravityEnabled?'block':'none';boostHeld=false;miningMachineView.setActive(zeroGravityEnabled);microGravityToggle.style.display=zeroGravityEnabled?'block':'none';microGravityIndicator.style.display=zeroGravityEnabled&&microGravityEnabled?'block':'none';microDrift=INITIAL_DRIFT;memoryLogButton.style.display=zeroGravityEnabled?'block':'none';if(!zeroGravityEnabled)memoryLogPanel.hidden=true;gravityToggle.textContent=zeroGravityEnabled?'Gravity: Off':'Gravity: On'};
+gravityToggle.onclick=()=>{zeroGravityEnabled=!zeroGravityEnabled;vy=0;verticalTouch=0;ascendButton.style.display=descendButton.style.display=zeroGravityEnabled?'block':'none';boostButton.style.display=zeroGravityEnabled?'block':'none';boostHeld=false;miningMachineView.setActive(zeroGravityEnabled);microGravityToggle.style.display=zeroGravityEnabled?'block':'none';microGravityIndicator.style.display=zeroGravityEnabled&&microGravityEnabled?'block':'none';gravityFaceToggle.style.display=zeroGravityEnabled&&microGravityEnabled?'block':'none';microDrift=INITIAL_DRIFT;memoryLogButton.style.display=zeroGravityEnabled?'block':'none';if(!zeroGravityEnabled)memoryLogPanel.hidden=true;gravityToggle.textContent=zeroGravityEnabled?'Gravity: Off':'Gravity: On'};
 let microGravityEnabled=false;
+let gravityAutoFaceEnabled=true;
 let microDrift=INITIAL_DRIFT;
 const microGravityIndicator=document.createElement('div');
 microGravityIndicator.setAttribute('role','status');
@@ -214,6 +215,16 @@ microGravityToggle.onclick=()=>{
   microDrift=INITIAL_DRIFT;
   microGravityToggle.textContent=microGravityEnabled?'Micro G: On':'Micro G: Off';
   microGravityIndicator.style.display=microGravityEnabled?'block':'none';
+  gravityFaceToggle.style.display=zeroGravityEnabled&&microGravityEnabled?'block':'none';
+};
+const gravityFaceToggle=document.createElement('button');
+gravityFaceToggle.textContent='Auto Face: On';
+gravityFaceToggle.setAttribute('aria-label','Toggle automatic rotation toward microgravity');
+gravityFaceToggle.style.cssText='position:fixed;right:12px;top:274px;z-index:3;min-height:44px;display:none';
+actions.append(gravityFaceToggle);
+gravityFaceToggle.onclick=()=>{
+  gravityAutoFaceEnabled=!gravityAutoFaceEnabled;
+  gravityFaceToggle.textContent=gravityAutoFaceEnabled?'Auto Face: On':'Auto Face: Off';
 };
 let autoMineState:AutoMineState=initialAutoMineState();
 const autoMineToggle=document.createElement('button');
@@ -225,7 +236,7 @@ let last=performance.now(),next=0,vy=0;const hud=document.querySelector('#hud')!
   const fading=advanceMemory(memoryState,now);
   memoryState=fading.state;
   if(fading.line)showMemoryLine(fading.line,now);
-}if(!document.hidden&&quality.sample(frameMs))renderer.setPixelRatio(quality.scale);impactPower=Math.max(0,impactPower-dt*1.7);const opacity=reducedMotion.matches||impactPower===0?'0':String(impactPower);if(opacity!==previousOpacity){impact.style.opacity=opacity;previousOpacity=opacity}if(zeroGravityEnabled&&microGravityEnabled&&!document.hidden&&document.hasFocus()&&
+}if(!document.hidden&&quality.sample(frameMs))renderer.setPixelRatio(quality.scale);impactPower=Math.max(0,impactPower-dt*1.7);const opacity=reducedMotion.matches||impactPower===0?'0':String(impactPower);if(opacity!==previousOpacity){impact.style.opacity=opacity;previousOpacity=opacity}if(zeroGravityEnabled&&microGravityEnabled&&gravityAutoFaceEnabled&&!document.hidden&&document.hasFocus()&&
   journalPanel.style.display==='none'&&memoryLogPanel.hidden&&!trading&&
   now-lastManualLookAt>1800){
   const gravity=microGravityAt(20261122,[camera.position.x,camera.position.y,camera.position.z]);
