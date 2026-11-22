@@ -9,6 +9,8 @@ on:
       - 'src/miningDurability.ts'
       - 'src/autoMineController.ts'
       - 'src/chunkCollapse.ts'
+      - 'src/zeroGravityMovement.ts'
+      - 'src/main.ts'
       - '.github/workflows/mining-balance.yml'
   workflow_dispatch:
 jobs:
