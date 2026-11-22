@@ -124,3 +124,9 @@
 - 실행 결과 `mining-balance-results.json` 및 요약 `mining-balance-summary.json`을 GitHub Actions artifact로 업로드하도록 설정.
 - 현재 CI의 `--base-seconds=1`은 임시 실험 입력이며 실제 게임 채굴 시간 확인 후 교체 필요.
 - **워크플로 파일 커밋 완료, Actions 실행 상태/성공 여부 미확인. 게임 본체와 Pages 배포 미적용.**
+
+## 시뮬레이터 검증 보강 및 런타임 현황 (2026-11-22)
+- `tests/mining-balance.test.mjs`에 시드 고정 총매출과 광물별 개수×가격 일치, 강화 6단계 광물 분류 유지 테스트 추가.
+- 기존 `src/main.ts`는 `excavateSphere`로 범위 채굴하고 있으며, 새 자동 전진·무한청크·장비 마모 경제는 아직 실제 게임에 연결되지 않았다.
+- GitHub Actions 워크플로 등록과 테스트 코드 커밋은 확인했지만 **CI 실제 통과 여부 및 시뮬레이션 산출물은 미확인**.
+- 다음 우선순위: CI 실행 로그/결과 검증 → 기존 채굴 시간·범위 로직과 새 경제 모델 차이 정리 → 게임 본체 통합.
