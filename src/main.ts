@@ -104,11 +104,29 @@ function blocked(p:T.Vector3){if(profiling)metrics.collisionCalls++;if(p.x<.25||
 // Experimental opt-in bridge. The legacy manual mining path remains the default.
 let autoMineEnabled=false;
 let zeroGravityEnabled=false;
+let verticalTouch=0;
+function makeVerticalButton(label:string,direction:-1|1,top:number){
+  const button=document.createElement('button');
+  button.textContent=label;
+  button.setAttribute('aria-label',direction>0?'Ascend in zero gravity':'Descend in zero gravity');
+  button.style.cssText='position:fixed;right:12px;top:'+top+'px;z-index:3;min-width:48px;min-height:44px;touch-action:none;display:none';
+  actions.append(button);
+  const stop=()=>{if(verticalTouch===direction)verticalTouch=0};
+  button.onpointerdown=e=>{e.preventDefault();button.setPointerCapture(e.pointerId);verticalTouch=direction};
+  button.onpointerup=stop;
+  button.onpointercancel=stop;
+  button.onlostpointercapture=stop;
+  return button;
+}
+const ascendButton=makeVerticalButton('↑',1,188);
+const descendButton=makeVerticalButton('↓',-1,238);
+addEventListener('blur',()=>{verticalTouch=0});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)verticalTouch=0});
 const gravityToggle=document.createElement('button');
 gravityToggle.textContent='Gravity: On';
 gravityToggle.style.cssText='position:fixed;right:12px;top:138px;z-index:3;min-height:44px';
 actions.append(gravityToggle);
-gravityToggle.onclick=()=>{zeroGravityEnabled=!zeroGravityEnabled;vy=0;gravityToggle.textContent=zeroGravityEnabled?'Gravity: Off':'Gravity: On'};
+gravityToggle.onclick=()=>{zeroGravityEnabled=!zeroGravityEnabled;vy=0;verticalTouch=0;ascendButton.style.display=descendButton.style.display=zeroGravityEnabled?'block':'none';gravityToggle.textContent=zeroGravityEnabled?'Gravity: Off':'Gravity: On'};
 let autoMineState:AutoMineState=initialAutoMineState();
 const autoMineToggle=document.createElement('button');
 autoMineToggle.textContent='Auto: Off';
@@ -133,7 +151,7 @@ if(autoMineEnabled){
   if(decision.moveForward) d.addScaledVector(forward,3*dt);
   if(decision.mineBlocks>0) dig();
 }if(zeroGravityEnabled){
-  d.y+=(Number(keys.has('e'))-Number(keys.has('q')))*3*dt;
+  d.y+=(Number(keys.has('e'))-Number(keys.has('q'))+verticalTouch)*3*dt;
   const vertical=probe.copy(camera.position);vertical.y+=d.y;
   if(!blocked(vertical))camera.position.copy(vertical);
   vy=0;
