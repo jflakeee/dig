@@ -60,6 +60,16 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  const compactLeft=await page.locator('#craft-toggle,#travel-toggle,#journal-toggle,#move').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {id:e.id,x:r.x,y:r.y,w:r.width,h:r.height}}));
  for(let i=0;i<compactLeft.length;i++)for(let k=i+1;k<compactLeft.length;k++){const a=compactLeft[i],b=compactLeft[k];assert.ok(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y,a.id+' overlaps '+b.id+' in compact landscape')}
  await page.screenshot({path:'artifacts/mobile-compact-landscape.png'});
+ // Rotate back to portrait without a reload: active joystick must be released.
+ const rotatedJoy=await page.locator('#move').boundingBox();
+ const center={x:rotatedJoy.x+rotatedJoy.width/2,y:rotatedJoy.y+rotatedJoy.height/2,id:3};
+ await touch('touchStart',[center]);await touch('touchMove',[{...center,x:center.x+30}]);
+ await page.waitForFunction(()=>getComputedStyle(document.querySelector('#stick')).transform!=='matrix(1, 0, 0, 1, -24, -24)');
+ await cdp.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:3,mobile:true,screenWidth:390,screenHeight:844});
+ await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
+  await page.waitForFunction(()=>document.querySelector('#move').getBoundingClientRect().width>0);
+ assert.equal((await page.locator('#stick').evaluate(e=>e.style.transform)).replaceAll(' ',''),'translate(-50%,-50%)','rotation should release active joystick');
+ await touch('touchCancel',[]);
  await cdp.send('Emulation.clearDeviceMetricsOverride');
  await cdp.detach();console.log('mobile multi-pointer cancellation and compact landscape passed');
  }

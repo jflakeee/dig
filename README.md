@@ -93,16 +93,12 @@ node --experimental-strip-types --test tests/*.test.mjs
 | P0–P10 | 채굴, 저장, 광산, 성장, 탐험 및 성능 개선 |
 | P11 | 4번째 화산 광산, 희귀 자원, 전설 장비, 저장 호환성 |
 | P12 | 모바일 조이스틱 이동 범위 개선 및 브라우저 회귀 검사 |
-| P13 | 모바일 가로 화면 회귀 테스트 및 배포 완료 |
-| P14 | 모바일 세로 화면 회귀 테스트 및 배포 완료 |
-| P15 | 화면 회전 입력 안정화 작업 브랜치 검증 중 |
 
 `main`에 변경사항이 반영되면 [Build and deploy](.github/workflows/build.yml)가 GitHub Pages 배포를 실행합니다. **코드 커밋, 자동 테스트, 배포 성공, 실제 기기 검증은 서로 다른 단계**이며, Actions의 최신 실행 결과를 확인하세요.
 
 ## 문서
 
-- [미구현 설계 감사 및 우선순위 (2026-11-21)](docs/unimplemented-audit-20261121.md)
-- [초기 시스템 구조 스냅샷 (2026-11-18)](docs/map-systems-20261118.md)
+- [시스템 구조와 개발 현황](docs/map-systems-20261118.md)
 - [P11 월드 확장](docs/p11-world.md)
 - [희귀 자원](docs/p11-rare-resources.md)
 - [전설 장비](docs/p11-legendary-equipment.md)
