@@ -25,3 +25,17 @@ test('invalid times are rejected', () => {
   assert.throws(() => advanceMemory(INITIAL_MEMORY, -1));
   assert.throws(() => memoryMiningEvent(INITIAL_MEMORY, NaN));
 });
+
+test('the memory module repeats its cycle instead of retaining all past fragments', () => {
+  let state = INITIAL_MEMORY;
+  const seen = [];
+  for (let i = 1; i <= 258; i++) {
+    const now = i * 20000;
+    const result = memoryMiningEvent(state, now);
+    state = result.state;
+    if (result.line) seen.push(result.line);
+    state = advanceMemory(state, now + 6500).state;
+  }
+  assert.equal(seen.length, 6);
+  assert.equal(state.fragment, -1);
+});
