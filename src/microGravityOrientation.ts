@@ -8,7 +8,9 @@ export function faceMicroGravity(
     throw Error('Invalid orientation input');
   const length=Math.hypot(...gravity);
   if(length<0.008||dt===0)return current;
-  const targetYaw=Math.atan2(-gravity[0],-gravity[2]);
+  // Near vertical gravity has no meaningful yaw; retain heading to prevent spinning.
+  const horizontal=Math.hypot(gravity[0],gravity[2]);
+  const targetYaw=horizontal<length*0.05?current.yaw:Math.atan2(-gravity[0],-gravity[2]);
   const targetPitch=Math.asin(Math.max(-1,Math.min(1,gravity[1]/length)));
   const shortest=Math.atan2(Math.sin(targetYaw-current.yaw),Math.cos(targetYaw-current.yaw));
   const turn=Math.min(1,dt*1.2);
