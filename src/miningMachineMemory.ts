@@ -13,6 +13,8 @@ const fragments = [
   ['집으로 돌아가야 해.', '그런데 집이 어디였지?'],
   ['내 손을 잡아 줬어.', '내게 손이 있었던가?'],
   ['이름을 잊으면 안 돼.', '이름이… 사라졌어.'],
+  ['이번엔 반드시 기억할 거야.', '또 잊었어… 내가 뭘 기억하려 했지?'],
+  ['누군가 나를 부르고 있어.', '누구였는지 또 잊어버렸어.'],
 ] as const;
 export function advanceMemory(
   state: MemoryState, nowMs: number,
