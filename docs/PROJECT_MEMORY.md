@@ -327,3 +327,8 @@
 - 중력 벡터가 급변해도 자동 회전 yaw/pitch 각각 최대 0.9rad/s로 제한. 기존 지수 감쇠는 유지.
 - 30/60/120FPS 간 작은 수치 차이를 허용하는 테스트 기준으로 조정, 최대 회전 속도 회귀 테스트 추가.
 - 별도 수치 재현으로 FPS별 2초 회전 결과 차이 약 0.00002rad 확인. 실제 GitHub CI/전체 빌드/모바일 검증은 미확인. 공개 main/Pages 유지.
+
+## CI 워크플로 YAML 수정 (2026-11-22)
+- `.github/workflows/mining-balance.yml`: micro-gravity-seed 테스트 명령이 이전 `run:` 아래 잘못 들여쓰기되어 있던 문제를 수정.
+- `Test world-specific microgravity seed` 독립 단계로 분리.
+- GitHub Actions 실제 실행 결과는 아직 확인되지 않음. main/Pages 미변경.
