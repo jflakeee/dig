@@ -109,6 +109,22 @@ machineVoice.style.cssText='position:fixed;left:50%;bottom:20%;transform:transla
 machineVoice.hidden=true;
 document.body.append(machineVoice);
 let machineVoiceUntil=0,machineEvent=0;
+const memoryLog:string[]=[];
+const memoryLogButton=document.createElement('button');
+memoryLogButton.textContent='Memory: 0';
+memoryLogButton.setAttribute('aria-label','View recovered memory fragments');
+memoryLogButton.style.cssText='position:fixed;left:12px;bottom:66px;z-index:5;min-height:44px;display:none';
+actions.append(memoryLogButton);
+const memoryLogPanel=document.createElement('div');
+memoryLogPanel.style.cssText='position:fixed;left:12px;bottom:116px;z-index:5;max-width:min(85vw,360px);max-height:40vh;overflow:auto;background:#101c25ef;color:#e6f6fa;border:1px solid #456b74;border-radius:8px;padding:10px;font:13px system-ui;white-space:pre-line';
+memoryLogPanel.hidden=true;
+document.body.append(memoryLogPanel);
+memoryLogButton.onclick=()=>{
+  memoryLogPanel.hidden=!memoryLogPanel.hidden;
+  memoryLogPanel.textContent=memoryLog.length
+    ? '외부 관측 기록 (기계는 이 기록을 인식하지 못함)\\n\\n'+memoryLog.map((line,i)=>(i+1)+'. '+line).join('\\n')
+    : '아직 기록된 기억 파편이 없습니다.';
+};
 let memoryState=INITIAL_MEMORY;
 function showMemoryLine(line:string,now:number){
   machineVoice.textContent=line;
@@ -123,7 +139,11 @@ const impact=document.createElement('div');impact.style.cssText='position:fixed;
   machineEvent++;
   const remembered=memoryMiningEvent(memoryState,performance.now());
   memoryState=remembered.state;
-  if(remembered.line)showMemoryLine(remembered.line,performance.now());
+  if(remembered.line){
+    showMemoryLine(remembered.line,performance.now());
+    if(!memoryLog.includes(remembered.line))memoryLog.push(remembered.line);
+    memoryLogButton.textContent='Memory: '+memoryLog.length;
+  }
   const reaction=machineDropReaction(gained,rareHits.length,machineEvent);
   if(reaction&&performance.now()>=machineVoiceUntil){
     machineVoice.textContent=reaction.line;
@@ -172,7 +192,7 @@ const gravityToggle=document.createElement('button');
 gravityToggle.textContent='Gravity: On';
 gravityToggle.style.cssText='position:fixed;right:12px;top:138px;z-index:3;min-height:44px';
 actions.append(gravityToggle);
-gravityToggle.onclick=()=>{zeroGravityEnabled=!zeroGravityEnabled;vy=0;verticalTouch=0;ascendButton.style.display=descendButton.style.display=zeroGravityEnabled?'block':'none';boostButton.style.display=zeroGravityEnabled?'block':'none';boostHeld=false;miningMachineView.setActive(zeroGravityEnabled);gravityToggle.textContent=zeroGravityEnabled?'Gravity: Off':'Gravity: On'};
+gravityToggle.onclick=()=>{zeroGravityEnabled=!zeroGravityEnabled;vy=0;verticalTouch=0;ascendButton.style.display=descendButton.style.display=zeroGravityEnabled?'block':'none';boostButton.style.display=zeroGravityEnabled?'block':'none';boostHeld=false;miningMachineView.setActive(zeroGravityEnabled);memoryLogButton.style.display=zeroGravityEnabled?'block':'none';if(!zeroGravityEnabled)memoryLogPanel.hidden=true;gravityToggle.textContent=zeroGravityEnabled?'Gravity: Off':'Gravity: On'};
 let autoMineState:AutoMineState=initialAutoMineState();
 const autoMineToggle=document.createElement('button');
 autoMineToggle.textContent='Auto: Off';
