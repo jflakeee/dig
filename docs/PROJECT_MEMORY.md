@@ -311,3 +311,8 @@
 - GitHub의 `microGravityOrientation.ts` 로직과 테스트를 별도 로컬 Node v22 환경에 재현하여 7개 테스트 모두 통과.
 - ±π 경계에서 가장 짧은 방향으로 yaw 회전하는지 검증을 강화하고 로컬 재실행 7/7 통과.
 - 실제 GitHub 저장소 checkout 기반 검증이나 전체 TypeScript/Vite 빌드, CI, 모바일 실기기 검증은 미완료. main/Pages 변경 없음.
+
+## 미세 중력 자동 회전 FPS 일관성 (2026-11-22)
+- `faceMicroGravity`의 프레임당 선형 회전 비율을 `-expm1(-1.2*dt)` 지수 감쇠로 변경. 동일한 중력 벡터에 대해 30/60/120FPS에서 시간 기반 회전 결과가 같도록 설계.
+- 2초간 각 프레임 속도로 시뮬레이션한 yaw/pitch 결과 비교 테스트 추가.
+- 실제 GitHub CI/전체 빌드/모바일 기기 테스트는 아직 미확인. 공개 main/Pages 유지.
