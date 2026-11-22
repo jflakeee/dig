@@ -1,3 +1,4 @@
+import { microGravityAt, MICRO_GRAVITY_MAX } from './chunkMicroGravity';
 import { INITIAL_DRIFT, microGravityDrift } from './microGravityDrift';
 import { INITIAL_MEMORY, advanceMemory, memoryMiningEvent } from './miningMachineMemory';
 import { machineDropReaction } from './miningMachinePersonality';
@@ -196,6 +197,12 @@ actions.append(gravityToggle);
 gravityToggle.onclick=()=>{zeroGravityEnabled=!zeroGravityEnabled;vy=0;verticalTouch=0;ascendButton.style.display=descendButton.style.display=zeroGravityEnabled?'block':'none';boostButton.style.display=zeroGravityEnabled?'block':'none';boostHeld=false;miningMachineView.setActive(zeroGravityEnabled);microGravityToggle.style.display=zeroGravityEnabled?'block':'none';microDrift=INITIAL_DRIFT;memoryLogButton.style.display=zeroGravityEnabled?'block':'none';if(!zeroGravityEnabled)memoryLogPanel.hidden=true;gravityToggle.textContent=zeroGravityEnabled?'Gravity: Off':'Gravity: On'};
 let microGravityEnabled=false;
 let microDrift=INITIAL_DRIFT;
+const microGravityIndicator=document.createElement('div');
+microGravityIndicator.setAttribute('role','status');
+microGravityIndicator.setAttribute('aria-label','Local microgravity');
+microGravityIndicator.style.cssText='position:fixed;right:12px;top:230px;z-index:3;padding:5px 8px;background:#101c25d9;color:#b8f7fa;border:1px solid #456b74;border-radius:6px;font:12px system-ui;pointer-events:none;display:none';
+document.body.append(microGravityIndicator);
+let microGravityIndicatorAt=0;
 const microGravityToggle=document.createElement('button');
 microGravityToggle.textContent='Micro G: Off';
 microGravityToggle.style.cssText='position:fixed;right:12px;top:182px;z-index:3;min-height:44px;display:none';
@@ -204,6 +211,7 @@ microGravityToggle.onclick=()=>{
   microGravityEnabled=!microGravityEnabled;
   microDrift=INITIAL_DRIFT;
   microGravityToggle.textContent=microGravityEnabled?'Micro G: On':'Micro G: Off';
+  microGravityIndicator.style.display=microGravityEnabled?'block':'none';
 };
 let autoMineState:AutoMineState=initialAutoMineState();
 const autoMineToggle=document.createElement('button');
@@ -239,6 +247,16 @@ if(autoMineEnabled){
   vy=0;
   d.y=0;
 }for(const axis of ['x','z'] as const){if(d[axis]===0)continue;const p=probe.copy(camera.position);p[axis]+=d[axis];if(!blocked(p))camera.position.copy(p)}if(zeroGravityEnabled&&microGravityEnabled&&!document.hidden){
+  if(now>=microGravityIndicatorAt){
+    microGravityIndicatorAt=now+250;
+    const g=microGravityAt(20261122,[camera.position.x,camera.position.y,camera.position.z]);
+    const strength=Math.hypot(...g);
+    const arrows=['→','←','↑','↓','↗','↙'];
+    const dominant=Math.abs(g[0])>=Math.abs(g[1])&&Math.abs(g[0])>=Math.abs(g[2])
+      ?(g[0]>=0?0:1):Math.abs(g[1])>=Math.abs(g[2])
+      ?(g[1]>=0?2:3):(g[2]>=0?4:5);
+    microGravityIndicator.textContent='Micro G '+(strength/MICRO_GRAVITY_MAX*100).toFixed(0)+'% '+arrows[dominant];
+  }
   const drift=microGravityDrift(microDrift,20261122,
     [camera.position.x,camera.position.y,camera.position.z],dt);
   const offset=drift.displacement;
