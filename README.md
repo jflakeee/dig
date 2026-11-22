@@ -86,6 +86,13 @@ node --experimental-strip-types --test tests/*.test.mjs
 
 브라우저 스모크 테스트는 Playwright와 빌드된 게임을 제공하는 로컬 미리보기 서버가 필요합니다. 실제 CI 구성은 [browser.yml](.github/workflows/browser.yml)을 참고하세요.
 
+## 개발 중인 차기 월드 설계 (미구현)
+
+하늘과 지표면이 없는 3차원 무한 지하 월드, 매점 건물 대신 메뉴형 상점, 원거리 청크 초기화, 채굴로 새로 노출된 블록의 광물 실시간 결정을 설계했습니다. **현재 플레이 가능한 main 버전에는 아직 적용되지 않았습니다.**
+
+- [최신 설계 문서](docs/infinite-underground-world-20261122.md)
+- [프로젝트 메모리·결정사항](docs/PROJECT_MEMORY.md)
+
 ## 개발 및 배포 현황
 
 | 단계 | 내용 |
