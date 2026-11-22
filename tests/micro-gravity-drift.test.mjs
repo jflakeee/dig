@@ -7,7 +7,7 @@ test('microgravity drift stays bounded and deterministic',()=>{
     const x=microGravityDrift(a,42,[5,7,9],0.04);
     const y=microGravityDrift(b,42,[5,7,9],0.04);
     assert.deepEqual(x,y);
-    assert.ok(x.state.velocity.every(v=>Math.abs(v)<=0.12));
+    assert.ok(Math.hypot(...x.state.velocity)<=0.12+1e-12);
     a=x.state;b=y.state;
   }
 });
@@ -19,4 +19,9 @@ test('zero delta causes no drift and no state mutation',()=>{
 test('bad delta rejected',()=>{
   assert.throws(()=>microGravityDrift(INITIAL_DRIFT,42,[0,0,0],-1));
   assert.throws(()=>microGravityDrift(INITIAL_DRIFT,42,[0,0,0],1));
+});
+
+test('diagonal velocity is limited by total speed, not each axis',()=>{
+  const result=microGravityDrift({velocity:[0.12,0.12,0.12]},42,[5,7,9],0.04);
+  assert.ok(Math.hypot(...result.state.velocity)<=0.12+1e-12);
 });
