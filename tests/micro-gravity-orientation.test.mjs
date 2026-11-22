@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {faceMicroGravity} from '../src/microGravityOrientation.ts';
+import {lookDirection} from '../src/zeroGravityMovement.ts';
 test('turns toward gravity along negative X',()=>{
   const v=faceMicroGravity({yaw:0,pitch:0},[-0.1,0,0],0.04);
   assert.ok(v.yaw>0);
@@ -56,4 +57,20 @@ test('abrupt gravity change cannot spin camera faster than 0.9 rad/s',()=>{
   assert.ok(Math.abs(next.yaw-start.yaw)<=0.9*dt+1e-12);
   const vertical=faceMicroGravity(start,[0,0.1,0],dt);
   assert.ok(Math.abs(vertical.pitch-start.pitch)<=0.9*dt+1e-12);
+});
+
+test('camera forward vector converges to gravity direction in all octants',()=>{
+  const vectors=[
+    [-0.1,0.02,0.04],[0.1,-0.02,0.04],
+    [-0.1,-0.02,-0.04],[0.1,0.02,-0.04],
+    [0,0,-0.1],[0,0,0.1],
+  ];
+  for(const gravity of vectors){
+    let facing={yaw:0,pitch:0};
+    for(let i=0;i<600;i++)facing=faceMicroGravity(facing,gravity,0.04);
+    const forward=lookDirection(facing.yaw,facing.pitch);
+    const magnitude=Math.hypot(...gravity);
+    const dot=forward.reduce((sum,v,i)=>sum+v*gravity[i]/magnitude,0);
+    assert.ok(dot>0.999, 'forward direction should align with local gravity');
+  }
 });
