@@ -1,7 +1,7 @@
 name: Browser smoke
 on:
   push:
-    branches: [chore/toolchain-integration, feature/p4-exploration, feature/p7-visuals, feature/p8-exploration, feature/p9-performance, feature/p10-gameplay, feature/p11-world, feature/p12-mobile, feature/p13-mobile-ux, feature/p14-portrait-smoke, feature/p15-rotation-regression, feature/p16-mobile-input-smoke]
+    branches: [chore/toolchain-integration, feature/p4-exploration, feature/p7-visuals, feature/p8-exploration, feature/p9-performance, feature/p10-gameplay, feature/p11-world, feature/p12-mobile, feature/p13-mobile-ux, feature/p14-portrait-smoke, feature/p15-rotation-regression, feature/p16-mobile-input-smoke, feature/p17-mobile-blur-regression]
   workflow_dispatch:
 permissions:
   contents: read

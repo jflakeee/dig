@@ -48,6 +48,12 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  await page.waitForFunction(v=>getComputedStyle(document.querySelector('#stick')).transform!==v,initial);
  await touch('touchStart',[{...j,x:j.x+30},d]);await page.waitForTimeout(350);
  await touch('touchCancel',[]);try{await page.waitForFunction(v=>getComputedStyle(document.querySelector('#stick')).transform===v,initial,{timeout:5000})}catch(e){console.error('Touch cancellation diagnostic',await page.locator('#stick').evaluate(e=>({inline:e.style.transform,computed:getComputedStyle(e).transform})));await page.screenshot({path:'artifacts/mobile-cancel-failed.png'});throw e}
+ // Losing focus must release a held joystick even if the touch never ends.
+ await touch('touchStart',[j]);await touch('touchMove',[{...j,x:j.x+30}]);
+ await page.waitForFunction(v=>getComputedStyle(document.querySelector('#stick')).transform!==v,initial);
+ await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
+ await page.waitForFunction(v=>getComputedStyle(document.querySelector('#stick')).transform===v,initial);
+ await touch('touchCancel',[]);
  // Verify compact landscape layouts and joystick travel after a viewport resize.
  // Mobile emulation needs screen metrics as well as viewport dimensions.
  await cdp.send('Emulation.setDeviceMetricsOverride',{width:700,height:500,deviceScaleFactor:3,mobile:true,screenWidth:700,screenHeight:500});
