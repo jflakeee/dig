@@ -372,3 +372,9 @@
 - `src/main.ts`: 카메라 pointerup, pointercancel, lostpointercapture에서 look 상태 해제와 수동 회전 유예 시각 갱신.
 - 창 blur 및 문서 hidden 전환에도 look 상태를 해제해 자동 회전 영구 정지 방지.
 - 실제 CI/빌드/모바일 실기기 검증은 미확인. 공개 main/Pages 미변경.
+
+## 미세 중력 일시정지 상태 검증 (2026-11-22)
+- `microGravityDrift`: dt=0 조기 반환 이전에 표류 속도 벡터 유한성 검증. dt>0에서의 중복 검사 제거.
+- NaN/Infinity 속도를 dt=0 및 dt=0.04 양쪽에서 거부하는 회귀 테스트 추가.
+- 최신 커밋의 GitHub combined status 및 PR 기반 workflow-run 조회 결과는 모두 빈 목록; CI 통과 여부를 입증하지 않음.
+- main/Pages 미변경, 전체 빌드/모바일 실기기 검증 미확인.
