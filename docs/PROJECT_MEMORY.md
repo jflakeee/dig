@@ -378,3 +378,8 @@
 - NaN/Infinity 속도를 dt=0 및 dt=0.04 양쪽에서 거부하는 회귀 테스트 추가.
 - 최신 커밋의 GitHub combined status 및 PR 기반 workflow-run 조회 결과는 모두 빈 목록; CI 통과 여부를 입증하지 않음.
 - main/Pages 미변경, 전체 빌드/모바일 실기기 검증 미확인.
+
+## 표류 속도 합성값 오버플로 보호 (2026-11-23)
+- `microGravityDrift`에서 개별 속도 성분의 유한성뿐 아니라 `Math.hypot(...velocity)` 합성값도 유한한지 검증.
+- 1e308 세 축 입력으로 발생할 수 있는 합성 속도 오버플로를 dt=0 및 dt>0에서 거부하는 테스트 추가.
+- CI/전체 빌드/모바일 실기기 실행 결과는 미확인. main/Pages 미변경.
