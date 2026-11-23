@@ -1,4 +1,4 @@
-import {rollEquipmentDrop,DISCOVERY_STORY,type EquipmentDrop} from './infiniteEquipmentDrops.ts';
+import {rollEquipmentDrop,DISCOVERY_STORY,IC_CHIP_SALVAGE,type EquipmentDrop} from './infiniteEquipmentDrops.ts';
 import {REPAIR_COST,repairDrill} from './infiniteDrillRepair.ts';
 import {discardMinerals,type DiscardAmount} from './infiniteCargoActions.ts';
 import {FUSION_RECIPES,fuseMinerals} from './infiniteMineralFusion.ts';
@@ -201,6 +201,31 @@ export function startInfinitePreview():void {
     const loot=document.createElement('p');
     loot.textContent='Recovered equipment ('+foundEquipment.length+'): '+(foundEquipment.length?foundEquipment.slice(-12).map(e=>e.kind+(e.kind==='drill'?' T'+e.tier:'')+' '+e.durability+'/'+e.maxDurability).join(' · '):'None');
     workshop.append(loot);
+    const chips=foundEquipment.filter(e=>e.kind==='ic-chip').length;
+    const dismantle=document.createElement('button');
+    dismantle.textContent='Dismantle IC chip → 3 copper + 2 iron ('+chips+' available)';
+    dismantle.style.cssText='min-height:48px;width:100%;margin:6px 0';
+    dismantle.disabled=chips===0||cargoCapacity(wagons)-cargoAmount(stock)<IC_CHIP_SALVAGE.copper+IC_CHIP_SALVAGE.iron;
+    dismantle.onclick=()=>{
+      const index=foundEquipment.findIndex(e=>e.kind==='ic-chip');
+      if(index<0||cargoCapacity(wagons)-cargoAmount(stock)<5)return;
+      const previous=foundEquipment;
+      const previousStock=stock;
+      foundEquipment=foundEquipment.filter((_,i)=>i!==index);
+      stock={...stock,copper:stock.copper+IC_CHIP_SALVAGE.copper,iron:stock.iron+IC_CHIP_SALVAGE.iron};
+      try{persistMachine();saveFailed=false}
+      catch{
+        foundEquipment=previous;stock=previousStock;saveFailed=true;
+        nextSaveRetryAt=performance.now()+2000;
+        const error=document.createElement('p');
+        error.setAttribute('role','alert');
+        error.textContent='IC chip dismantling cancelled: unable to save.';
+        workshop.prepend(error);
+        return;
+      }
+      refreshWorkshop();
+    };
+    workshop.append(dismantle);
     // A full hold must never permanently block progression when upgrade recipes
     // require a mineral that the player has not yet collected.
     const discard=document.createElement('div');
