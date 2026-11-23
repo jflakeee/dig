@@ -1,3 +1,4 @@
+import { gravityLevelRoll } from './microGravityCameraRoll';
 import { microGravityWorldSeed } from './microGravitySeed.ts';
 import { microGravityAt, MICRO_GRAVITY_MAX, MICRO_GRAVITY_DIRECTION_THRESHOLD } from './chunkMicroGravity';
 import { INITIAL_DRIFT, microGravityDrift } from './microGravityDrift';
@@ -252,13 +253,7 @@ if(zeroGravityEnabled&&microGravityEnabled&&gravityAutoFaceEnabled&&!document.hi
   journalPanel.style.display==='none'&&memoryLogPanel.hidden&&!trading){
   const gravity=microGravityAt(microGravitySeed,[camera.position.x,camera.position.y,camera.position.z]);
   const localGravity=new T.Vector3(...gravity).applyQuaternion(camera.quaternion.clone().invert());
-  const screenStrength=Math.hypot(localGravity.x,localGravity.y);
-  if(screenStrength>=MICRO_GRAVITY_DIRECTION_THRESHOLD){
-    // Roll around the viewing axis; preserve the camera's forward direction.
-    const target=Math.atan2(localGravity.x,-localGravity.y);
-    const difference=Math.atan2(Math.sin(target-gravityRoll),Math.cos(target-gravityRoll));
-    gravityRoll+=T.MathUtils.clamp(difference,-0.9*dt,0.9*dt);
-  }
+  gravityRoll=gravityLevelRoll(gravityRoll,localGravity.x,localGravity.y,dt);
 }
 if(zeroGravityEnabled&&microGravityEnabled&&gravityAutoFaceEnabled)camera.rotateZ(gravityRoll);const drive=propulsionStep(propulsion,dt,zeroGravityEnabled&&(boostHeld||keys.has('shift')));propulsion=drive.state;const driveSpeed=zeroGravityEnabled?drive.speed:3;const d=moveVec.set(Number(keys.has('d'))-Number(keys.has('a'))+joyX,0,Number(keys.has('s'))-Number(keys.has('w'))+joyY);if(d.lengthSq()>1)d.normalize();d.applyAxisAngle(up,yaw).multiplyScalar(driveSpeed*dt);
 if(autoMineEnabled){
