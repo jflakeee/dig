@@ -437,3 +437,8 @@
 - `tests/micro-gravity-camera-roll.test.mjs`: 화면 사분면, 회전 속도, 중력 약함, wrap, 유효성 검사.
 - `.github/workflows/mining-balance.yml` 경로 감지와 Node22 테스트 단계 추가.
 - GitHub 커밋 완료. 실제 CI/전체 빌드/모바일 실기기 검증 미확인. main/Pages 유지.
+
+## 카메라 롤 테스트 Node22 로컬 재현 (2026-11-23)
+- 독립 테스트 미러에서 `src/microGravityCameraRoll.ts`의 현재 알고리즘 및 7개 테스트를 Node 22.16.0 `--experimental-strip-types`로 재현 실행.
+- 첫 실행 6/7: 2축 오버플로 입력 `1.1e308`은 hypot 결과가 유한해 실패. 실제 Infinity가 되는 `1.4e308`로 테스트 수정, 재실행 7/7 통과.
+- 독립 미러 검증이며 GitHub 저장소 전체 빌드/CI/모바일 실기기 검증은 미확인. main/Pages 유지.
