@@ -35,3 +35,11 @@ test('all enhancement levels keep ore categories stable', () => {
     assert.ok(result.repairs >= 0 && result.replacements >= 0);
   }
 });
+
+test('nonfinite and unbounded simulation inputs fail before running', () => {
+  for (const options of [
+    { hours: Infinity }, { hours: 101 }, { hours: NaN },
+    { baseMineSeconds: Infinity }, { baseMineSeconds: NaN },
+    { tier: 0.5 }, { upgrade: 1.5 }, { seed: Infinity }, { seed: 1.5 },
+  ]) assert.throws(() => simulate(options), /Invalid simulation inputs/);
+});
