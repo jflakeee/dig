@@ -235,7 +235,8 @@ export function startInfinitePreview():void {
         refreshWorkshop();
         const notice=document.createElement('p');
         notice.setAttribute('role','status');
-        notice.textContent=result.success?'Fusion success: +1 '+recipe.to:'Fusion failed: '+recipe.cost+' '+recipe.from+' consumed';
+        notice.textContent=result.success?'✓ Fusion success: +1 '+recipe.to:'✕ Fusion failed: '+recipe.cost+' '+recipe.from+' consumed';
+        notice.style.cssText='padding:10px 12px;margin:8px 0;border-radius:6px;border:1px solid '+(result.success?'#69c99b':'#e6a47a')+';font-weight:600';
         workshop.insertBefore(notice,fusionHeading.nextSibling);
       };
       workshop.append(button);
