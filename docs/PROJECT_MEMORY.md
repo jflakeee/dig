@@ -404,3 +404,8 @@
 - `src/chunkMicroGravity.ts`에 `MICRO_GRAVITY_DIRECTION_THRESHOLD=0.008` 상수 추가.
 - `src/microGravityOrientation.ts` 자동 방향 회전 및 `src/main.ts` Neutral HUD에서 공통 상수 사용.
 - 동작 임계값 변경 없음. CI/전체 빌드/모바일 검증 미확인, main/Pages 유지.
+
+## 대각선 중력 자동 회전 속도 제한 (2026-11-23)
+- `src/microGravityOrientation.ts`: yaw/pitch 축별 제한을 합성 각변화량 `Math.hypot(yawStep,pitchStep)` 제한으로 변경, 0.9 rad/s 유지.
+- 대각선 중력 방향 세 가지에서 프레임별 합성 회전량 제한을 검증하는 테스트 추가.
+- 실제 CI/전체 빌드/모바일 실기기 검증 미확인. main/Pages 변경 없음.
