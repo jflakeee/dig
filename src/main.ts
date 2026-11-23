@@ -345,12 +345,12 @@ if(autoMineEnabled){
     saveHealthy:!saving,fallSafe:zeroGravityEnabled||Math.abs(vy)<.5};
   const decision=stepAutoMine(autoMineState,{
     deltaSeconds:dt,solidAhead:blocked(ahead),safety:safe,
-    tool:{current:1000,maximum:1000,originalMaximum:1000},
+    tool:{current:Math.max(1,hazardDrillDurability),maximum:1000,originalMaximum:1000},
     enhancement:0,baseMineSeconds:.35
   });
   autoMineState=decision.state;
   if(decision.moveForward) d.addScaledVector(forward,driveSpeed*dt);
-  if(decision.mineBlocks>0) dig();
+  if(decision.mineBlocks>0&&now>=next){dig();next=now+(hazardDrillDurability<=0?2500:legendaryTool(selected,session.levels,session.crafted,world.profile.version===3?world.profile.legendary:undefined).interval)}
 }if(zeroGravityEnabled){
   d.y+=(Number(keys.has('e'))-Number(keys.has('q'))+verticalTouch)*driveSpeed*dt;
   const vertical=probe.copy(camera.position);vertical.y+=d.y;
