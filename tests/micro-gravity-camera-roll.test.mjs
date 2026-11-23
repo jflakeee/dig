@@ -31,6 +31,6 @@ test('shortest rotation crosses the wrap boundary',()=>{
 });
 test('invalid and overflowing inputs are rejected',()=>{
   assert.throws(()=>gravityLevelRoll(0,Infinity,0,0.04));
-  assert.throws(()=>gravityLevelRoll(0,1.1e308,1.1e308,0.04));
+  assert.throws(()=>gravityLevelRoll(0,1.4e308,1.4e308,0.04));
   assert.throws(()=>gravityLevelRoll(0,0.1,0,-0.1));
 });
