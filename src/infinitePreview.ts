@@ -104,7 +104,7 @@ export function startInfinitePreview():void {
   const up=(e:KeyboardEvent)=>keys.delete(e.key.toLowerCase());
   addEventListener('keydown',down);addEventListener('keyup',up);
   const touchPad=document.createElement('div');
-  touchPad.style.cssText='position:fixed;left:16px;bottom:20px;display:flex;gap:8px;z-index:6;touch-action:none';
+  touchPad.style.cssText='position:fixed;left:16px;bottom:20px;display:grid;grid-template-columns:repeat(3,44px);gap:8px;z-index:6;touch-action:none';
   const touchButtons:[string,string][]=[['◀','a'],['▲','w'],['▼','s'],['▶','d'],['↑','e'],['↓','q']];
   for(const [label,key] of touchButtons){
     const button=document.createElement('button');
