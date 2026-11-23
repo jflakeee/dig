@@ -25,7 +25,7 @@ export function startInfinitePreview():void {
   const stream=new InfiniteChunkScene(scene,20261123,2,(coord,terrain)=>save.apply(coord,terrain));
   const status=document.createElement('div');
   status.style.cssText='position:fixed;top:12px;left:12px;background:#101820d9;padding:12px;border-radius:8px;color:white;pointer-events:none;z-index:5';
-  status.textContent='Infinite world preview · WASD move · Q/E vertical · drag to look · mining autosave (F/⛏)';
+  status.textContent='Infinite world preview · WASD move · Q/E vertical · drag to look · mining machine autosave (F/Drill)';
   document.body.append(status);
   let collected=[...save.edits.values()].reduce((total,indices)=>total+indices.size,0);
   let saveFailed=false;
@@ -95,7 +95,7 @@ export function startInfinitePreview():void {
   advanceButton.addEventListener('click',toggleAdvance);
   document.body.append(advanceButton);
   const mineButton=document.createElement('button');
-  mineButton.textContent='⛏ Mine';
+  mineButton.textContent='Drill';
   mineButton.style.cssText='position:fixed;right:16px;bottom:20px;min-height:52px;min-width:80px;z-index:7;touch-action:manipulation';
   mineButton.addEventListener('click',()=>mine());
   document.body.append(mineButton);
