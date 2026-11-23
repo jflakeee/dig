@@ -131,13 +131,22 @@ export function startInfinitePreview():void {
     const moveX=(Math.sin(yaw)*-forward+Math.cos(yaw)*strafe)*speed;
     const moveZ=(-Math.cos(yaw)*forward-Math.sin(yaw)*strafe)*speed;
     const moveY=vertical*speed;
-    // Pause automatic forward movement while rock blocks the path.
+    // Probe a small player-width tunnel, not only a single center ray.
     let blocked=false;
     if(autoAdvance){
       const direction=new T.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
-      raycaster.set(camera.position,direction);
-      raycaster.far=.85;
-      blocked=raycaster.intersectObjects([...stream.meshes.values()],false).length>0;
+      const right=new T.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+      const objects=[...stream.meshes.values()];
+      for(const side of [-.25,0,.25]){
+        for(const height of [-.35,0,.35]){
+          const origin=camera.position.clone().addScaledVector(right,side);
+          origin.y+=height;
+          raycaster.set(origin,direction);
+          raycaster.far=.85;
+          if(raycaster.intersectObjects(objects,false).length){blocked=true;break}
+        }
+        if(blocked)break;
+      }
       raycaster.far=5;
     }
     // Stop the automatic drill before crossing into unloaded or solid terrain.
