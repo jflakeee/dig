@@ -215,11 +215,13 @@ export function startInfinitePreview():void {
       equip.onclick=()=>{
         const result=equipRecoveredDrill(drill,foundEquipment,index);
         if(!result)return;
-        const previousDrill=drill,previousEquipment=foundEquipment;
+        const previousDrill=drill,previousEquipment=foundEquipment,previousCrafting=crafting;
         drill=result.drill;foundEquipment=result.equipment;
+        // A manually equipped working drill supersedes an unpaid auto-replacement.
+        if(crafting&&!crafting.paid)crafting=null;
         try{persistMachine();saveFailed=false}
         catch{
-          drill=previousDrill;foundEquipment=previousEquipment;saveFailed=true;
+          drill=previousDrill;foundEquipment=previousEquipment;crafting=previousCrafting;saveFailed=true;
           nextSaveRetryAt=performance.now()+2000;
           const error=document.createElement('p');
           error.setAttribute('role','alert');
