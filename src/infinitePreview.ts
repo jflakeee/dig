@@ -133,8 +133,11 @@ export function startInfinitePreview():void {
     const repair=document.createElement('button');
     const repairCost=REPAIR_COST[drill.tier];
     repair.textContent='Repair drill +50% · '+Object.entries(repairCost).filter(([,n])=>n>0).map(([m,n])=>n+' '+m).join(', ');
-    repair.disabled=drill.durability>=DRILLS[drill.tier].durability||
-      !(['stone','copper','iron','crystal'] as const).every(m=>stock[m]>=repairCost[m]);
+    const missingRepair=Object.entries(repairCost).filter(([m,n])=>n>stock[m as keyof Stock]);
+    repair.disabled=drill.durability>=DRILLS[drill.tier].durability||missingRepair.length>0;
+    repair.title=drill.durability>=DRILLS[drill.tier].durability?'Drill already fully repaired':
+      missingRepair.length?'Missing: '+missingRepair.map(([m,n])=>m+' '+(n-stock[m as keyof Stock])).join(', '):
+      'Restore up to half the drill maximum durability';
     repair.onclick=()=>{
       const result=repairDrill(stock,drill);
       if(!result)return;
