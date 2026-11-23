@@ -29,3 +29,17 @@ test('collected count survives reload and older saves default to zero',()=>{
  saveMachine(storage,20261123,{...state(),collected:-1},5000);
  assert.equal(loadMachine(storage,20261123,100),null);
 });
+
+test('equipment save accepts IC chips but rejects mineral piles and impossible durability',()=>{
+ const data=new Map();
+ const storage={getItem:k=>data.get(k)??null,setItem:(k,v)=>data.set(k,v)};
+ const chip={kind:'ic-chip',tier:0,durability:25,maxDurability:100};
+ saveMachine(storage,20261123,{...state(),foundEquipment:[chip]},5000);
+ assert.deepEqual(loadMachine(storage,20261123,100).foundEquipment,[chip]);
+ saveMachine(storage,20261123,{...state(),foundEquipment:[{kind:'mineral-pile',tier:0,durability:10,maxDurability:100}]},5000);
+ assert.equal(loadMachine(storage,20261123,100),null);
+ saveMachine(storage,20261123,{...state(),foundEquipment:[{kind:'drill',tier:3,durability:10,maxDurability:100}]},5000);
+ assert.equal(loadMachine(storage,20261123,100),null);
+ saveMachine(storage,20261123,state(),5000);
+ assert.deepEqual(loadMachine(storage,20261123,100).foundEquipment,[]);
+});
