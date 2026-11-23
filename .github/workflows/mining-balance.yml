@@ -24,6 +24,8 @@ on:
       - 'tests/chunk-micro-gravity.test.mjs'
       - 'src/zeroGravityMovement.ts'
       - 'src/main.ts'
+      - 'src/drillHazards.ts'
+      - 'tests/drill-hazards.test.mjs'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.json'
@@ -56,6 +58,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Type-check and build
         run: npm run build
+      - name: Test drill emergency hazards
+        run: node --experimental-strip-types --test tests/drill-hazards.test.mjs
       - name: Test mining simulator
         run: node --test tests/mining-balance.test.mjs
       - name: Test mining machine propulsion
