@@ -27,6 +27,7 @@ export function startInfinitePreview():void {
   status.style.cssText='position:fixed;top:12px;left:12px;background:#101820d9;padding:12px;border-radius:8px;color:white;pointer-events:none;z-index:5';
   status.textContent='Infinite world preview · WASD move · Q/E vertical · drag to look · mining autosave (F/⛏)';
   document.body.append(status);
+  let collected=[...save.edits.values()].reduce((total,indices)=>total+indices.size,0);
   const raycaster=new T.Raycaster();
   raycaster.far=5;
   const mine=()=>{
@@ -48,12 +49,14 @@ export function startInfinitePreview():void {
     if(record.terrain[index]!==1)return;
     record.terrain[index]=0;
     save.mark(coord,index);
+    collected++;
     try{save.flush()}catch{status.textContent='Mining succeeded, but save failed — check storage'}
     scene.remove(mesh);disposeInfiniteChunkMesh(mesh);
     const replacement=infiniteChunkMesh(record.terrain,coord);
     stream.meshes.set(key,replacement);scene.add(replacement);
   };
   let autoMine=false;
+  let autoAdvance=false;
   let nextAutoMineAt=0;
   const autoButton=document.createElement('button');
   autoButton.textContent='Auto Mine: OFF';
@@ -67,13 +70,25 @@ export function startInfinitePreview():void {
   };
   autoButton.addEventListener('click',toggleAutoMine);
   document.body.append(autoButton);
+  const advanceButton=document.createElement('button');
+  advanceButton.textContent='Auto Forward: OFF';
+  advanceButton.setAttribute('aria-pressed','false');
+  advanceButton.style.cssText='position:fixed;right:16px;bottom:148px;min-height:52px;min-width:112px;z-index:7;touch-action:manipulation';
+  const toggleAdvance=()=>{
+    autoAdvance=!autoAdvance;
+    advanceButton.textContent=autoAdvance?'Auto Forward: ON':'Auto Forward: OFF';
+    advanceButton.setAttribute('aria-pressed',String(autoAdvance));
+    if(autoAdvance&&!autoMine)toggleAutoMine();
+  };
+  advanceButton.addEventListener('click',toggleAdvance);
+  document.body.append(advanceButton);
   const mineButton=document.createElement('button');
   mineButton.textContent='⛏ Mine';
   mineButton.style.cssText='position:fixed;right:16px;bottom:20px;min-height:52px;min-width:80px;z-index:7;touch-action:manipulation';
   mineButton.addEventListener('click',mine);
   document.body.append(mineButton);
   const keys=new Set<string>();
-  const down=(e:KeyboardEvent)=>{if(e.key.toLowerCase()==='f'&&!e.repeat)mine();if(e.key.toLowerCase()==='r'&&!e.repeat)toggleAutoMine();keys.add(e.key.toLowerCase());if(['w','a','s','d','q','e'].includes(e.key.toLowerCase()))e.preventDefault()};
+  const down=(e:KeyboardEvent)=>{if(e.key.toLowerCase()==='f'&&!e.repeat)mine();if(e.key.toLowerCase()==='r'&&!e.repeat)toggleAutoMine();if(e.key.toLowerCase()==='t'&&!e.repeat)toggleAdvance();keys.add(e.key.toLowerCase());if(['w','a','s','d','q','e'].includes(e.key.toLowerCase()))e.preventDefault()};
   const up=(e:KeyboardEvent)=>keys.delete(e.key.toLowerCase());
   addEventListener('keydown',down);addEventListener('keyup',up);
   const touchPad=document.createElement('div');
@@ -105,14 +120,28 @@ export function startInfinitePreview():void {
   function tick(now:number){
     const dt=Math.min((now-last)/1000,.05);last=now;
     camera.rotation.order='YXZ';camera.rotation.set(pitch,yaw,0);
-    const forward=Number(keys.has('w'))-Number(keys.has('s'));
+    const forward=Number(keys.has('w'))-Number(keys.has('s'))+Number(autoAdvance);
     const strafe=Number(keys.has('d'))-Number(keys.has('a'));
     const vertical=Number(keys.has('e'))-Number(keys.has('q'));
     const length=Math.hypot(forward,strafe,vertical)||1;
     const speed=4*dt/length;
-    camera.position.x+=(Math.sin(yaw)*-forward+Math.cos(yaw)*strafe)*speed;
-    camera.position.z+=(-Math.cos(yaw)*forward-Math.sin(yaw)*strafe)*speed;
-    camera.position.y+=vertical*speed;
+    const moveX=(Math.sin(yaw)*-forward+Math.cos(yaw)*strafe)*speed;
+    const moveZ=(-Math.cos(yaw)*forward-Math.sin(yaw)*strafe)*speed;
+    const moveY=vertical*speed;
+    // Pause automatic forward movement while rock blocks the path.
+    let blocked=false;
+    if(autoAdvance){
+      const direction=new T.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+      raycaster.set(camera.position,direction);
+      raycaster.far=.85;
+      blocked=raycaster.intersectObjects([...stream.meshes.values()],false).length>0;
+      raycaster.far=5;
+    }
+    if(!blocked||!autoAdvance){
+      camera.position.x+=moveX;
+      camera.position.z+=moveZ;
+    }
+    camera.position.y+=moveY;
     // Automatically mine only the closest block directly ahead, at a bounded rate.
     if(autoMine&&now>=nextAutoMineAt){
       mine();
@@ -121,7 +150,7 @@ export function startInfinitePreview():void {
     // Throttle expensive chunk generation to once every four frames.
     if(frame++%4===0){
       stream.update([camera.position.x,camera.position.y,camera.position.z]);
-      status.textContent='Infinite preview · '+stream.meshes.size+' chunks · '+camera.position.toArray().map(n=>n.toFixed(1)).join(', ')+'m · autosave · auto mine '+(autoMine?'ON':'OFF')+' (R)';
+      status.textContent='Infinite preview · '+stream.meshes.size+' chunks · '+camera.position.toArray().map(n=>n.toFixed(1)).join(', ')+'m · collected '+collected+' · auto mine '+(autoMine?'ON':'OFF')+' (R) · forward '+(autoAdvance?'ON':'OFF')+' (T)';
     }
     renderer.render(scene,camera);
     requestAnimationFrame(tick);
