@@ -99,3 +99,9 @@ test('near-vertical target converges to safe pitch without wasting yaw turn budg
   assert.ok(Math.abs(facing.pitch-1.5)<1e-4);
   assert.ok(Math.abs(facing.yaw+Math.PI/4)<1e-4);
 });
+
+test('rejects finite components whose combined gravity magnitude overflows',()=>{
+  const state={yaw:0,pitch:0};
+  assert.throws(()=>faceMicroGravity(state,[1.1e308,1.1e308,1.1e308],0.04));
+  assert.throws(()=>faceMicroGravity(state,[1.1e308,1.1e308,1.1e308],0));
+});
