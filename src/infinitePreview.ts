@@ -125,6 +125,7 @@ export function startInfinitePreview():void {
     try{persistMachine();saveFailed=false}catch{saveFailed=true}
     return true;
   };
+  let lastFusionResult='';
   const refreshWorkshop=()=>{
     workshop.replaceChildren();
     const heading=document.createElement('h3');
@@ -201,6 +202,12 @@ export function startInfinitePreview():void {
     const fusionHeading=document.createElement('p');
     fusionHeading.textContent='Chance fusion · materials consumed even on failure';
     workshop.append(fusionHeading);
+    const fusionNotice=document.createElement('p');
+    fusionNotice.setAttribute('role','status');
+    fusionNotice.setAttribute('aria-live','polite');
+    fusionNotice.style.cssText='padding:10px 12px;margin:8px 0;border-radius:6px;font-weight:600';
+    fusionNotice.textContent=lastFusionResult;
+    if(lastFusionResult)workshop.append(fusionNotice);
     for(const recipe of FUSION_RECIPES){
       const button=document.createElement('button');
       button.textContent=recipe.cost+' '+recipe.from+' → 1 '+recipe.to+' ('+Math.round(recipe.chance*100)+'%)';
@@ -232,12 +239,8 @@ export function startInfinitePreview():void {
           workshop.prepend(error);
           return;
         }
+        lastFusionResult=result.success?'✓ Fusion success: +1 '+recipe.to:'✕ Fusion failed: '+recipe.cost+' '+recipe.from+' consumed';
         refreshWorkshop();
-        const notice=document.createElement('p');
-        notice.setAttribute('role','status');
-        notice.textContent=result.success?'✓ Fusion success: +1 '+recipe.to:'✕ Fusion failed: '+recipe.cost+' '+recipe.from+' consumed';
-        notice.style.cssText='padding:10px 12px;margin:8px 0;border-radius:6px;border:1px solid '+(result.success?'#69c99b':'#e6a47a')+';font-weight:600';
-        workshop.insertBefore(notice,fusionHeading.nextSibling);
       };
       workshop.append(button);
     }
