@@ -120,10 +120,19 @@ export function startInfinitePreview():void {
   workshopButton.style.cssText='position:fixed;right:16px;top:12px;z-index:10;min-height:44px';
   document.body.append(workshopButton);
   const spend=(cost:Stock):boolean=>{
-    if(!(['stone','copper','iron','crystal'] as const).every(m=>stock[m]>=cost[m]))return false;
-    for(const m of ['stone','copper','iron','crystal'] as const)stock[m]-=cost[m];
-    try{persistMachine();saveFailed=false}catch{saveFailed=true}
-    return true;
+    const minerals=['stone','copper','iron','crystal'] as const;
+    if(!minerals.every(m=>Number.isSafeInteger(cost[m])&&cost[m]>=0&&stock[m]>=cost[m]))return false;
+    const previous=stock;
+    const next={...stock};
+    for(const m of minerals)next[m]-=cost[m];
+    stock=next;
+    try{persistMachine();saveFailed=false;return true}
+    catch{
+      stock=previous;
+      saveFailed=true;
+      nextSaveRetryAt=performance.now()+2000;
+      return false;
+    }
   };
   let lastFusionResult='';
   let lastFusionSuccess=false;
