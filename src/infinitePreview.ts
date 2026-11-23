@@ -1,4 +1,5 @@
 import * as T from 'three';
+import {cargoAmount,cargoCapacity,cargoSpeed,canStore,wagonCost,engineCost,MAX_WAGONS,MAX_ENGINE} from './infiniteCargoTrain.ts';
 import {mineralAt,miningDuration,DRILLS,emptyStock,craft,bestCraftable,drillCountCost,rangeCost,canCraft,type DrillTier,type DrillState,type Stock} from './infiniteDrillEconomy.ts';
 import {InfiniteChunkScene} from './infiniteChunkScene.ts';
 import {InfiniteMiningSave} from './infiniteMiningSave.ts';
@@ -32,6 +33,7 @@ export function startInfinitePreview():void {
   let stock:Stock=emptyStock();
   let drill:DrillState={tier:0,durability:DRILLS[0].durability};
   let drillCount=1,drillRange=0;
+  let wagons=1,engineLevel=0;
   let miningTarget='',miningStartedAt=0;
   let crafting:{tier:DrillTier;readyAt:number;paid:boolean}|null=null;
   const queue:DrillState[]=[];
@@ -81,7 +83,7 @@ export function startInfinitePreview():void {
     const target=key+':'+index;
     const now=performance.now();
     ensureDrill(now);
-    if(drill.durability<=0)return false;
+    if(drill.durability<=0||!canStore(stock,wagons))return false;
     if(miningTarget!==target){miningTarget=target;miningStartedAt=now;return false}
     if(now-miningStartedAt<miningDuration(mineral,drill.tier))return false;
     miningTarget='';
@@ -138,6 +140,19 @@ export function startInfinitePreview():void {
     range.disabled=drillRange>=3||!(['stone','copper','iron','crystal'] as const).every(m=>stock[m]>=rangeCost(drillRange+1)[m]);
     range.onclick=()=>{if(drillRange<3&&spend(rangeCost(drillRange+1))){drillRange++;refreshWorkshop()}};
     workshop.append(range);
+    const cargo=document.createElement('p');
+    cargo.textContent='Cargo train: '+wagons+' wagons · '+cargoAmount(stock)+'/'+cargoCapacity(wagons)+' · engine '+engineLevel+' · max '+cargoSpeed(stock,wagons,engineLevel).toFixed(1)+'m/s';
+    workshop.append(cargo);
+    const wagonButton=document.createElement('button');
+    wagonButton.textContent='Add cargo wagon ('+'40 capacity'+')';
+    wagonButton.disabled=wagons>=MAX_WAGONS||!(['stone','copper','iron','crystal'] as const).every(m=>stock[m]>=wagonCost(wagons+1)[m]);
+    wagonButton.onclick=()=>{if(wagons<MAX_WAGONS&&spend(wagonCost(wagons+1))){wagons++;refreshWorkshop()}};
+    workshop.append(wagonButton);
+    const engineButton=document.createElement('button');
+    engineButton.textContent='Upgrade engine '+engineLevel+' → '+Math.min(MAX_ENGINE,engineLevel+1);
+    engineButton.disabled=engineLevel>=MAX_ENGINE||!(['stone','copper','iron','crystal'] as const).every(m=>stock[m]>=engineCost(engineLevel+1)[m]);
+    engineButton.onclick=()=>{if(engineLevel<MAX_ENGINE&&spend(engineCost(engineLevel+1))){engineLevel++;refreshWorkshop()}};
+    workshop.append(engineButton);
     const note=document.createElement('p');
     note.textContent='Extra drill mounts and installation range are reserved upgrades; only the center drill mines in this preview.';
     workshop.append(note);
@@ -214,7 +229,7 @@ export function startInfinitePreview():void {
     const strafe=Number(keys.has('d'))-Number(keys.has('a'));
     const vertical=Number(keys.has('e'))-Number(keys.has('q'));
     const length=Math.hypot(forward,strafe,vertical)||1;
-    const speed=4*dt/length;
+    const speed=cargoSpeed(stock,wagons,engineLevel)*dt/length;
     const moveX=(Math.sin(yaw)*-forward+Math.cos(yaw)*strafe)*speed;
     const moveZ=(-Math.cos(yaw)*forward-Math.sin(yaw)*strafe)*speed;
     const moveY=vertical*speed;
