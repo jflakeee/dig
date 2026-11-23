@@ -18,8 +18,13 @@ export function faceMicroGravity(
   const turn=-Math.expm1(-1.2*dt);
   // A hard angular cap prevents sudden camera swings at a chunk transition.
   const maxTurn=0.9*dt;
-  const yawStep=Math.max(-maxTurn,Math.min(maxTurn,shortest*turn));
-  const pitchStep=Math.max(-maxTurn,Math.min(maxTurn,(targetPitch-current.pitch)*turn));
+  const desiredYawStep=shortest*turn;
+  const desiredPitchStep=(targetPitch-current.pitch)*turn;
+  // Cap the combined yaw/pitch change, not each axis independently.
+  const requestedTurn=Math.hypot(desiredYawStep,desiredPitchStep);
+  const scale=requestedTurn>maxTurn?maxTurn/requestedTurn:1;
+  const yawStep=desiredYawStep*scale;
+  const pitchStep=desiredPitchStep*scale;
   return {
     yaw:current.yaw+yawStep,
     pitch:Math.max(-1.5,Math.min(1.5,current.pitch+pitchStep)),
