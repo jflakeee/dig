@@ -1,4 +1,5 @@
 import * as T from 'three';
+import {loadMachine,saveMachine} from './infiniteMachineSave.ts';
 import {createCargoTrain} from './infiniteCargoTrainView.ts';
 import {cargoAmount,cargoCapacity,cargoSpeed,canStore,wagonCost,engineCost,MAX_WAGONS,MAX_ENGINE} from './infiniteCargoTrain.ts';
 import {mineralAt,miningDuration,DRILLS,emptyStock,craft,bestCraftable,drillCountCost,rangeCost,canCraft,type DrillTier,type DrillState,type Stock} from './infiniteDrillEconomy.ts';
@@ -40,6 +41,13 @@ export function startInfinitePreview():void {
   let miningTarget='',miningStartedAt=0;
   let crafting:{tier:DrillTier;readyAt:number;paid:boolean}|null=null;
   const queue:DrillState[]=[];
+  const restored=loadMachine(localStorage,20261123,performance.now());
+  if(restored){
+    stock=restored.stock;drill=restored.drill;drillCount=restored.drillCount;drillRange=restored.drillRange;
+    wagons=restored.wagons;engineLevel=restored.engineLevel;queue.push(...restored.queue);
+    crafting=restored.crafting;cargoTrain.setWagons(wagons);
+  }
+  const persistMachine=()=>saveMachine(localStorage,20261123,{stock,drill,drillCount,drillRange,wagons,engineLevel,queue,crafting},performance.now());
   const ensureDrill=(now:number)=>{
     if(crafting&&now>=crafting.readyAt){
       const result=crafting.paid?{stock,drill:{tier:crafting.tier,durability:DRILLS[crafting.tier].durability}}:craft(stock,crafting.tier);
@@ -54,7 +62,7 @@ export function startInfinitePreview():void {
   let saveFailed=false;
   let nextSaveRetryAt=0;
   const flushOnExit=()=>{
-    try{save.flush();saveFailed=false}catch{saveFailed=true}
+    try{save.flush();persistMachine();saveFailed=false}catch{saveFailed=true}
   };
   addEventListener('pagehide',flushOnExit);
   document.addEventListener('visibilitychange',()=>{
@@ -95,7 +103,7 @@ export function startInfinitePreview():void {
     record.terrain[index]=0;
     save.mark(coord,index);
     collected++;
-    try{save.flush();saveFailed=false}catch{saveFailed=true;nextSaveRetryAt=performance.now()+2000}
+    try{save.flush();persistMachine();saveFailed=false}catch{saveFailed=true;nextSaveRetryAt=performance.now()+2000}
     scene.remove(mesh);disposeInfiniteChunkMesh(mesh);
     const replacement=infiniteChunkMesh(record.terrain,coord);
     stream.meshes.set(key,replacement);scene.add(replacement);
@@ -111,6 +119,7 @@ export function startInfinitePreview():void {
   const spend=(cost:Stock):boolean=>{
     if(!(['stone','copper','iron','crystal'] as const).every(m=>stock[m]>=cost[m]))return false;
     for(const m of ['stone','copper','iron','crystal'] as const)stock[m]-=cost[m];
+    try{persistMachine();saveFailed=false}catch{saveFailed=true}
     return true;
   };
   const refreshWorkshop=()=>{
@@ -284,9 +293,10 @@ export function startInfinitePreview():void {
       }else mine(false);
       nextAutoMineAt=now+100;
     }
+    if(frame%60===0){try{persistMachine()}catch{saveFailed=true;nextSaveRetryAt=now+2000}}
     // Retry transient storage errors without requiring another block to be mined.
     if(saveFailed&&now>=nextSaveRetryAt){
-      try{save.flush();saveFailed=false}catch{nextSaveRetryAt=now+2000}
+      try{save.flush();persistMachine();saveFailed=false}catch{nextSaveRetryAt=now+2000}
     }
     // Throttle expensive chunk generation to once every four frames.
     if(frame++%4===0){
