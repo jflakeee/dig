@@ -161,7 +161,21 @@ export function startInfinitePreview():void {
     camera.position.y+=moveY;
     // Automatically mine only the closest block directly ahead, at a bounded rate.
     if(autoMine&&now>=nextAutoMineAt){
-      mine(autoAdvance);
+      // Carve a full player-width passage before resuming forward movement.
+      if(autoAdvance){
+        const original=camera.position.clone();
+        const right=new T.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+        let mined=false;
+        for(const side of [-.25,0,.25]){
+          for(const height of [-.35,0,.35]){
+            camera.position.copy(original).addScaledVector(right,side);
+            camera.position.y+=height;
+            if(mine(true)){mined=true;break}
+          }
+          if(mined)break;
+        }
+        camera.position.copy(original);
+      }else mine(false);
       nextAutoMineAt=now+350;
     }
     // Throttle expensive chunk generation to once every four frames.
