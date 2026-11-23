@@ -1,3 +1,4 @@
+import {FUSION_RECIPES,fuseMinerals} from './infiniteMineralFusion.ts';
 import * as T from 'three';
 import {loadMachine,saveMachine} from './infiniteMachineSave.ts';
 import {createCargoTrain} from './infiniteCargoTrainView.ts';
@@ -147,6 +148,26 @@ export function startInfinitePreview():void {
       discard.append(button);
     }
     workshop.append(discard);
+    const fusionHeading=document.createElement('p');
+    fusionHeading.textContent='Chance fusion · materials consumed even on failure';
+    workshop.append(fusionHeading);
+    for(const recipe of FUSION_RECIPES){
+      const button=document.createElement('button');
+      button.textContent=recipe.cost+' '+recipe.from+' → 1 '+recipe.to+' ('+Math.round(recipe.chance*100)+'%)';
+      button.disabled=stock[recipe.from]<recipe.cost;
+      button.onclick=()=>{
+        const result=fuseMinerals(stock,recipe,Math.random());
+        if(!result)return;
+        stock=result.stock;
+        try{persistMachine();saveFailed=false}catch{saveFailed=true;nextSaveRetryAt=performance.now()+2000}
+        refreshWorkshop();
+        const notice=document.createElement('p');
+        notice.setAttribute('role','status');
+        notice.textContent=result.success?'Fusion success: +1 '+recipe.to:'Fusion failed: '+recipe.cost+' '+recipe.from+' consumed';
+        workshop.insertBefore(notice,fusionHeading.nextSibling);
+      };
+      workshop.append(button);
+    }
     for(let tier=0;tier<DRILLS.length;tier++){
       const t=tier as DrillTier;
       const button=document.createElement('button');
