@@ -6,8 +6,11 @@ export type ChunkRecord={coord:ChunkCoord;terrain:Uint8Array};
 export class InfiniteChunkStream {
   readonly loaded=new Map<string,ChunkRecord>();
   readonly retained=new Map<string,ChunkRecord>();
-  constructor(readonly seed:number,readonly loadBudget=2){
+  readonly seed:number;
+  readonly loadBudget:number;
+  constructor(seed:number,loadBudget=2){
     if(!Number.isSafeInteger(seed)||!Number.isInteger(loadBudget)||loadBudget<1)throw Error('Invalid stream configuration');
+    this.seed=seed;this.loadBudget=loadBudget;
   }
   /** Called each update. Visible chunks are loaded gradually, nearest first. */
   update(position:WorldPosition):{loaded:number;unloaded:number;reset:number}{
