@@ -208,7 +208,6 @@ export function startInfinitePreview():void {
       const equip=document.createElement('button');
       equip.textContent='Equip recovered drill T'+item.tier+' ('+item.durability+'/'+item.maxDurability+')';
       equip.style.cssText='min-height:44px;width:100%;margin:4px 0';
-      equip.disabled=drill.durability<=0;
       equip.onclick=()=>{
         const result=equipRecoveredDrill(drill,foundEquipment,index);
         if(!result)return;
