@@ -257,13 +257,17 @@ let last=performance.now(),next=0,vy=0;const hud=document.querySelector('#hud')!
   journalPanel.style.display==='none'&&memoryLogPanel.hidden&&!trading){
   const gravity=microGravityAt(microGravitySeed,[camera.position.x,camera.position.y,camera.position.z]);
   // Give touch/mouse look priority, then gradually point the machine into gravity.
-  if(look===-1&&now-lastManualLookAt>1800){
+  const manualLookIdle=look===-1&&now-lastManualLookAt>1800;
+  if(manualLookIdle){
     const facing=faceMicroGravity({yaw,pitch},gravity,dt);
     yaw=facing.yaw;pitch=facing.pitch;
   }
   camera.rotation.set(pitch,yaw,0,'YXZ');
-  const localGravity=new T.Vector3(...gravity).applyQuaternion(camera.quaternion.clone().invert());
-  gravityRoll=gravityLevelRoll(gravityRoll,localGravity.x,localGravity.y,dt);
+  // Roll assist must respect the same touch/mouse grace period as yaw and pitch.
+  if(manualLookIdle){
+    const localGravity=new T.Vector3(...gravity).applyQuaternion(camera.quaternion.clone().invert());
+    gravityRoll=gravityLevelRoll(gravityRoll,localGravity.x,localGravity.y,dt);
+  }
 }else camera.rotation.set(pitch,yaw,0,'YXZ');
 if(zeroGravityEnabled&&microGravityEnabled&&gravityAutoFaceEnabled)camera.rotateZ(gravityRoll);const drive=propulsionStep(propulsion,dt,zeroGravityEnabled&&(boostHeld||keys.has('shift')));propulsion=drive.state;const driveSpeed=zeroGravityEnabled?drive.speed:3;const d=moveVec.set(Number(keys.has('d'))-Number(keys.has('a'))+joyX,0,Number(keys.has('s'))-Number(keys.has('w'))+joyY);if(d.lengthSq()>1)d.normalize();d.applyAxisAngle(up,yaw).multiplyScalar(driveSpeed*dt);
 if(autoMineEnabled){
