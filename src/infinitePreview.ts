@@ -138,11 +138,13 @@ export function startInfinitePreview():void {
     repair.onclick=()=>{
       const result=repairDrill(stock,drill);
       if(!result)return;
-      const previousStock=stock,previousDrill=drill;
+      const previousStock=stock,previousDrill=drill,previousCrafting=crafting;
       stock=result.stock;drill=result.drill;
+      // A repaired drill takes priority over a pending unpaid auto-replacement.
+      if(crafting&&!crafting.paid)crafting=null;
       try{persistMachine();saveFailed=false}
       catch{
-        stock=previousStock;drill=previousDrill;saveFailed=true;
+        stock=previousStock;drill=previousDrill;crafting=previousCrafting;saveFailed=true;
         nextSaveRetryAt=performance.now()+2000;
         const error=document.createElement('p');
         error.setAttribute('role','alert');
