@@ -112,8 +112,15 @@ export function startInfinitePreview():void {
     collected++;
     const drop=rollEquipmentDrop(Math.random(),Math.random(),Math.random());
     if(drop){
-      if(foundEquipment.length<1000)foundEquipment.push(drop);
-      discovery.textContent='Found '+drop.kind+' ('+drop.durability+'/'+drop.maxDurability+' durability). '+DISCOVERY_STORY;
+      if(drop.kind==='mineral-pile'){
+        const available=Math.max(0,cargoCapacity(wagons)-cargoAmount(stock));
+        const received=Math.min(drop.amount,available);
+        stock[drop.mineral]+=received;
+        discovery.textContent='Found mineral pile: '+received+' '+drop.mineral+(received<drop.amount?' (cargo full)':'')+'. '+DISCOVERY_STORY;
+      }else{
+        if(foundEquipment.length<1000)foundEquipment.push(drop);
+        discovery.textContent='Found '+drop.kind+' ('+drop.durability+'/'+drop.maxDurability+' durability). '+DISCOVERY_STORY;
+      }
       discovery.style.display='block';
       discoveryUntil=now+5500;
     }
