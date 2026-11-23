@@ -29,7 +29,7 @@ export function loadMachine(storage:Pick<Storage,'getItem'>,seed:number,now:numb
       !Number.isInteger(state.drillCount)||state.drillCount<1||state.drillCount>4||
       !Number.isInteger(state.drillRange)||state.drillRange<0||state.drillRange>3)return null;
     if(state.collected!==undefined&&(!Number.isSafeInteger(state.collected)||state.collected<0))return null;
-    if(state.foundEquipment!==undefined&&(!Array.isArray(state.foundEquipment)||state.foundEquipment.length>1000||!state.foundEquipment.every(e=>e&&DROP_KIN.includes(e.kind)&&Number.isInteger(e.tier)&&e.tier>=0&&e.tier<DRILLS.length&&Number.isInteger(e.maxDurability)&&e.maxDurability>0&&e.maxDurability<=300&&Number.isInteger(e.durability)&&e.durability>=1&&e.durability<=e.maxDurability)))return null;
+    if(state.foundEquipment!==undefined&&(!Array.isArray(state.foundEquipment)||state.foundEquipment.length>1000||!state.foundEquipment.every(e=>e&&DROP_KINDS.includes(e.kind)&&Number.isInteger(e.tier)&&e.tier>=0&&e.tier<DRILLS.length&&Number.isInteger(e.maxDurability)&&e.maxDurability>0&&e.maxDurability<=300&&Number.isInteger(e.durability)&&e.durability>=1&&e.durability<=e.maxDurability)))return null;
     const job=state.crafting;
     if(job!==null&&(!job||!Number.isInteger(job.tier)||job.tier<0||job.tier>=DRILLS.length||
       typeof job.paid!=='boolean'||!Number.isFinite(job.readyAt)))return null;
