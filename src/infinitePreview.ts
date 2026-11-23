@@ -30,25 +30,25 @@ export function startInfinitePreview():void {
   let collected=[...save.edits.values()].reduce((total,indices)=>total+indices.size,0);
   const raycaster=new T.Raycaster();
   raycaster.far=5;
-  const mine=(horizontal=false)=>{
+  const mine=(horizontal=false):boolean=>{
     if(horizontal){
       raycaster.set(camera.position,new T.Vector3(-Math.sin(yaw),0,-Math.cos(yaw)));
     }else raycaster.setFromCamera(new T.Vector2(0,0),camera);
     const hit=raycaster.intersectObjects([...stream.meshes.values()],false)[0];
-    if(!hit?.face)return;
+    if(!hit?.face)return false;
     const mesh=hit.object as T.Mesh;
     const coord:[number,number,number]=[
       Math.round(mesh.position.x/16),Math.round(mesh.position.y/16),Math.round(mesh.position.z/16)
     ];
     const key=chunkKey(coord);
     const record=stream.stream.loaded.get(key);
-    if(!record)return;
+    if(!record)return false;
     // Step into the solid side of the selected face, avoiding boundary ambiguity.
     const p=hit.point.clone().addScaledVector(hit.face.normal,-.002).sub(mesh.position);
     const x=Math.floor(p.x/VOXEL_METERS),y=Math.floor(p.y/VOXEL_METERS),z=Math.floor(p.z/VOXEL_METERS);
-    if([x,y,z].some(n=>n<0||n>=CHUNK_VOXELS_PER_AXIS))return;
+    if([x,y,z].some(n=>n<0||n>=CHUNK_VOXELS_PER_AXIS))return false;
     const index=voxelIndex(x,y,z);
-    if(record.terrain[index]!==1)return;
+    if(record.terrain[index]!==1)return false;
     record.terrain[index]=0;
     save.mark(coord,index);
     collected++;
@@ -56,6 +56,7 @@ export function startInfinitePreview():void {
     scene.remove(mesh);disposeInfiniteChunkMesh(mesh);
     const replacement=infiniteChunkMesh(record.terrain,coord);
     stream.meshes.set(key,replacement);scene.add(replacement);
+    return true;
   };
   let autoMine=false;
   let autoAdvance=false;
