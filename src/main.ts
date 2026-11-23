@@ -53,7 +53,7 @@ import {mines,PROFILE} from './mineProfile';
 import {unlocked} from './expedition';
 import {S,density,excavateSphere,surfaceSpawn,rescueSpawn,rescueFloor} from './terrain';
 import * as T from 'three';
-import { discoverDrillHazard, advanceDrillHazard, hazardResolved, rollDrillHazard } from './drillHazards';
+import { discoverDrillHazard, advanceDrillHazard, hazardResolved, rollDrillHazard, hazardFailureEffect } from './drillHazards';
 import type { DrillHazard } from './drillHazards';
 import { unlockAudio, muted } from 'plinkfx';
 async function boot(){
@@ -151,7 +151,7 @@ function showMemoryLine(line:string,now:number){
   machineVoiceUntil=now+3800;
 }
 
-const impact=document.createElement('div');impact.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:1;box-shadow:inset 0 0 65px 8px #b38b55;opacity:0';document.body.append(impact);let impactPower=0;const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');const ray=new T.Raycaster(),aimPoint=new T.Vector2();function dig(){if(trading||activeHazard)return;camera.updateMatrixWorld(true);ray.setFromCamera(aimPoint,camera);const tool=legendaryTool(selected,session.levels,session.crafted,world.profile.version===3?world.profile.legendary:undefined);ray.far=tool.reach;const hit=ray.intersectObjects([...chunks.values()])[0];const prop=ray.intersectObjects([...explorationModels.values()],true)[0];if(prop&&(!hit||prop.distance<hit.distance)&&!saving){let group=prop.object;while(group.parent&&!group.userData.discoveryId)group=group.parent;const id=group.userData.discoveryId as string;if(id){trading=true;const claim=()=>{if(world.claim(id)==='saved'){scene.remove(group);explorationModels.delete(id);updateBag();refreshJournal();notice=' · Discovery recorded';showDiscovery(id);uiSound('confirm')}else notice=' · Discovery save failed'};void (async()=>{try{if(navigator.locks)await navigator.locks.request(SAVE,claim);else claim()}catch{notice=' · Discovery save failed'}finally{trading=false}})();return}}if(!hit||!hit.face)return;const hazardRoll=rollDrillHazard(Math.random());if(hazardRoll){activeHazard=discoverDrillHazard(hazardRoll.kind,hazardRoll.side,performance.now());tickHazard(performance.now());return}const q=hit.point.clone().addScaledVector(hit.face.normal,-.28);const {dirty,removed,indices}=excavateSphere(data,q,tool.radius,shape);const gained:Partial<Record<Ore,number>>={};for(const i of indices){const ore=mineOre(shape.id,i%N,Math.floor(i/(N*N)),Math.floor(i/N)%N);if(ore){inventory[ore]++;gained[ore]=(gained[ore]??0)+1}}const rareHits=Number(shape.id)===4?indices.map(rareAt).filter(k=>k!==null):[];if(rareHits.length){rareSound();rareNotice.textContent=rareHits.map(k=>rareLabels[k]).join(' · ');rareNotice.hidden=false;rareUntil=performance.now()+3000;refreshRare();} if(removed>0&&zeroGravityEnabled){
+const impact=document.createElement('div');impact.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:1;box-shadow:inset 0 0 65px 8px #b38b55;opacity:0';document.body.append(impact);let impactPower=0;const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');const ray=new T.Raycaster(),aimPoint=new T.Vector2();function dig(){if(trading||activeHazard||hazardDrillDurability<=0)return;camera.updateMatrixWorld(true);ray.setFromCamera(aimPoint,camera);const tool=legendaryTool(selected,session.levels,session.crafted,world.profile.version===3?world.profile.legendary:undefined);ray.far=tool.reach;const hit=ray.intersectObjects([...chunks.values()])[0];const prop=ray.intersectObjects([...explorationModels.values()],true)[0];if(prop&&(!hit||prop.distance<hit.distance)&&!saving){let group=prop.object;while(group.parent&&!group.userData.discoveryId)group=group.parent;const id=group.userData.discoveryId as string;if(id){trading=true;const claim=()=>{if(world.claim(id)==='saved'){scene.remove(group);explorationModels.delete(id);updateBag();refreshJournal();notice=' · Discovery recorded';showDiscovery(id);uiSound('confirm')}else notice=' · Discovery save failed'};void (async()=>{try{if(navigator.locks)await navigator.locks.request(SAVE,claim);else claim()}catch{notice=' · Discovery save failed'}finally{trading=false}})();return}}if(!hit||!hit.face)return;const hazardRoll=rollDrillHazard(Math.random());if(hazardRoll){activeHazard=discoverDrillHazard(hazardRoll.kind,hazardRoll.side,performance.now());tickHazard(performance.now());return}const q=hit.point.clone().addScaledVector(hit.face.normal,-.28);const {dirty,removed,indices}=excavateSphere(data,q,tool.radius,shape);const gained:Partial<Record<Ore,number>>={};for(const i of indices){const ore=mineOre(shape.id,i%N,Math.floor(i/(N*N)),Math.floor(i/N)%N);if(ore){inventory[ore]++;gained[ore]=(gained[ore]??0)+1}}const rareHits=Number(shape.id)===4?indices.map(rareAt).filter(k=>k!==null):[];if(rareHits.length){rareSound();rareNotice.textContent=rareHits.map(k=>rareLabels[k]).join(' · ');rareNotice.hidden=false;rareUntil=performance.now()+3000;refreshRare();} if(removed>0&&zeroGravityEnabled){
   machineEvent++;
   const remembered=memoryMiningEvent(memoryState,performance.now());
   memoryState=remembered.state;
@@ -171,6 +171,8 @@ const impact=document.createElement('div');impact.style.cssText='position:fixed;
   }
 }
 const feedback=excavationFeedback(removed,gained);if(feedback){gain.textContent=feedback.text;gain.style.color=feedback.rare?'#ffe18a':'#ffffff';gain.hidden=false;gainUntil=performance.now()+1100}updateBag();count+=removed;for(const k of dirty){const [x,y,z]=k.split(',').map(Number);rebuild(x,y,z)}if(dirty.size){propulsion=collectDust(propulsion,removed);impactPower=.18;viewTool.hit();debris.burst(hit.point,hit.face.normal,removed,rareHits.length?rareColors[rareHits[0]].getHex():0xb58a61,rareHits.length>0);save();digSound(tool.id)}}
+// Experimental hazard durability is session-only until the save schema supports it.
+let hazardDrillDurability=1000;
 let activeHazard:DrillHazard|null=null;
 let hazardMessageUntil=0;
 const hazardAlert=document.createElement('div');
@@ -192,7 +194,19 @@ function tickHazard(now:number){
     if(hazardResolved(hazard,now)){hazardAlert.textContent='Hazard cleared';hazardMessageUntil=now+1200;activeHazard=null}
   }else{
     hazardAlert.hidden=false;
-    hazardAlert.textContent=hazard.kind==='explosive'?'EXPLOSION — drill damage risk!':'ACID BREACH — cargo loss!';
+    const effect=hazardFailureEffect(hazard,Math.random(),hazardDrillDurability);
+    hazardDrillDurability=Math.max(0,hazardDrillDurability-effect.drillDurabilityLoss);
+    if(effect.cargoLost){
+      // Only remove unspent, unsold cargo. Existing sale/crafting ledgers remain intact.
+      const available=remaining(inventory,session.sold,session.crafted);
+      for(const key of Object.keys(available) as (keyof typeof inventory)[]){
+        inventory[key]=Math.max(0,inventory[key]-(available[key]??0));
+      }
+      updateBag();
+    }
+    hazardAlert.textContent=effect.cargoLost?'ACID BREACH — exposed cargo lost!':
+      effect.drillDurabilityLoss>0?'EXPLOSION — drill -'+effect.drillDurabilityLoss+' durability':
+      'EXPLOSION — drill shielded (no damage)!';
     hazardMessageUntil=now+1800;activeHazard=null;
   }
 }
