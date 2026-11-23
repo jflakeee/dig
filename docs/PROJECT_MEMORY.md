@@ -431,3 +431,9 @@
 - Auto Face UI를 Auto Level로 변경. 수동 yaw/pitch, 추진, 중력 표류, HUD 유지.
 - 기존 `src/microGravityOrientation.ts` 및 테스트는 아직 저장소에 남아 있으나 게임 실행에서 사용하지 않음.
 - 전체 빌드/CI/모바일 시각 검증 미확인. main/Pages 변경 없음.
+
+## 미세 중력 카메라 롤 테스트 가능 모듈화 (2026-11-23)
+- `src/microGravityCameraRoll.ts`로 화면 아래 중력 정렬 순수 함수 분리, main.ts 연결.
+- `tests/micro-gravity-camera-roll.test.mjs`: 화면 사분면, 회전 속도, 중력 약함, wrap, 유효성 검사.
+- `.github/workflows/mining-balance.yml` 경로 감지와 Node22 테스트 단계 추가.
+- GitHub 커밋 완료. 실제 CI/전체 빌드/모바일 실기기 검증 미확인. main/Pages 유지.
