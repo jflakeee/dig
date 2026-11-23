@@ -91,3 +91,11 @@ test('combined yaw and pitch rotation stays within the angular speed cap',()=>{
     assert.ok(Math.hypot(next.yaw-start.yaw,next.pitch-start.pitch)<=0.9*dt+1e-12);
   }
 });
+
+test('near-vertical target converges to safe pitch without wasting yaw turn budget',()=>{
+  let facing={yaw:0,pitch:0};
+  const gravity=[0.01,0.1,-0.01];
+  for(let i=0;i<600;i++)facing=faceMicroGravity(facing,gravity,0.04);
+  assert.ok(Math.abs(facing.pitch-1.5)<1e-4);
+  assert.ok(Math.abs(facing.yaw+Math.PI/4)<1e-4);
+});
