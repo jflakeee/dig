@@ -399,3 +399,8 @@
 - 중력 모드/미세 중력 토글 시 HUD 이전 위치 값 제거, `Scanning…` 표시 후 다음 활성 프레임에 즉시 새 중력값 계산.
 - 표류 속도 초기화 및 기존 자동 회전 토글 상태 유지.
 - CI/전체 빌드/모바일 실기기 검증 미확인. main/Pages 미변경.
+
+## 미세 중력 방향 판정 임계값 일원화 (2026-11-23)
+- `src/chunkMicroGravity.ts`에 `MICRO_GRAVITY_DIRECTION_THRESHOLD=0.008` 상수 추가.
+- `src/microGravityOrientation.ts` 자동 방향 회전 및 `src/main.ts` Neutral HUD에서 공통 상수 사용.
+- 동작 임계값 변경 없음. CI/전체 빌드/모바일 검증 미확인, main/Pages 유지.
