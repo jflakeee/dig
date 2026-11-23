@@ -204,7 +204,7 @@ const gravityToggle=document.createElement('button');
 gravityToggle.textContent='Gravity: On';
 gravityToggle.style.cssText='position:fixed;right:12px;top:138px;z-index:3;min-height:44px';
 actions.append(gravityToggle);
-gravityToggle.onclick=()=>{zeroGravityEnabled=!zeroGravityEnabled;vy=0;verticalTouch=0;ascendButton.style.display=descendButton.style.display=zeroGravityEnabled?'block':'none';boostButton.style.display=zeroGravityEnabled?'block':'none';boostHeld=false;miningMachineView.setActive(zeroGravityEnabled);microGravityToggle.style.display=zeroGravityEnabled?'block':'none';microGravityIndicator.style.display=zeroGravityEnabled&&microGravityEnabled?'block':'none';gravityFaceToggle.style.display=zeroGravityEnabled&&microGravityEnabled?'block':'none';microDrift=INITIAL_DRIFT;memoryLogButton.style.display=zeroGravityEnabled?'block':'none';if(!zeroGravityEnabled)memoryLogPanel.hidden=true;gravityToggle.textContent=zeroGravityEnabled?'Gravity: Off':'Gravity: On'};
+gravityToggle.onclick=()=>{zeroGravityEnabled=!zeroGravityEnabled;vy=0;verticalTouch=0;ascendButton.style.display=descendButton.style.display=zeroGravityEnabled?'block':'none';boostButton.style.display=zeroGravityEnabled?'block':'none';boostHeld=false;miningMachineView.setActive(zeroGravityEnabled);microGravityToggle.style.display=zeroGravityEnabled?'block':'none';microGravityIndicator.style.display=zeroGravityEnabled&&microGravityEnabled?'block':'none';gravityFaceToggle.style.display=zeroGravityEnabled&&microGravityEnabled?'block':'none';microDrift=INITIAL_DRIFT;microGravityIndicatorAt=0;microGravityIndicator.textContent='Micro G · Scanning…';memoryLogButton.style.display=zeroGravityEnabled?'block':'none';if(!zeroGravityEnabled)memoryLogPanel.hidden=true;gravityToggle.textContent=zeroGravityEnabled?'Gravity: Off':'Gravity: On'};
 let microGravityEnabled=false;
 let gravityAutoFaceEnabled=true;
 let microDrift=INITIAL_DRIFT;
@@ -221,6 +221,8 @@ actions.append(microGravityToggle);
 microGravityToggle.onclick=()=>{
   microGravityEnabled=!microGravityEnabled;
   microDrift=INITIAL_DRIFT;
+  microGravityIndicatorAt=0;
+  microGravityIndicator.textContent='Micro G · Scanning…';
   microGravityToggle.textContent=microGravityEnabled?'Micro G: On':'Micro G: Off';
   microGravityIndicator.style.display=microGravityEnabled?'block':'none';
   gravityFaceToggle.style.display=zeroGravityEnabled&&microGravityEnabled?'block':'none';
