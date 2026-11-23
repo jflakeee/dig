@@ -1,3 +1,4 @@
+import {rollEquipmentDrop,DISCOVERY_STORY,type EquipmentDrop} from './infiniteEquipmentDrops.ts';
 import {REPAIR_COST,repairDrill} from './infiniteDrillRepair.ts';
 import {discardMinerals,type DiscardAmount} from './infiniteCargoActions.ts';
 import {FUSION_RECIPES,fuseMinerals} from './infiniteMineralFusion.ts';
@@ -33,6 +34,12 @@ export function startInfinitePreview():void {
   status.textContent='Infinite world preview · WASD move · Q/E vertical · drag to look · mining machine autosave (F/Drill)';
   document.body.append(status);
   let collected=0;
+  let foundEquipment:EquipmentDrop[]=[];
+  const discovery=document.createElement('div');
+  discovery.style.cssText='position:fixed;bottom:92px;left:50%;transform:translateX(-50%);max-width:85vw;background:#172630ed;color:white;padding:12px;border-radius:8px;z-index:9;display:none;pointer-events:none';
+  discovery.setAttribute('role','status');
+  document.body.append(discovery);
+  let discoveryUntil=0;
   let stock:Stock=emptyStock();
   let drill:DrillState={tier:0,durability:DRILLS[0].durability};
   let drillCount=1,drillRange=0;
@@ -46,9 +53,9 @@ export function startInfinitePreview():void {
   if(restored){
     stock=restored.stock;drill=restored.drill;drillCount=restored.drillCount;drillRange=restored.drillRange;
     wagons=restored.wagons;engineLevel=restored.engineLevel;queue.push(...restored.queue);
-    crafting=restored.crafting;collected=restored.collected??0;cargoTrain.setWagons(wagons);
+    crafting=restored.crafting;collected=restored.collected??0;foundEquipment=restored.foundEquipment??[];cargoTrain.setWagons(wagons);
   }
-  const persistMachine=()=>saveMachine(localStorage,20261123,{stock,drill,drillCount,drillRange,wagons,engineLevel,queue,crafting,collected},performance.now());
+  const persistMachine=()=>saveMachine(localStorage,20261123,{stock,drill,drillCount,drillRange,wagons,engineLevel,queue,crafting,collected,foundEquipment},performance.now());
   const ensureDrill=(now:number)=>{
     if(crafting&&now>=crafting.readyAt){
       const result=crafting.paid?{stock,drill:{tier:crafting.tier,durability:DRILLS[crafting.tier].durability}}:craft(stock,crafting.tier);
@@ -103,6 +110,13 @@ export function startInfinitePreview():void {
     stock[mineral]++;
     record.terrain[index]=0;
     collected++;
+    const drop=rollEquipmentDrop(Math.random(),Math.random(),Math.random());
+    if(drop){
+      if(foundEquipment.length<1000)foundEquipment.push(drop);
+      discovery.textContent='Found '+drop.kind+' ('+drop.durability+'/'+drop.maxDurability+' durability). '+DISCOVERY_STORY;
+      discovery.style.display='block';
+      discoveryUntil=now+5500;
+    }
     try{persistMachine();saveFailed=false}catch{saveFailed=true;nextSaveRetryAt=performance.now()+2000}
     scene.remove(mesh);disposeInfiniteChunkMesh(mesh);
     const replacement=infiniteChunkMesh(record.terrain,coord);
@@ -173,6 +187,9 @@ export function startInfinitePreview():void {
     const inventory=document.createElement('p');
     inventory.textContent=Object.entries(stock).map(([m,n])=>m+': '+n).join(' · ');
     workshop.append(inventory);
+    const loot=document.createElement('p');
+    loot.textContent='Recovered equipment ('+foundEquipment.length+'): '+(foundEquipment.length?foundEquipment.slice(-12).map(e=>e.kind+(e.kind==='drill'?' T'+e.tier:'')+' '+e.durability+'/'+e.maxDurability).join(' · '):'None');
+    workshop.append(loot);
     // A full hold must never permanently block progression when upgrade recipes
     // require a mineral that the player has not yet collected.
     const discard=document.createElement('div');
@@ -425,6 +442,7 @@ export function startInfinitePreview():void {
     // Throttle expensive chunk generation to once every four frames.
     if(frame++%4===0){
       stream.update([camera.position.x,camera.position.y,camera.position.z]);
+      if(discoveryUntil&&now>discoveryUntil){discovery.style.display='none';discoveryUntil=0}
       status.textContent='Infinite preview · '+stream.meshes.size+' chunks · '+camera.position.toArray().map(n=>n.toFixed(1)).join(', ')+'m · collected '+collected+' · drill '+DRILLS[drill.tier].name+' '+drill.durability+'/'+DRILLS[drill.tier].durability+(drill.durability===0?' · REPAIR IN WORKSHOP':'')+' · auto mine '+(autoMine?'ON':'OFF')+' (R) · forward '+(autoAdvance?'ON':'OFF')+' (T)'+(saveFailed?' · ⚠ SAVE FAILED — storage unavailable':'');
     }
     cargoTrain.update(camera.position,yaw,dt);
