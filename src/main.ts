@@ -53,6 +53,8 @@ import {mines,PROFILE} from './mineProfile';
 import {unlocked} from './expedition';
 import {S,density,excavateSphere,surfaceSpawn,rescueSpawn,rescueFloor} from './terrain';
 import * as T from 'three';
+import { discoverDrillHazard, advanceDrillHazard, hazardResolved, rollDrillHazard } from './drillHazards';
+import type { DrillHazard } from './drillHazards';
 import { unlockAudio, muted } from 'plinkfx';
 async function boot(){
 addEventListener('pointerdown',()=>{unlockAudio()},{once:true});
@@ -149,7 +151,7 @@ function showMemoryLine(line:string,now:number){
   machineVoiceUntil=now+3800;
 }
 
-const impact=document.createElement('div');impact.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:1;box-shadow:inset 0 0 65px 8px #b38b55;opacity:0';document.body.append(impact);let impactPower=0;const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');const ray=new T.Raycaster(),aimPoint=new T.Vector2();function dig(){if(trading)return;camera.updateMatrixWorld(true);ray.setFromCamera(aimPoint,camera);const tool=legendaryTool(selected,session.levels,session.crafted,world.profile.version===3?world.profile.legendary:undefined);ray.far=tool.reach;const hit=ray.intersectObjects([...chunks.values()])[0];const prop=ray.intersectObjects([...explorationModels.values()],true)[0];if(prop&&(!hit||prop.distance<hit.distance)&&!saving){let group=prop.object;while(group.parent&&!group.userData.discoveryId)group=group.parent;const id=group.userData.discoveryId as string;if(id){trading=true;const claim=()=>{if(world.claim(id)==='saved'){scene.remove(group);explorationModels.delete(id);updateBag();refreshJournal();notice=' · Discovery recorded';showDiscovery(id);uiSound('confirm')}else notice=' · Discovery save failed'};void (async()=>{try{if(navigator.locks)await navigator.locks.request(SAVE,claim);else claim()}catch{notice=' · Discovery save failed'}finally{trading=false}})();return}}if(!hit||!hit.face)return;const q=hit.point.clone().addScaledVector(hit.face.normal,-.28);const {dirty,removed,indices}=excavateSphere(data,q,tool.radius,shape);const gained:Partial<Record<Ore,number>>={};for(const i of indices){const ore=mineOre(shape.id,i%N,Math.floor(i/(N*N)),Math.floor(i/N)%N);if(ore){inventory[ore]++;gained[ore]=(gained[ore]??0)+1}}const rareHits=Number(shape.id)===4?indices.map(rareAt).filter(k=>k!==null):[];if(rareHits.length){rareSound();rareNotice.textContent=rareHits.map(k=>rareLabels[k]).join(' · ');rareNotice.hidden=false;rareUntil=performance.now()+3000;refreshRare();} if(removed>0&&zeroGravityEnabled){
+const impact=document.createElement('div');impact.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:1;box-shadow:inset 0 0 65px 8px #b38b55;opacity:0';document.body.append(impact);let impactPower=0;const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');const ray=new T.Raycaster(),aimPoint=new T.Vector2();function dig(){if(trading||activeHazard)return;const hazardRoll=rollDrillHazard(Math.random());if(hazardRoll){activeHazard=discoverDrillHazard(hazardRoll.kind,hazardRoll.side,performance.now());tickHazard(performance.now());return}hazardLastDrillAt=performance.now();camera.updateMatrixWorld(true);ray.setFromCamera(aimPoint,camera);const tool=legendaryTool(selected,session.levels,session.crafted,world.profile.version===3?world.profile.legendary:undefined);ray.far=tool.reach;const hit=ray.intersectObjects([...chunks.values()])[0];const prop=ray.intersectObjects([...explorationModels.values()],true)[0];if(prop&&(!hit||prop.distance<hit.distance)&&!saving){let group=prop.object;while(group.parent&&!group.userData.discoveryId)group=group.parent;const id=group.userData.discoveryId as string;if(id){trading=true;const claim=()=>{if(world.claim(id)==='saved'){scene.remove(group);explorationModels.delete(id);updateBag();refreshJournal();notice=' · Discovery recorded';showDiscovery(id);uiSound('confirm')}else notice=' · Discovery save failed'};void (async()=>{try{if(navigator.locks)await navigator.locks.request(SAVE,claim);else claim()}catch{notice=' · Discovery save failed'}finally{trading=false}})();return}}if(!hit||!hit.face)return;const q=hit.point.clone().addScaledVector(hit.face.normal,-.28);const {dirty,removed,indices}=excavateSphere(data,q,tool.radius,shape);const gained:Partial<Record<Ore,number>>={};for(const i of indices){const ore=mineOre(shape.id,i%N,Math.floor(i/(N*N)),Math.floor(i/N)%N);if(ore){inventory[ore]++;gained[ore]=(gained[ore]??0)+1}}const rareHits=Number(shape.id)===4?indices.map(rareAt).filter(k=>k!==null):[];if(rareHits.length){rareSound();rareNotice.textContent=rareHits.map(k=>rareLabels[k]).join(' · ');rareNotice.hidden=false;rareUntil=performance.now()+3000;refreshRare();} if(removed>0&&zeroGravityEnabled){
   machineEvent++;
   const remembered=memoryMiningEvent(memoryState,performance.now());
   memoryState=remembered.state;
@@ -169,6 +171,31 @@ const impact=document.createElement('div');impact.style.cssText='position:fixed;
   }
 }
 const feedback=excavationFeedback(removed,gained);if(feedback){gain.textContent=feedback.text;gain.style.color=feedback.rare?'#ffe18a':'#ffffff';gain.hidden=false;gainUntil=performance.now()+1100}updateBag();count+=removed;for(const k of dirty){const [x,y,z]=k.split(',').map(Number);rebuild(x,y,z)}if(dirty.size){propulsion=collectDust(propulsion,removed);impactPower=.18;viewTool.hit();debris.burst(hit.point,hit.face.normal,removed,rareHits.length?rareColors[rareHits[0]].getHex():0xb58a61,rareHits.length>0);save();digSound(tool.id)}}
+let activeHazard:DrillHazard|null=null;
+let hazardMessageUntil=0;
+const hazardAlert=document.createElement('div');
+hazardAlert.setAttribute('role','alert');
+hazardAlert.style.cssText='position:fixed;top:20%;left:50%;transform:translateX(-50%);z-index:8;background:#581717;color:white;border:2px solid #ffb33e;border-radius:10px;padding:14px;font:bold 16px system-ui;text-align:center;pointer-events:none;max-width:85vw';
+hazardAlert.hidden=true;document.body.append(hazardAlert);
+let hazardLastDrillAt=-Infinity;
+function hazardDrilling(now:number){return held||keys.has(' ')||(autoMineEnabled&&now-hazardLastDrillAt<400)}
+function tickHazard(now:number){
+  if(!activeHazard){if(now>hazardMessageUntil)hazardAlert.hidden=true;return}
+  activeHazard=advanceDrillHazard(activeHazard,now,hazardDrilling(now));
+  const hazard=activeHazard;
+  if(hazard.phase==='warning'){
+    hazardAlert.hidden=false;
+    hazardAlert.textContent=(hazard.kind==='explosive'?'⚠ FRONT EXPLOSIVE':'⚠ REAR ACID LEAK')+' — STOP DRILL! '+Math.max(0,(hazard.deadline-now)/1000).toFixed(1)+'s';
+  }else if(hazard.phase==='clearing'){
+    hazardAlert.hidden=false;
+    hazardAlert.textContent=hazard.kind==='explosive'?'Removing explosive…':'Neutralizer spraying…';
+    if(hazardResolved(hazard,now)){hazardAlert.textContent='Hazard cleared';hazardMessageUntil=now+1200;activeHazard=null}
+  }else{
+    hazardAlert.hidden=false;
+    hazardAlert.textContent=hazard.kind==='explosive'?'EXPLOSION — drill damage risk!':'ACID BREACH — cargo loss!';
+    hazardMessageUntil=now+1800;activeHazard=null;
+  }
+}
 let held=false;const b=document.querySelector<HTMLButtonElement>('#dig')!;let digId=-1;b.onpointerdown=e=>{if(digId!==-1)return;digId=e.pointerId;b.setPointerCapture(e.pointerId);held=true};b.onpointerup=b.onpointercancel=e=>{if(e.pointerId===digId){digId=-1;held=false}};addEventListener('blur',()=>{held=false;digId=-1});
 const horizontalSamples=[-.22,0,.22],verticalSamples=[-1.55,-1.25,-.95,-.65,-.35,-.05,.1];
 function blocked(p:T.Vector3){if(profiling)metrics.collisionCalls++;if(p.x<.25||p.z< -2.75||p.x>N*S-.25||p.z>N*S-.25||p.y<1.6||(zeroGravityEnabled&&p.y>H*S-.25))return true;const floor=rescueFloor(p.x,p.z,shape);if(p.z<.25&&floor!==null&&p.y<floor+1.6)return true;for(const dx of horizontalSamples)for(const dz of horizontalSamples)for(const dy of verticalSamples)if(density(data,p.x+dx,p.y+dy,p.z+dz,shape)>.5)return true;return false}
@@ -249,7 +276,7 @@ autoMineToggle.textContent='Auto: Off';
 autoMineToggle.style.cssText='position:fixed;right:12px;top:94px;z-index:3;min-height:44px';
 actions.append(autoMineToggle);
 autoMineToggle.onclick=()=>{autoMineEnabled=!autoMineEnabled;autoMineState=initialAutoMineState();autoMineToggle.textContent=autoMineEnabled?'Auto: On':'Auto: Off'};
-let last=performance.now(),next=0,vy=0;const hud=document.querySelector('#hud')!;let hudAt=0,notice='';const ret=document.createElement('button');ret.textContent='Surface';ret.style.cssText='position:fixed;right:12px;top:50px;z-index:2';actions.append(ret);function returnSurface(){const p=surfaceSpawn(data,shape)??rescueSpawn(shape);camera.position.set(p.x,p.y,p.z);vy=0;held=false;digId=-1;keys.clear();resetJoy();look=-1;notice=' · Returned';uiSound('confirm')}ret.onclick=returnSurface;addEventListener('keydown',e=>{if(e.key.toLowerCase()==='r'&&!e.repeat)returnSurface()});renderer.domElement.onlostpointercapture=e=>{if(e.pointerId===look)look=-1};b.onlostpointercapture=e=>{if(e.pointerId===digId){digId=-1;held=false}};addEventListener('blur',()=>{look=-1});const moveVec=new T.Vector3(),up=new T.Vector3(0,1,0),probe=new T.Vector3();let previousOpacity='';function frame(now:number){requestAnimationFrame(frame);const frameMs=now-last;const dt=Math.min(.04,frameMs/1000);last=now;if(!discoveryBanner.hidden&&now>=discoveryUntil)discoveryBanner.hidden=true;if(!gain.hidden&&now>=gainUntil)gain.hidden=true;if(!rareNotice.hidden&&now>=rareUntil)rareNotice.hidden=true;if(!machineVoice.hidden&&now>=machineVoiceUntil)machineVoice.hidden=true;if(zeroGravityEnabled&&!document.hidden){
+let last=performance.now(),next=0,vy=0;const hud=document.querySelector('#hud')!;let hudAt=0,notice='';const ret=document.createElement('button');ret.textContent='Surface';ret.style.cssText='position:fixed;right:12px;top:50px;z-index:2';actions.append(ret);function returnSurface(){const p=surfaceSpawn(data,shape)??rescueSpawn(shape);camera.position.set(p.x,p.y,p.z);vy=0;held=false;digId=-1;keys.clear();resetJoy();look=-1;notice=' · Returned';uiSound('confirm')}ret.onclick=returnSurface;addEventListener('keydown',e=>{if(e.key.toLowerCase()==='r'&&!e.repeat)returnSurface()});renderer.domElement.onlostpointercapture=e=>{if(e.pointerId===look)look=-1};b.onlostpointercapture=e=>{if(e.pointerId===digId){digId=-1;held=false}};addEventListener('blur',()=>{look=-1});const moveVec=new T.Vector3(),up=new T.Vector3(0,1,0),probe=new T.Vector3();let previousOpacity='';function frame(now:number){requestAnimationFrame(frame);const frameMs=now-last;const dt=Math.min(.04,frameMs/1000);last=now;tickHazard(now);if(!discoveryBanner.hidden&&now>=discoveryUntil)discoveryBanner.hidden=true;if(!gain.hidden&&now>=gainUntil)gain.hidden=true;if(!rareNotice.hidden&&now>=rareUntil)rareNotice.hidden=true;if(!machineVoice.hidden&&now>=machineVoiceUntil)machineVoice.hidden=true;if(zeroGravityEnabled&&!document.hidden){
   const fading=advanceMemory(memoryState,now);
   memoryState=fading.state;
   if(fading.line)showMemoryLine(fading.line,now);
