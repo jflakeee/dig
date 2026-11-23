@@ -173,6 +173,12 @@ const impact=document.createElement('div');impact.style.cssText='position:fixed;
 const feedback=excavationFeedback(removed,gained);if(feedback){gain.textContent=feedback.text;gain.style.color=feedback.rare?'#ffe18a':'#ffffff';gain.hidden=false;gainUntil=performance.now()+1100}updateBag();count+=removed;for(const k of dirty){const [x,y,z]=k.split(',').map(Number);rebuild(x,y,z)}if(dirty.size){propulsion=collectDust(propulsion,removed);impactPower=.18;viewTool.hit();debris.burst(hit.point,hit.face.normal,removed,rareHits.length?rareColors[rareHits[0]].getHex():0xb58a61,rareHits.length>0);save();digSound(tool.id)}}
 // Experimental hazard durability is session-only until the save schema supports it.
 let hazardDrillDurability=1000;
+const drillStatus=document.createElement('div');
+drillStatus.setAttribute('role','status');
+drillStatus.style.cssText='position:fixed;left:12px;top:102px;z-index:3;color:#fff;background:#20252add;border-radius:6px;padding:7px;font:13px system-ui;pointer-events:none';
+document.body.append(drillStatus);
+function updateDrillStatus(){drillStatus.textContent='Drill '+hazardDrillDurability+'/1000'+(hazardDrillDurability===0?' · BROKEN':'')}
+updateDrillStatus();
 let activeHazard:DrillHazard|null=null;
 let hazardMessageUntil=0;
 const hazardAlert=document.createElement('div');
@@ -196,6 +202,7 @@ function tickHazard(now:number){
     hazardAlert.hidden=false;
     const effect=hazardFailureEffect(hazard,Math.random(),hazardDrillDurability);
     hazardDrillDurability=Math.max(0,hazardDrillDurability-effect.drillDurabilityLoss);
+    updateDrillStatus();
     if(effect.cargoLost){
       // Only remove unspent, unsold cargo. Existing sale/crafting ledgers remain intact.
       const available=remaining(inventory,session.sold,session.crafted);
