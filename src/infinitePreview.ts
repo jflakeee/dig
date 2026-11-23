@@ -1,3 +1,4 @@
+import {REPAIR_COST,repairDrill} from './infiniteDrillRepair.ts';
 import {discardMinerals,type DiscardAmount} from './infiniteCargoActions.ts';
 import {FUSION_RECIPES,fuseMinerals} from './infiniteMineralFusion.ts';
 import * as T from 'three';
@@ -129,6 +130,29 @@ export function startInfinitePreview():void {
     const heading=document.createElement('h3');
     heading.textContent='Drill workshop · '+DRILLS[drill.tier].name+' '+drill.durability+'/'+DRILLS[drill.tier].durability;
     workshop.append(heading);
+    const repair=document.createElement('button');
+    const repairCost=REPAIR_COST[drill.tier];
+    repair.textContent='Repair drill +50% · '+Object.entries(repairCost).filter(([,n])=>n>0).map(([m,n])=>n+' '+m).join(', ');
+    repair.disabled=drill.durability>=DRILLS[drill.tier].durability||
+      !(['stone','copper','iron','crystal'] as const).every(m=>stock[m]>=repairCost[m]);
+    repair.onclick=()=>{
+      const result=repairDrill(stock,drill);
+      if(!result)return;
+      const previousStock=stock,previousDrill=drill;
+      stock=result.stock;drill=result.drill;
+      try{persistMachine();saveFailed=false}
+      catch{
+        stock=previousStock;drill=previousDrill;saveFailed=true;
+        nextSaveRetryAt=performance.now()+2000;
+        const error=document.createElement('p');
+        error.setAttribute('role','alert');
+        error.textContent='Repair cancelled: unable to save.';
+        workshop.prepend(error);
+        return;
+      }
+      refreshWorkshop();
+    };
+    workshop.append(repair);
     const inventory=document.createElement('p');
     inventory.textContent=Object.entries(stock).map(([m,n])=>m+': '+n).join(' · ');
     workshop.append(inventory);
