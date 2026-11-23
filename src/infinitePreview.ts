@@ -33,17 +33,17 @@ export function startInfinitePreview():void {
   let drill:DrillState={tier:0,durability:DRILLS[0].durability};
   let drillCount=1,drillRange=0;
   let miningTarget='',miningStartedAt=0;
-  let crafting:{tier:DrillTier;readyAt:number}|null=null;
+  let crafting:{tier:DrillTier;readyAt:number;paid:boolean}|null=null;
   const queue:DrillState[]=[];
   const ensureDrill=(now:number)=>{
     if(crafting&&now>=crafting.readyAt){
-      const result=craft(stock,crafting.tier);
+      const result=crafting.paid?{stock,drill:{tier:crafting.tier,durability:DRILLS[crafting.tier].durability}}:craft(stock,crafting.tier);
       if(result){stock=result.stock;queue.push(result.drill)}
       crafting=null;
     }
     if(drill.durability===0&&queue.length)drill=queue.shift()!;
     if(drill.durability===0&&!crafting){
-      crafting={tier:bestCraftable(stock),readyAt:now+DRILLS[bestCraftable(stock)].craftMs};
+      crafting={tier:bestCraftable(stock),readyAt:now+DRILLS[bestCraftable(stock)].craftMs,paid:false};
     }
   };
   let saveFailed=false;
@@ -123,7 +123,7 @@ export function startInfinitePreview():void {
       button.disabled=!!crafting||!canCraft(stock,t);
       button.onclick=()=>{
         if(crafting||!spend({...DRILLS[t].recipe}))return;
-        crafting={tier:t,readyAt:performance.now()+DRILLS[t].craftMs};
+        crafting={tier:t,readyAt:performance.now()+DRILLS[t].craftMs,paid:true};
         refreshWorkshop();
       };
       workshop.append(button);
