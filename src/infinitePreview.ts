@@ -384,7 +384,7 @@ export function startInfinitePreview():void {
     // Throttle expensive chunk generation to once every four frames.
     if(frame++%4===0){
       stream.update([camera.position.x,camera.position.y,camera.position.z]);
-      status.textContent='Infinite preview · '+stream.meshes.size+' chunks · '+camera.position.toArray().map(n=>n.toFixed(1)).join(', ')+'m · collected '+collected+' · auto mine '+(autoMine?'ON':'OFF')+' (R) · forward '+(autoAdvance?'ON':'OFF')+' (T)'+(saveFailed?' · ⚠ SAVE FAILED — storage unavailable':'');
+      status.textContent='Infinite preview · '+stream.meshes.size+' chunks · '+camera.position.toArray().map(n=>n.toFixed(1)).join(', ')+'m · collected '+collected+' · drill '+DRILLS[drill.tier].name+' '+drill.durability+'/'+DRILLS[drill.tier].durability+(drill.durability===0?' · REPAIR IN WORKSHOP':'')+' · auto mine '+(autoMine?'ON':'OFF')+' (R) · forward '+(autoAdvance?'ON':'OFF')+' (T)'+(saveFailed?' · ⚠ SAVE FAILED — storage unavailable':'');
     }
     cargoTrain.update(camera.position,yaw,dt);
     renderer.render(scene,camera);
