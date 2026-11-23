@@ -205,7 +205,14 @@ export function startInfinitePreview():void {
       const button=document.createElement('button');
       button.textContent=recipe.cost+' '+recipe.from+' → 1 '+recipe.to+' ('+Math.round(recipe.chance*100)+'%)';
       button.style.cssText='display:block;width:100%;min-height:48px;margin:6px 0;padding:10px;text-align:left;white-space:normal;touch-action:manipulation';
-      button.disabled=stock[recipe.from]<recipe.cost;
+      const fusionShortage=Math.max(0,recipe.cost-stock[recipe.from]);
+      button.disabled=fusionShortage>0;
+      if(fusionShortage>0){
+        const shortage=document.createElement('span');
+        shortage.textContent=' · need '+fusionShortage+' more '+recipe.from;
+        shortage.style.cssText='display:block;font-size:12px;opacity:.85';
+        button.append(shortage);
+      }
       button.onclick=()=>{
         const result=fuseMinerals(stock,recipe,Math.random());
         if(!result)return;
