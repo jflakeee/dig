@@ -87,8 +87,8 @@ export function startInfinitePreview():void {
     const now=performance.now();
     ensureDrill(now);
     if(drill.durability<=0||!canStore(stock,wagons))return false;
-    if(miningTarget!==target){miningTarget=target;miningStartedAt=now;return false}
-    if(now-miningStartedAt<miningDuration(mineral,drill.tier))return false;
+    if(miningTarget!==target){miningTarget=target;miningStartedAt=now;return true}
+    if(now-miningStartedAt<miningDuration(mineral,drill.tier))return true;
     miningTarget='';
     drill={...drill,durability:drill.durability-1};
     stock[mineral]++;
