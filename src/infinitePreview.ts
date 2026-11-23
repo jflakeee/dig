@@ -103,7 +103,7 @@ export function startInfinitePreview():void {
     stock[mineral]++;
     record.terrain[index]=0;
     collected++;
-    try{save.flush();persistMachine();saveFailed=false}catch{saveFailed=true;nextSaveRetryAt=performance.now()+2000}
+    try{persistMachine();saveFailed=false}catch{saveFailed=true;nextSaveRetryAt=performance.now()+2000}
     scene.remove(mesh);disposeInfiniteChunkMesh(mesh);
     const replacement=infiniteChunkMesh(record.terrain,coord);
     stream.meshes.set(key,replacement);scene.add(replacement);
