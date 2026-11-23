@@ -65,6 +65,8 @@ jobs:
         run: node --experimental-strip-types --test tests/mining-machine-personality.test.mjs
       - name: Test machine memory loss
         run: node --experimental-strip-types --test tests/mining-machine-memory.test.mjs
+      - name: Test infinite chunk coordinates
+        run: node --experimental-strip-types --test tests/infinite-chunk-coordinates.test.mjs
       - name: Test chunk micro gravity
         run: node --experimental-strip-types --test tests/chunk-micro-gravity.test.mjs
       - name: Test microgravity drift
