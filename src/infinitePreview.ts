@@ -1,3 +1,4 @@
+import {dismantleIcChip} from './infiniteIcChipSalvage.ts';
 import {rollEquipmentDrop,DISCOVERY_STORY,IC_CHIP_SALVAGE,type EquipmentDrop} from './infiniteEquipmentDrops.ts';
 import {REPAIR_COST,repairDrill} from './infiniteDrillRepair.ts';
 import {discardMinerals,type DiscardAmount} from './infiniteCargoActions.ts';
@@ -207,12 +208,12 @@ export function startInfinitePreview():void {
     dismantle.style.cssText='min-height:48px;width:100%;margin:6px 0';
     dismantle.disabled=chips===0||cargoCapacity(wagons)-cargoAmount(stock)<IC_CHIP_SALVAGE.copper+IC_CHIP_SALVAGE.iron;
     dismantle.onclick=()=>{
-      const index=foundEquipment.findIndex(e=>e.kind==='ic-chip');
-      if(index<0||cargoCapacity(wagons)-cargoAmount(stock)<5)return;
+      const result=dismantleIcChip(stock,foundEquipment,wagons);
+      if(!result)return;
       const previous=foundEquipment;
       const previousStock=stock;
-      foundEquipment=foundEquipment.filter((_,i)=>i!==index);
-      stock={...stock,copper:stock.copper+IC_CHIP_SALVAGE.copper,iron:stock.iron+IC_CHIP_SALVAGE.iron};
+      foundEquipment=result.equipment;
+      stock=result.stock;
       try{persistMachine();saveFailed=false}
       catch{
         foundEquipment=previous;stock=previousStock;saveFailed=true;
