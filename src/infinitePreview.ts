@@ -1,7 +1,10 @@
 import * as T from 'three';
 import {InfiniteChunkScene} from './infiniteChunkScene.ts';
+import {infiniteChunkMesh,disposeInfiniteChunkMesh} from './infiniteChunkMesh.ts';
+import {chunkKey} from './infiniteChunkCoordinates.ts';
+import {voxelIndex,VOXEL_METERS,CHUNK_VOXELS_PER_AXIS} from './infiniteChunkTerrain.ts';
 
-/** Opt-in, read-only rendering preview. Does not open or write legacy saves. */
+/** Opt-in preview with temporary mining; never opens or writes legacy saves. */
 export function startInfinitePreview():void {
   document.body.replaceChildren();
   const scene=new T.Scene();
@@ -19,10 +22,39 @@ export function startInfinitePreview():void {
   const stream=new InfiniteChunkScene(scene,20261123,2);
   const status=document.createElement('div');
   status.style.cssText='position:fixed;top:12px;left:12px;background:#101820d9;padding:12px;border-radius:8px;color:white;pointer-events:none;z-index:5';
-  status.textContent='Infinite world preview · WASD move · Q/E vertical · drag to look · no save';
+  status.textContent='Infinite world preview · WASD move · Q/E vertical · drag to look · temporary mining (F/⛏)';
   document.body.append(status);
+  const raycaster=new T.Raycaster();
+  raycaster.far=5;
+  const mine=()=>{
+    raycaster.setFromCamera(new T.Vector2(0,0),camera);
+    const hit=raycaster.intersectObjects([...stream.meshes.values()],false)[0];
+    if(!hit?.face)return;
+    const mesh=hit.object as T.Mesh;
+    const coord:[number,number,number]=[
+      Math.round(mesh.position.x/16),Math.round(mesh.position.y/16),Math.round(mesh.position.z/16)
+    ];
+    const key=chunkKey(coord);
+    const record=stream.stream.loaded.get(key);
+    if(!record)return;
+    // Step into the solid side of the selected face, avoiding boundary ambiguity.
+    const p=hit.point.clone().addScaledVector(hit.face.normal,-.002).sub(mesh.position);
+    const x=Math.floor(p.x/VOXEL_METERS),y=Math.floor(p.y/VOXEL_METERS),z=Math.floor(p.z/VOXEL_METERS);
+    if([x,y,z].some(n=>n<0||n>=CHUNK_VOXELS_PER_AXIS))return;
+    const index=voxelIndex(x,y,z);
+    if(record.terrain[index]!==1)return;
+    record.terrain[index]=0;
+    scene.remove(mesh);disposeInfiniteChunkMesh(mesh);
+    const replacement=infiniteChunkMesh(record.terrain,coord);
+    stream.meshes.set(key,replacement);scene.add(replacement);
+  };
+  const mineButton=document.createElement('button');
+  mineButton.textContent='⛏ Mine';
+  mineButton.style.cssText='position:fixed;right:16px;bottom:20px;min-height:52px;min-width:80px;z-index:7;touch-action:manipulation';
+  mineButton.addEventListener('click',mine);
+  document.body.append(mineButton);
   const keys=new Set<string>();
-  const down=(e:KeyboardEvent)=>{keys.add(e.key.toLowerCase());if(['w','a','s','d','q','e'].includes(e.key.toLowerCase()))e.preventDefault()};
+  const down=(e:KeyboardEvent)=>{if(e.key.toLowerCase()==='f')mine();keys.add(e.key.toLowerCase());if(['w','a','s','d','q','e'].includes(e.key.toLowerCase()))e.preventDefault()};
   const up=(e:KeyboardEvent)=>keys.delete(e.key.toLowerCase());
   addEventListener('keydown',down);addEventListener('keyup',up);
   const touchPad=document.createElement('div');
