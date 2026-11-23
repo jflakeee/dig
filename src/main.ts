@@ -1,4 +1,5 @@
 import { gravityLevelRoll } from './microGravityCameraRoll';
+import { faceMicroGravity } from './microGravityOrientation';
 import { microGravityWorldSeed } from './microGravitySeed.ts';
 import { microGravityAt, MICRO_GRAVITY_MAX, MICRO_GRAVITY_DIRECTION_THRESHOLD } from './chunkMicroGravity';
 import { INITIAL_DRIFT, microGravityDrift } from './microGravityDrift';
@@ -88,6 +89,7 @@ const biomeColors={limestone:new T.Color(0xb7a58a),basalt:new T.Color(0x484452),
 function rebuild(cx:number,cy:number,cz:number){if(cx<0||cy<0||cz<0||cx>=N/8||cz>=N/8||cy>=Math.ceil(H/8))return;const key=[cx,cy,cz].join(',');const old=chunks.get(key);if(old){scene.remove(old);old.geometry.dispose();chunks.delete(key)}const started=profiling?performance.now():0;const p=meshChunk(data,cx,cy,cz,shape);if(profiling)metrics.rebuilds++;if(!p.length){if(profiling)metrics.rebuildMs+=performance.now()-started;return;}const c:number[]=[],emission:number[]=[],oreMask:number[]=[];for(let i=0;i<p.length;i+=3){const {layer,tint}=terrainTint(p[i],p[i+1]-H*S+12,p[i+2]);let color=palette[layer];const x=p[i],y=p[i+1],z=p[i+2];const ix=Math.floor(x/S),iy=Math.floor(y/S),iz=Math.floor(z/S);if(world.profile.worldgen===1){const biome=biomeAt(shape.id,Math.max(0,Math.min(N-1,ix)),Math.max(0,Math.min(H-1,iy)),Math.max(0,Math.min(N-1,iz)));if(biome&&biome!=='soil')color=biomeTint.copy(color).lerp(biomeColors[biome],.45)}if(Number(shape.id)===4){const material=volcanicMaterial(Math.max(0,Math.min(N-1,ix)),Math.max(0,Math.min(H-1,iy)),Math.max(0,Math.min(N-1,iz)));if(material)color=biomeTint.copy(color).lerp(volcanicColors[material],.85)}let found=false,glow=0;for(let dy=-1;dy<=0&&!found;dy++)for(let dz=-1;dz<=0&&!found;dz++)for(let dx=-1;dx<=0&&!found;dx++){const a=ix+dx,b=iy+dy,d=iz+dz;if(!solid(data,a,b,d,shape))continue;const distance=(x-(a+.5)*S)**2+(y-(b+.5)*S)**2+(z-(d+.5)*S)**2;if(distance>S*S*.76)continue;const rare=Number(shape.id)===4&&a>=0&&a<N&&b>=0&&b<H&&d>=0&&d<N?rareAt(a+d*N+b*N*N):null;if(rare){color=rareColors[rare];glow=1.1;found=true;continue}const ore=mineOre(shape.id,a,b,d);if(ore){color=orePalette[ore];glow=glowStrength(ore);found=true}}c.push(color.r*tint,color.g*tint,color.b*tint);emission.push(color.r*glow,color.g*glow,color.b*glow);oreMask.push(found?1:0)}const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(p,3));g.setAttribute('color',new T.Float32BufferAttribute(c,3));g.setAttribute('oreGlow',new T.Float32BufferAttribute(emission,3));g.setAttribute('oreMask',new T.Float32BufferAttribute(oreMask,1));g.computeVertexNormals();const m=new T.Mesh(g,mat);chunks.set(key,m);scene.add(m);if(profiling)metrics.rebuildMs+=performance.now()-started}
 for(let x=0;x<N/8;x++)for(let y=0;y<Math.ceil(H/8);y++)for(let z=0;z<N/8;z++)rebuild(x,y,z);
 const spawn=surfaceSpawn(data,shape)??rescueSpawn(shape);camera.position.set(count===0?N*S/2:spawn?.x??N*S/2,spawn.y,count===0?N*S/2:spawn?.z??N*S/2);let yaw=0,pitch=-.65;
+let lastManualLookAt=-Infinity;
 camera.rotation.order='YXZ';const keys=new Set<string>();addEventListener('keydown',e=>keys.add(e.key.toLowerCase()));addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));addEventListener('blur',()=>keys.clear());
 const pad=document.querySelector<HTMLElement>('#move')!,stick=document.querySelector<HTMLElement>('#stick')!;let joyId=-1,joyX=0,joyY=0;
 function resetJoy(){joyId=-1;joyX=joyY=0;stick.style.transform='translate(-50%,-50%)'}
@@ -96,12 +98,12 @@ pad.onpointerdown=e=>{if(joyId!==-1)return;joyId=e.pointerId;pad.setPointerCaptu
 pad.onpointermove=e=>{if(e.pointerId===joyId)updateJoy(e)};
 pad.onpointerup=pad.onpointercancel=pad.onlostpointercapture=e=>{if(e.pointerId===joyId)resetJoy()};
 addEventListener('blur',resetJoy);
-let look=-1,lx=0,ly=0;renderer.domElement.onpointerdown=e=>{if(look!==-1)return;look=e.pointerId;lx=e.clientX;ly=e.clientY;renderer.domElement.setPointerCapture(look)};renderer.domElement.onpointermove=e=>{if(e.pointerId!==look)return;yaw-=(e.clientX-lx)*.005;pitch=T.MathUtils.clamp(pitch-(e.clientY-ly)*.005,-1.5,1.5);lx=e.clientX;ly=e.clientY};renderer.domElement.onpointerup=renderer.domElement.onpointercancel=renderer.domElement.onlostpointercapture=e=>{
-  if(e.pointerId===look){look=-1}
+let look=-1,lx=0,ly=0;renderer.domElement.onpointerdown=e=>{if(look!==-1)return;lastManualLookAt=performance.now();look=e.pointerId;lx=e.clientX;ly=e.clientY;renderer.domElement.setPointerCapture(look)};renderer.domElement.onpointermove=e=>{if(e.pointerId!==look)return;yaw-=(e.clientX-lx)*.005;pitch=T.MathUtils.clamp(pitch-(e.clientY-ly)*.005,-1.5,1.5);lx=e.clientX;ly=e.clientY;lastManualLookAt=performance.now()};renderer.domElement.onpointerup=renderer.domElement.onpointercancel=renderer.domElement.onlostpointercapture=e=>{
+  if(e.pointerId===look){look=-1;lastManualLookAt=performance.now()}
 };
-addEventListener('blur',()=>{look=-1});
+addEventListener('blur',()=>{look=-1;lastManualLookAt=performance.now()});
 document.addEventListener('visibilitychange',()=>{
-  if(document.hidden){look=-1}
+  if(document.hidden){look=-1;lastManualLookAt=performance.now()}
 });
 let selected=0;const bar=document.createElement('div');bar.id='tools';bar.style.cssText='position:fixed;bottom:max(12px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);display:flex;gap:4px;z-index:3';document.body.append(bar);
 const toolButtons=tools.map((t,i)=>{const el=document.createElement('button');el.textContent=t.name;el.style.cssText='padding:8px 5px;font-size:12px';el.onclick=()=>{selectTool(i);uiSound('click')};bar.append(el);return el});
@@ -230,8 +232,8 @@ microGravityToggle.onclick=()=>{
   gravityFaceToggle.style.display=zeroGravityEnabled&&microGravityEnabled?'block':'none';
 };
 const gravityFaceToggle=document.createElement('button');
-gravityFaceToggle.textContent='Auto Level: On';
-gravityFaceToggle.setAttribute('aria-label','Toggle camera down alignment with microgravity');
+gravityFaceToggle.textContent='Auto Align: On';
+gravityFaceToggle.setAttribute('aria-label','Toggle camera forward and down alignment with microgravity');
 gravityFaceToggle.style.cssText='position:fixed;right:12px;top:274px;z-index:3;min-height:44px;display:none';
 actions.append(gravityFaceToggle);
 gravityFaceToggle.onclick=()=>{
@@ -239,7 +241,7 @@ gravityFaceToggle.onclick=()=>{
   // Discard the old camera bank when auto-level is re-enabled after manual flight.
   // Otherwise the previous area's gravity can briefly tilt the view.
   gravityRoll=0;
-  gravityFaceToggle.textContent=gravityAutoFaceEnabled?'Auto Level: On':'Auto Level: Off';
+  gravityFaceToggle.textContent=gravityAutoFaceEnabled?'Auto Align: On':'Auto Align: Off';
 };
 let autoMineState:AutoMineState=initialAutoMineState();
 const autoMineToggle=document.createElement('button');
@@ -251,13 +253,18 @@ let last=performance.now(),next=0,vy=0;const hud=document.querySelector('#hud')!
   const fading=advanceMemory(memoryState,now);
   memoryState=fading.state;
   if(fading.line)showMemoryLine(fading.line,now);
-}if(!document.hidden&&quality.sample(frameMs))renderer.setPixelRatio(quality.scale);impactPower=Math.max(0,impactPower-dt*1.7);const opacity=reducedMotion.matches||impactPower===0?'0':String(impactPower);if(opacity!==previousOpacity){impact.style.opacity=opacity;previousOpacity=opacity}camera.rotation.set(pitch,yaw,0,'YXZ');
-if(zeroGravityEnabled&&microGravityEnabled&&gravityAutoFaceEnabled&&!document.hidden&&document.hasFocus()&&
+}if(!document.hidden&&quality.sample(frameMs))renderer.setPixelRatio(quality.scale);impactPower=Math.max(0,impactPower-dt*1.7);const opacity=reducedMotion.matches||impactPower===0?'0':String(impactPower);if(opacity!==previousOpacity){impact.style.opacity=opacity;previousOpacity=opacity}if(zeroGravityEnabled&&microGravityEnabled&&gravityAutoFaceEnabled&&!document.hidden&&document.hasFocus()&&
   journalPanel.style.display==='none'&&memoryLogPanel.hidden&&!trading){
   const gravity=microGravityAt(microGravitySeed,[camera.position.x,camera.position.y,camera.position.z]);
+  // Give touch/mouse look priority, then gradually point the machine into gravity.
+  if(look===-1&&now-lastManualLookAt>1800){
+    const facing=faceMicroGravity({yaw,pitch},gravity,dt);
+    yaw=facing.yaw;pitch=facing.pitch;
+  }
+  camera.rotation.set(pitch,yaw,0,'YXZ');
   const localGravity=new T.Vector3(...gravity).applyQuaternion(camera.quaternion.clone().invert());
   gravityRoll=gravityLevelRoll(gravityRoll,localGravity.x,localGravity.y,dt);
-}
+}else camera.rotation.set(pitch,yaw,0,'YXZ');
 if(zeroGravityEnabled&&microGravityEnabled&&gravityAutoFaceEnabled)camera.rotateZ(gravityRoll);const drive=propulsionStep(propulsion,dt,zeroGravityEnabled&&(boostHeld||keys.has('shift')));propulsion=drive.state;const driveSpeed=zeroGravityEnabled?drive.speed:3;const d=moveVec.set(Number(keys.has('d'))-Number(keys.has('a'))+joyX,0,Number(keys.has('s'))-Number(keys.has('w'))+joyY);if(d.lengthSq()>1)d.normalize();d.applyAxisAngle(up,yaw).multiplyScalar(driveSpeed*dt);
 if(autoMineEnabled){
   const [fx,fy,fz]=lookDirection(yaw,pitch);
