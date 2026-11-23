@@ -10,6 +10,7 @@ export function createCargoTrain(scene:T.Scene){
   const glow=new T.MeshBasicMaterial({color:0x6ee7eb});
   const pods:T.Group[]=[];
   const history:T.Vector3[]=[];
+  // Distance-based trail prevents wagon spacing from changing with frame rate.
   function setWagons(count:number){
     while(pods.length<count){
       const pod=new T.Group();
@@ -28,15 +29,30 @@ export function createCargoTrain(scene:T.Scene){
       pod.traverse(o=>{if(o instanceof T.Mesh)o.geometry.dispose()});
     }
   }
-  function update(position:T.Vector3,heading:number,dt:number){
-    history.unshift(position.clone());
-    if(history.length>600)history.length=600;
+  function update(position:T.Vector3,heading:number,_dt:number){
+    // Keep a spatial breadcrumb every ~0.15m, not one per rendered frame.
+    if(!history.length||history[0].distanceTo(position)>=.15)history.unshift(position.clone());
+    if(history.length>300)history.length=300;
     for(let i=0;i<pods.length;i++){
       const pod=pods[i];
       const behind=1.1+i*.85;
-      const target=history[Math.min(history.length-1,Math.floor(behind/Math.max(.04,dt*4)))]??position;
-      const fallback=new T.Vector3(position.x+Math.sin(heading)*behind,position.y,position.z+Math.cos(heading)*behind);
-      pod.position.copy(history.length>4?target:fallback);
+      let remaining=behind;
+      let target=position.clone();
+      let previous=position;
+      for(const point of history){
+        const distance=previous.distanceTo(point);
+        if(distance>=remaining){
+          target.copy(previous).lerp(point,distance>0?remaining/distance:0);
+          remaining=0;
+          break;
+        }
+        remaining-=distance;
+        target.copy(point);
+        previous=point;
+      }
+      // When standing still after spawning, arrange the wagons behind the craft.
+      if(remaining>0)target.add(new T.Vector3(Math.sin(heading)*remaining,0,Math.cos(heading)*remaining));
+      pod.position.copy(target);
       pod.rotation.y=heading;
     }
   }
