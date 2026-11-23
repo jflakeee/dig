@@ -263,6 +263,8 @@ export function startInfinitePreview():void {
       button.onclick=()=>{
         if(crafting||!spend({...DRILLS[t].recipe}))return;
         crafting={tier:t,readyAt:performance.now()+DRILLS[t].craftMs,paid:true};
+        try{persistMachine();saveFailed=false}
+        catch{saveFailed=true;nextSaveRetryAt=performance.now()+2000}
         refreshWorkshop();
       };
       workshop.append(button);
