@@ -130,6 +130,23 @@ export function startInfinitePreview():void {
     const inventory=document.createElement('p');
     inventory.textContent=Object.entries(stock).map(([m,n])=>m+': '+n).join(' · ');
     workshop.append(inventory);
+    // A full hold must never permanently block progression when upgrade recipes
+    // require a mineral that the player has not yet collected.
+    const discard=document.createElement('div');
+    discard.style.cssText='display:flex;flex-wrap:wrap;gap:4px;margin:8px 0';
+    for(const mineral of ['stone','copper','iron','crystal'] as const){
+      const button=document.createElement('button');
+      button.textContent='Discard 10 '+mineral;
+      button.disabled=stock[mineral]===0;
+      button.title='Permanently remove up to 10 units to free cargo capacity';
+      button.onclick=()=>{
+        stock[mineral]=Math.max(0,stock[mineral]-10);
+        try{persistMachine();saveFailed=false}catch{saveFailed=true;nextSaveRetryAt=performance.now()+2000}
+        refreshWorkshop();
+      };
+      discard.append(button);
+    }
+    workshop.append(discard);
     for(let tier=0;tier<DRILLS.length;tier++){
       const t=tier as DrillTier;
       const button=document.createElement('button');
