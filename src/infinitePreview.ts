@@ -1,3 +1,4 @@
+import {discardMinerals,type DiscardAmount} from './infiniteCargoActions.ts';
 import {FUSION_RECIPES,fuseMinerals} from './infiniteMineralFusion.ts';
 import * as T from 'three';
 import {loadMachine,saveMachine} from './infiniteMachineSave.ts';
@@ -136,16 +137,20 @@ export function startInfinitePreview():void {
     const discard=document.createElement('div');
     discard.style.cssText='display:flex;flex-wrap:wrap;gap:4px;margin:8px 0';
     for(const mineral of ['stone','copper','iron','crystal'] as const){
-      const button=document.createElement('button');
-      button.textContent='Discard 10 '+mineral;
-      button.disabled=stock[mineral]===0;
-      button.title='Permanently remove up to 10 units to free cargo capacity';
-      button.onclick=()=>{
-        stock[mineral]=Math.max(0,stock[mineral]-10);
-        try{persistMachine();saveFailed=false}catch{saveFailed=true;nextSaveRetryAt=performance.now()+2000}
-        refreshWorkshop();
-      };
-      discard.append(button);
+      for(const amount of [1,10,'all'] as const satisfies readonly DiscardAmount[]){
+        const button=document.createElement('button');
+        button.textContent='Discard '+amount+' '+mineral;
+        button.disabled=stock[mineral]===0;
+        button.title='Permanently remove minerals to free cargo capacity';
+        button.onclick=()=>{
+          const next=discardMinerals(stock,mineral,amount);
+          if(!next)return;
+          stock=next;
+          try{persistMachine();saveFailed=false}catch{saveFailed=true;nextSaveRetryAt=performance.now()+2000}
+          refreshWorkshop();
+        };
+        discard.append(button);
+      }
     }
     workshop.append(discard);
     const fusionHeading=document.createElement('p');
