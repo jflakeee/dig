@@ -65,7 +65,10 @@ export function startInfinitePreview():void {
       if(result){stock=result.stock;queue.push(result.drill)}
       crafting=null;
     }
-    if(drill.durability===0&&queue.length)drill=queue.shift()!;
+    if(drill.durability===0&&queue.length){
+      drill=queue.shift()!;
+      miningTarget='';miningStartedAt=0;
+    }
     if(drill.durability===0&&!crafting){
       crafting={tier:bestCraftable(stock),readyAt:now+DRILLS[bestCraftable(stock)].craftMs,paid:false};
     }
@@ -224,7 +227,7 @@ export function startInfinitePreview():void {
           workshop.prepend(error);
           return;
         }
-        miningTarget='';
+        miningTarget='';miningStartedAt=0;
         refreshWorkshop();
       };
       workshop.append(equip);
