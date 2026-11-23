@@ -15,7 +15,7 @@ export class InfiniteChunkStream {
     let unloaded=0,reset=0,loaded=0;
     for(const [key,record] of this.loaded){
       if(chunkRange(distanceToChunk(position,record.coord))!=='active'){
-        this.loaded.delete(key);this.retained.set(key,record);unloaded++;
+        this.loaded.delete(key);if(chunkRange(distanceToChunk(position,record.coord))==='reset')reset++;else this.retained.set(key,record);unloaded++;
       }
     }
     for(const [key,record] of this.retained){
