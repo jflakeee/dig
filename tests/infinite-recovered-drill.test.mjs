@@ -10,9 +10,9 @@ test('equip recovered drill swaps worn gear without changing original inventory'
  assert.deepEqual(result.equipment[1],{kind:'drill',tier:0,durability:17,maxDurability:30});
  assert.equal(items[1].tier,2);
 });
-test('non-drills, invalid indexes and exhausted current drills cannot be equipped',()=>{
+test('non-drills and invalid indexes cannot be equipped',()=>{
  const items=[{kind:'ic-chip',tier:0,durability:40,maxDurability:100},{kind:'drill',tier:1,durability:9,maxDurability:75}];
  assert.equal(equipRecoveredDrill({tier:0,durability:20},items,0),null);
  assert.equal(equipRecoveredDrill({tier:0,durability:20},items,3),null);
- assert.equal(equipRecoveredDrill({tier:0,durability:0},items,1),null);
+ assert.deepEqual(equipRecoveredDrill({tier:0,durability:0},items,1).drill,{tier:1,durability:9});
 });
