@@ -1,4 +1,4 @@
-import { convertMineralFuel, type PropulsionState } from './miningMachinePropulsion';
+import { convertMineralFuel, type PropulsionState } from './miningMachinePropulsion.ts';
 
 /** Transaction planning only. Caller must atomically persist the ore debit before
  * applying returned propulsion state. Never mutate a saved inventory here.
