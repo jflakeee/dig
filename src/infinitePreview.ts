@@ -28,6 +28,7 @@ export function startInfinitePreview():void {
   status.textContent='Infinite world preview · WASD move · Q/E vertical · drag to look · mining autosave (F/⛏)';
   document.body.append(status);
   let collected=[...save.edits.values()].reduce((total,indices)=>total+indices.size,0);
+  let saveFailed=false;
   const raycaster=new T.Raycaster();
   raycaster.far=5;
   const mine=(horizontal=false):boolean=>{
@@ -52,7 +53,7 @@ export function startInfinitePreview():void {
     record.terrain[index]=0;
     save.mark(coord,index);
     collected++;
-    try{save.flush()}catch{status.textContent='Mining succeeded, but save failed — check storage'}
+    try{save.flush();saveFailed=false}catch{saveFailed=true}
     scene.remove(mesh);disposeInfiniteChunkMesh(mesh);
     const replacement=infiniteChunkMesh(record.terrain,coord);
     stream.meshes.set(key,replacement);scene.add(replacement);
@@ -181,7 +182,7 @@ export function startInfinitePreview():void {
     // Throttle expensive chunk generation to once every four frames.
     if(frame++%4===0){
       stream.update([camera.position.x,camera.position.y,camera.position.z]);
-      status.textContent='Infinite preview · '+stream.meshes.size+' chunks · '+camera.position.toArray().map(n=>n.toFixed(1)).join(', ')+'m · collected '+collected+' · auto mine '+(autoMine?'ON':'OFF')+' (R) · forward '+(autoAdvance?'ON':'OFF')+' (T)';
+      status.textContent='Infinite preview · '+stream.meshes.size+' chunks · '+camera.position.toArray().map(n=>n.toFixed(1)).join(', ')+'m · collected '+collected+' · auto mine '+(autoMine?'ON':'OFF')+' (R) · forward '+(autoAdvance?'ON':'OFF')+' (T)'+(saveFailed?' · ⚠ SAVE FAILED — storage unavailable':'');
     }
     renderer.render(scene,camera);
     requestAnimationFrame(tick);
