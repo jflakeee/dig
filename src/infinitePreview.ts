@@ -1,4 +1,5 @@
 import * as T from 'three';
+import {mineralAt,miningDuration,DRILLS,emptyStock,craft,bestCraftable,drillCountCost,rangeCost,canCraft,type DrillTier,type DrillState,type Mineral,type Stock} from './infiniteDrillEconomy.ts';
 import {InfiniteChunkScene} from './infiniteChunkScene.ts';
 import {InfiniteMiningSave} from './infiniteMiningSave.ts';
 import {infiniteChunkMesh,disposeInfiniteChunkMesh} from './infiniteChunkMesh.ts';
@@ -28,6 +29,23 @@ export function startInfinitePreview():void {
   status.textContent='Infinite world preview · WASD move · Q/E vertical · drag to look · mining machine autosave (F/Drill)';
   document.body.append(status);
   let collected=[...save.edits.values()].reduce((total,indices)=>total+indices.size,0);
+  let stock:Stock=emptyStock();
+  let drill:DrillState={tier:0,durability:DRILLS[0].durability};
+  let drillCount=1,drillRange=0;
+  let miningTarget='',miningStartedAt=0;
+  let crafting:{tier:DrillTier;readyAt:number}|null=null;
+  const queue:DrillState[]=[];
+  const ensureDrill=(now:number)=>{
+    if(crafting&&now>=crafting.readyAt){
+      const result=craft(stock,crafting.tier);
+      if(result){stock=result.stock;queue.push(result.drill)}
+      crafting=null;
+    }
+    if(drill.durability===0&&queue.length)drill=queue.shift()!;
+    if(drill.durability===0&&!crafting){
+      crafting={tier:bestCraftable(stock),readyAt:now+DRILLS[bestCraftable(stock)].craftMs};
+    }
+  };
   let saveFailed=false;
   let nextSaveRetryAt=0;
   const flushOnExit=()=>{
@@ -58,6 +76,17 @@ export function startInfinitePreview():void {
     if([x,y,z].some(n=>n<0||n>=CHUNK_VOXELS_PER_AXIS))return false;
     const index=voxelIndex(x,y,z);
     if(record.terrain[index]!==1)return false;
+    const wx=coord[0]*32+x,wy=coord[1]*32+y,wz=coord[2]*32+z;
+    const mineral=mineralAt(20261123,wx,wy,wz);
+    const target=key+':'+index;
+    const now=performance.now();
+    ensureDrill(now);
+    if(drill.durability<=0)return false;
+    if(miningTarget!==target){miningTarget=target;miningStartedAt=now;return false}
+    if(now-miningStartedAt<miningDuration(mineral,drill.tier))return false;
+    miningTarget='';
+    drill={...drill,durability:drill.durability-1};
+    stock[mineral]++;
     record.terrain[index]=0;
     save.mark(coord,index);
     collected++;
@@ -170,6 +199,7 @@ export function startInfinitePreview():void {
     }
     camera.position.y+=moveY;
     // Automatically mine only the closest block directly ahead, at a bounded rate.
+    ensureDrill(now);
     if(autoMine&&now>=nextAutoMineAt){
       // Carve a full player-width passage before resuming forward movement.
       if(autoAdvance){
@@ -186,7 +216,7 @@ export function startInfinitePreview():void {
         }
         camera.position.copy(original);
       }else mine(false);
-      nextAutoMineAt=now+350;
+      nextAutoMineAt=now+100;
     }
     // Retry transient storage errors without requiring another block to be mined.
     if(saveFailed&&now>=nextSaveRetryAt){
