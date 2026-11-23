@@ -424,3 +424,10 @@
 - `faceMicroGravity`: 벡터 성분은 유한하지만 `Math.hypot` 결과가 Infinity인 입력을 거부.
 - dt=0 포함 합성 중력 크기 오버플로 회귀 테스트 추가.
 - 전체 테스트/빌드/CI/모바일 실기기 검증 미확인, main/Pages 유지.
+
+## 미세 중력 카메라 자동 수평 정렬 변경 (2026-11-23)
+- 사용자 최신 요청: 중력 방향으로 카메라 전방을 돌리지 않고 화면 아래쪽이 중력 방향을 향하도록 자동 롤 회전.
+- `src/main.ts`: 기존 `faceMicroGravity` 기반 yaw/pitch 자동 회전 제거. 현재 카메라 방향 기준으로 중력을 화면 평면에 투영하고 카메라 로컬 Z축 롤로 화면 아래를 중력 방향에 맞춤. 0.9rad/s 속도 제한과 약한 중력 임계값 유지.
+- Auto Face UI를 Auto Level로 변경. 수동 yaw/pitch, 추진, 중력 표류, HUD 유지.
+- 기존 `src/microGravityOrientation.ts` 및 테스트는 아직 저장소에 남아 있으나 게임 실행에서 사용하지 않음.
+- 전체 빌드/CI/모바일 시각 검증 미확인. main/Pages 변경 없음.
