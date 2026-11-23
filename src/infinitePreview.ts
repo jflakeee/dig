@@ -1,3 +1,4 @@
+import {repairRecoveredDrill} from './infiniteRecoveredDrillRepair.ts';
 import {equipRecoveredDrill} from './infiniteRecoveredDrill.ts';
 import {dismantleIcChip} from './infiniteIcChipSalvage.ts';
 import {rollEquipmentDrop,DISCOVERY_STORY,IC_CHIP_SALVAGE,type EquipmentDrop} from './infiniteEquipmentDrops.ts';
@@ -227,6 +228,28 @@ export function startInfinitePreview():void {
         refreshWorkshop();
       };
       workshop.append(equip);
+      const repairRecovered=document.createElement('button');
+      repairRecovered.textContent='Repair recovered drill T'+item.tier+' ('+item.durability+'/'+item.maxDurability+')';
+      repairRecovered.style.cssText='min-height:44px;width:100%;margin:4px 0';
+      repairRecovered.disabled=item.durability>=item.maxDurability||!repairRecoveredDrill(stock,foundEquipment,index);
+      repairRecovered.onclick=()=>{
+        const result=repairRecoveredDrill(stock,foundEquipment,index);
+        if(!result)return;
+        const previousStock=stock,previousEquipment=foundEquipment;
+        stock=result.stock;foundEquipment=result.equipment;
+        try{persistMachine();saveFailed=false}
+        catch{
+          stock=previousStock;foundEquipment=previousEquipment;saveFailed=true;
+          nextSaveRetryAt=performance.now()+2000;
+          const error=document.createElement('p');
+          error.setAttribute('role','alert');
+          error.textContent='Recovered drill repair cancelled: unable to save.';
+          workshop.prepend(error);
+          return;
+        }
+        refreshWorkshop();
+      };
+      workshop.append(repairRecovered);
     }
     const chips=foundEquipment.filter(e=>e.kind==='ic-chip').length;
     const dismantle=document.createElement('button');
