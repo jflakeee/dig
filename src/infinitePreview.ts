@@ -1,10 +1,11 @@
 import * as T from 'three';
 import {InfiniteChunkScene} from './infiniteChunkScene.ts';
+import {InfiniteMiningSave} from './infiniteMiningSave.ts';
 import {infiniteChunkMesh,disposeInfiniteChunkMesh} from './infiniteChunkMesh.ts';
 import {chunkKey} from './infiniteChunkCoordinates.ts';
 import {voxelIndex,VOXEL_METERS,CHUNK_VOXELS_PER_AXIS} from './infiniteChunkTerrain.ts';
 
-/** Opt-in preview with temporary mining; never opens or writes legacy saves. */
+/** Opt-in preview with isolated autosave; never opens or writes legacy saves. */
 export function startInfinitePreview():void {
   document.body.replaceChildren();
   const scene=new T.Scene();
@@ -19,10 +20,12 @@ export function startInfinitePreview():void {
   scene.add(new T.HemisphereLight(0x99b5d9,0x23232a,1.5));
   const lamp=new T.PointLight(0xffe5bd,25,30);
   camera.add(lamp);scene.add(camera);
-  const stream=new InfiniteChunkScene(scene,20261123,2);
+  const save=new InfiniteMiningSave(localStorage,20261123);
+  save.load();
+  const stream=new InfiniteChunkScene(scene,20261123,2,(coord,terrain)=>save.apply(coord,terrain));
   const status=document.createElement('div');
   status.style.cssText='position:fixed;top:12px;left:12px;background:#101820d9;padding:12px;border-radius:8px;color:white;pointer-events:none;z-index:5';
-  status.textContent='Infinite world preview · WASD move · Q/E vertical · drag to look · temporary mining (F/⛏)';
+  status.textContent='Infinite world preview · WASD move · Q/E vertical · drag to look · mining autosave (F/⛏)';
   document.body.append(status);
   const raycaster=new T.Raycaster();
   raycaster.far=5;
@@ -44,6 +47,8 @@ export function startInfinitePreview():void {
     const index=voxelIndex(x,y,z);
     if(record.terrain[index]!==1)return;
     record.terrain[index]=0;
+    save.mark(coord,index);
+    try{save.flush()}catch{status.textContent='Mining succeeded, but save failed — check storage'}
     scene.remove(mesh);disposeInfiniteChunkMesh(mesh);
     const replacement=infiniteChunkMesh(record.terrain,coord);
     stream.meshes.set(key,replacement);scene.add(replacement);
