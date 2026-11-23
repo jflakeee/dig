@@ -18,3 +18,14 @@ test('reject corrupted, impossible and incompatible machine saves',()=>{
  assert.equal(loadMachine(storage,5,100),null);
  assert.equal(loadMachine({getItem:()=>'{bad'},5,100),null);
 });
+
+test('collected count survives reload and older saves default to zero',()=>{
+ const data=new Map();
+ const storage={getItem:k=>data.get(k)??null,setItem:(k,v)=>data.set(k,v)};
+ saveMachine(storage,20261123,{...state(),collected:4321},5000);
+ assert.equal(loadMachine(storage,20261123,100).collected,4321);
+ saveMachine(storage,20261123,state(),5000);
+ assert.equal(loadMachine(storage,20261123,100).collected,0);
+ saveMachine(storage,20261123,{...state(),collected:-1},5000);
+ assert.equal(loadMachine(storage,20261123,100),null);
+});
