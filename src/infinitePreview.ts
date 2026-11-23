@@ -25,6 +25,22 @@ export function startInfinitePreview():void {
   const down=(e:KeyboardEvent)=>{keys.add(e.key.toLowerCase());if(['w','a','s','d','q','e'].includes(e.key.toLowerCase()))e.preventDefault()};
   const up=(e:KeyboardEvent)=>keys.delete(e.key.toLowerCase());
   addEventListener('keydown',down);addEventListener('keyup',up);
+  const touchPad=document.createElement('div');
+  touchPad.style.cssText='position:fixed;left:16px;bottom:20px;display:flex;gap:8px;z-index:6;touch-action:none';
+  const touchButtons:[string,string][]=[['◀','a'],['▲','w'],['▼','s'],['▶','d'],['↑','e'],['↓','q']];
+  for(const [label,key] of touchButtons){
+    const button=document.createElement('button');
+    button.textContent=label;button.setAttribute('aria-label','Move '+key.toUpperCase());
+    button.style.cssText='min-width:44px;min-height:52px;touch-action:none';
+    button.addEventListener('pointerdown',e=>{e.preventDefault();keys.add(key);button.setPointerCapture(e.pointerId)});
+    const release=()=>keys.delete(key);
+    button.addEventListener('pointerup',release);
+    button.addEventListener('pointercancel',release);
+    button.addEventListener('lostpointercapture',release);
+    touchPad.append(button);
+  }
+  document.body.append(touchPad);
+  addEventListener('blur',()=>keys.clear());
   let yaw=0,pitch=0,drag=false,lastX=0,lastY=0;
   renderer.domElement.addEventListener('pointerdown',e=>{drag=true;lastX=e.clientX;lastY=e.clientY;renderer.domElement.setPointerCapture(e.pointerId)});
   renderer.domElement.addEventListener('pointerup',()=>drag=false);
