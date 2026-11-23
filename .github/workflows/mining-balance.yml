@@ -69,6 +69,8 @@ jobs:
         run: node --experimental-strip-types --test tests/infinite-chunk-coordinates.test.mjs
       - name: Test infinite chunk terrain
         run: node --experimental-strip-types --test tests/infinite-chunk-terrain.test.mjs
+      - name: Test cargo discard actions
+        run: node --experimental-strip-types --test tests/infinite-cargo-actions.test.mjs
       - name: Test mineral fusion
         run: node --experimental-strip-types --test tests/infinite-mineral-fusion.test.mjs
       - name: Test infinite machine save
