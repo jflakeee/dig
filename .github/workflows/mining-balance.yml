@@ -3,6 +3,13 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'index.html'
+      - 'package.json'
+      - '.github/workflows/mining-balance.yml'
   push:
     branches:
       - feat/infinite-chunks-shop-protection-20261122
