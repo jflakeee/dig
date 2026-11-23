@@ -1,3 +1,4 @@
+import {equipRecoveredDrill} from './infiniteRecoveredDrill.ts';
 import {dismantleIcChip} from './infiniteIcChipSalvage.ts';
 import {rollEquipmentDrop,DISCOVERY_STORY,IC_CHIP_SALVAGE,type EquipmentDrop} from './infiniteEquipmentDrops.ts';
 import {REPAIR_COST,repairDrill} from './infiniteDrillRepair.ts';
@@ -202,6 +203,32 @@ export function startInfinitePreview():void {
     const loot=document.createElement('p');
     loot.textContent='Recovered equipment ('+foundEquipment.length+'): '+(foundEquipment.length?foundEquipment.slice(-12).map(e=>e.kind+(e.kind==='drill'?' T'+e.tier:'')+' '+e.durability+'/'+e.maxDurability).join(' · '):'None');
     workshop.append(loot);
+    const recoveredDrills=foundEquipment.map((item,index)=>({item,index})).filter(({item})=>item.kind==='drill');
+    for(const {item,index} of recoveredDrills.slice(-12)){
+      const equip=document.createElement('button');
+      equip.textContent='Equip recovered drill T'+item.tier+' ('+item.durability+'/'+item.maxDurability+')';
+      equip.style.cssText='min-height:44px;width:100%;margin:4px 0';
+      equip.disabled=drill.durability<=0;
+      equip.onclick=()=>{
+        const result=equipRecoveredDrill(drill,foundEquipment,index);
+        if(!result)return;
+        const previousDrill=drill,previousEquipment=foundEquipment;
+        drill=result.drill;foundEquipment=result.equipment;
+        try{persistMachine();saveFailed=false}
+        catch{
+          drill=previousDrill;foundEquipment=previousEquipment;saveFailed=true;
+          nextSaveRetryAt=performance.now()+2000;
+          const error=document.createElement('p');
+          error.setAttribute('role','alert');
+          error.textContent='Drill swap cancelled: unable to save.';
+          workshop.prepend(error);
+          return;
+        }
+        miningTarget='';
+        refreshWorkshop();
+      };
+      workshop.append(equip);
+    }
     const chips=foundEquipment.filter(e=>e.kind==='ic-chip').length;
     const dismantle=document.createElement('button');
     dismantle.textContent='Dismantle IC chip → 3 copper + 2 iron ('+chips+' available)';
