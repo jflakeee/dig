@@ -1,5 +1,5 @@
 import * as T from 'three';
-import {mineralAt,miningDuration,DRILLS,emptyStock,craft,bestCraftable,drillCountCost,rangeCost,canCraft,type DrillTier,type DrillState,type Mineral,type Stock} from './infiniteDrillEconomy.ts';
+import {mineralAt,miningDuration,DRILLS,emptyStock,craft,bestCraftable,drillCountCost,rangeCost,canCraft,type DrillTier,type DrillState,type Stock} from './infiniteDrillEconomy.ts';
 import {InfiniteChunkScene} from './infiniteChunkScene.ts';
 import {InfiniteMiningSave} from './infiniteMiningSave.ts';
 import {infiniteChunkMesh,disposeInfiniteChunkMesh} from './infiniteChunkMesh.ts';
@@ -96,6 +96,54 @@ export function startInfinitePreview():void {
     stream.meshes.set(key,replacement);scene.add(replacement);
     return true;
   };
+  const workshop=document.createElement('div');
+  workshop.style.cssText='display:none;position:fixed;right:12px;top:60px;max-width:min(350px,90vw);max-height:65vh;overflow:auto;background:#172630;color:white;padding:12px;z-index:10;border:1px solid #577';
+  document.body.append(workshop);
+  const workshopButton=document.createElement('button');
+  workshopButton.textContent='Drill Workshop';
+  workshopButton.style.cssText='position:fixed;right:16px;top:12px;z-index:10;min-height:44px';
+  document.body.append(workshopButton);
+  const spend=(cost:Stock):boolean=>{
+    if(!(['stone','copper','iron','crystal'] as const).every(m=>stock[m]>=cost[m]))return false;
+    for(const m of ['stone','copper','iron','crystal'] as const)stock[m]-=cost[m];
+    return true;
+  };
+  const refreshWorkshop=()=>{
+    workshop.replaceChildren();
+    const heading=document.createElement('h3');
+    heading.textContent='Drill workshop · '+DRILLS[drill.tier].name+' '+drill.durability+'/'+DRILLS[drill.tier].durability;
+    workshop.append(heading);
+    const inventory=document.createElement('p');
+    inventory.textContent=Object.entries(stock).map(([m,n])=>m+': '+n).join(' · ');
+    workshop.append(inventory);
+    for(let tier=0;tier<DRILLS.length;tier++){
+      const t=tier as DrillTier;
+      const button=document.createElement('button');
+      button.textContent='Precraft '+DRILLS[t].name+' ('+(DRILLS[t].craftMs/1000)+'s)';
+      button.disabled=!!crafting||!canCraft(stock,t);
+      button.onclick=()=>{
+        if(crafting||!spend({...DRILLS[t].recipe}))return;
+        crafting={tier:t,readyAt:performance.now()+DRILLS[t].craftMs};
+        refreshWorkshop();
+      };
+      workshop.append(button);
+    }
+    const count=document.createElement('button');
+    count.textContent='Drill count: '+drillCount+' → '+Math.min(4,drillCount+1);
+    count.disabled=drillCount>=4||!(['stone','copper','iron','crystal'] as const).every(m=>stock[m]>=drillCountCost(drillCount+1)[m]);
+    count.onclick=()=>{if(drillCount<4&&spend(drillCountCost(drillCount+1))){drillCount++;refreshWorkshop()}};
+    workshop.append(count);
+    const range=document.createElement('button');
+    range.textContent='Installation range: '+drillRange+' → '+Math.min(3,drillRange+1);
+    range.disabled=drillRange>=3||!(['stone','copper','iron','crystal'] as const).every(m=>stock[m]>=rangeCost(drillRange+1)[m]);
+    range.onclick=()=>{if(drillRange<3&&spend(rangeCost(drillRange+1))){drillRange++;refreshWorkshop()}};
+    workshop.append(range);
+    const note=document.createElement('p');
+    note.textContent='Extra drill mounts and installation range are reserved upgrades; only the center drill mines in this preview.';
+    workshop.append(note);
+    if(crafting){const p=document.createElement('p');p.textContent='Crafting '+DRILLS[crafting.tier].name+'…';workshop.append(p)}
+  };
+  workshopButton.onclick=()=>{const show=workshop.style.display==='none';workshop.style.display=show?'block':'none';if(show)refreshWorkshop()};
   let autoMine=false;
   let autoAdvance=false;
   let nextAutoMineAt=0;
