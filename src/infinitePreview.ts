@@ -53,13 +53,27 @@ export function startInfinitePreview():void {
     const replacement=infiniteChunkMesh(record.terrain,coord);
     stream.meshes.set(key,replacement);scene.add(replacement);
   };
+  let autoMine=false;
+  let nextAutoMineAt=0;
+  const autoButton=document.createElement('button');
+  autoButton.textContent='Auto Mine: OFF';
+  autoButton.setAttribute('aria-pressed','false');
+  autoButton.style.cssText='position:fixed;right:16px;bottom:84px;min-height:52px;min-width:112px;z-index:7;touch-action:manipulation';
+  const toggleAutoMine=()=>{
+    autoMine=!autoMine;
+    autoButton.textContent=autoMine?'Auto Mine: ON':'Auto Mine: OFF';
+    autoButton.setAttribute('aria-pressed',String(autoMine));
+    nextAutoMineAt=0;
+  };
+  autoButton.addEventListener('click',toggleAutoMine);
+  document.body.append(autoButton);
   const mineButton=document.createElement('button');
   mineButton.textContent='⛏ Mine';
   mineButton.style.cssText='position:fixed;right:16px;bottom:20px;min-height:52px;min-width:80px;z-index:7;touch-action:manipulation';
   mineButton.addEventListener('click',mine);
   document.body.append(mineButton);
   const keys=new Set<string>();
-  const down=(e:KeyboardEvent)=>{if(e.key.toLowerCase()==='f')mine();keys.add(e.key.toLowerCase());if(['w','a','s','d','q','e'].includes(e.key.toLowerCase()))e.preventDefault()};
+  const down=(e:KeyboardEvent)=>{if(e.key.toLowerCase()==='f'&&!e.repeat)mine();if(e.key.toLowerCase()==='r'&&!e.repeat)toggleAutoMine();keys.add(e.key.toLowerCase());if(['w','a','s','d','q','e'].includes(e.key.toLowerCase()))e.preventDefault()};
   const up=(e:KeyboardEvent)=>keys.delete(e.key.toLowerCase());
   addEventListener('keydown',down);addEventListener('keyup',up);
   const touchPad=document.createElement('div');
@@ -99,10 +113,15 @@ export function startInfinitePreview():void {
     camera.position.x+=(Math.sin(yaw)*-forward+Math.cos(yaw)*strafe)*speed;
     camera.position.z+=(-Math.cos(yaw)*forward-Math.sin(yaw)*strafe)*speed;
     camera.position.y+=vertical*speed;
+    // Automatically mine only the closest block directly ahead, at a bounded rate.
+    if(autoMine&&now>=nextAutoMineAt){
+      mine();
+      nextAutoMineAt=now+350;
+    }
     // Throttle expensive chunk generation to once every four frames.
     if(frame++%4===0){
       stream.update([camera.position.x,camera.position.y,camera.position.z]);
-      status.textContent='Infinite preview · '+stream.meshes.size+' chunks · '+camera.position.toArray().map(n=>n.toFixed(1)).join(', ')+'m · WASD/QE · drag · no save';
+      status.textContent='Infinite preview · '+stream.meshes.size+' chunks · '+camera.position.toArray().map(n=>n.toFixed(1)).join(', ')+'m · autosave · auto mine '+(autoMine?'ON':'OFF')+' (R)';
     }
     renderer.render(scene,camera);
     requestAnimationFrame(tick);
