@@ -8,6 +8,7 @@ export function faceMicroGravity(
   if (![current.yaw,current.pitch,...gravity,dt].every(Number.isFinite)||dt<0||dt>0.1)
     throw Error('Invalid orientation input');
   const length=Math.hypot(...gravity);
+  if(!Number.isFinite(length))throw Error('Invalid gravity magnitude');
   if(length<MICRO_GRAVITY_DIRECTION_THRESHOLD||dt===0)return current;
   // Near vertical gravity has no meaningful yaw; retain heading to prevent spinning.
   const horizontal=Math.hypot(gravity[0],gravity[2]);
