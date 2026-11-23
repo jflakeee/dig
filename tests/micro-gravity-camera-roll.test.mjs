@@ -14,7 +14,7 @@ test('gravity left rolls camera toward left',()=>{
   assert.ok(next<0&&next>=-0.9*0.04);
 });
 test('near zero gravity and paused frame preserve roll',()=>{
-  assert.equal(gravityLevelRoll(0.6,0.001,0,0.04),0.6);
+  assert.ok(gravityLevelRoll(0.6,0.001,0,0.04)<0.6);
   assert.equal(gravityLevelRoll(0.6,0.1,0,0),0.6);
 });
 test('roll converges to gravity in every screen quadrant',()=>{
@@ -33,4 +33,11 @@ test('invalid and overflowing inputs are rejected',()=>{
   assert.throws(()=>gravityLevelRoll(0,Infinity,0,0.04));
   assert.throws(()=>gravityLevelRoll(0,1.4e308,1.4e308,0.04));
   assert.throws(()=>gravityLevelRoll(0,0.1,0,-0.1));
+});
+
+test('obsolete bank eases back to level after gravity aligns with forward',()=>{
+  let roll=0.6;
+  for(let i=0;i<30;i++)roll=gravityLevelRoll(roll,0,0,0.04);
+  assert.equal(roll,0);
+  assert.equal(gravityLevelRoll(0.6,0,0,0),0.6);
 });
