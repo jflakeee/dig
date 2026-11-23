@@ -181,7 +181,7 @@ const BASIC_DRILL_IRON=4;
 function tryRebuildBasicDrill(){
   if(hazardDrillDurability>0)return;
   const cargo=remaining(inventory,session.sold,session.crafted);
-  if((cargo.coal??0)<BASIC_DRILL_COAL||(cargo.iron??0)<BASIC_DRILL_IRON)return;
+  if((cargo.coal??0)-recoveryCoalUsed<BASIC_DRILL_COAL||(cargo.iron??0)-recoveryIronUsed<BASIC_DRILL_IRON)return;
   // Existing inventory tracks cumulative mined ore. Record consumed recovery ore
   // as a separate session offset; do not alter the terrain-derived inventory.
   recoveryCoalUsed+=BASIC_DRILL_COAL;
@@ -194,7 +194,7 @@ const drillStatus=document.createElement('div');
 drillStatus.setAttribute('role','status');
 drillStatus.style.cssText='position:fixed;left:12px;top:102px;z-index:3;color:#fff;background:#20252add;border-radius:6px;padding:7px;font:13px system-ui;pointer-events:none';
 document.body.append(drillStatus);
-function updateDrillStatus(){drillStatus.textContent='Drill '+hazardDrillDurability+'/1000'+(hazardDrillDurability===0?' · BROKEN':'')}
+function updateDrillStatus(){drillStatus.textContent='Drill '+hazardDrillDurability+'/1000'+(hazardDrillDurability===0?' · LASER (2.5s) · rebuild: '+BASIC_DRILL_COAL+' coal / '+BASIC_DRILL_IRON+' iron':'')}
 updateDrillStatus();
 let activeHazard:DrillHazard|null=null;
 let hazardMessageUntil=0;
