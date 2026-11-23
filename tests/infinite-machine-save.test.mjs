@@ -43,3 +43,13 @@ test('equipment save accepts IC chips but rejects mineral piles and impossible d
  saveMachine(storage,20261123,state(),5000);
  assert.deepEqual(loadMachine(storage,20261123,100).foundEquipment,[]);
 });
+
+test('exhausted recovered drill persists for later repair and non-drill tiers are rejected',()=>{
+ const data=new Map();
+ const storage={getItem:k=>data.get(k)??null,setItem:(k,v)=>data.set(k,v)};
+ const broken={kind:'drill',tier:0,durability:0,maxDurability:30};
+ saveMachine(storage,20261123,{...state(),foundEquipment:[broken]},5000);
+ assert.deepEqual(loadMachine(storage,20261123,100).foundEquipment,[broken]);
+ saveMachine(storage,20261123,{...state(),foundEquipment:[{kind:'ic-chip',tier:2,durability:50,maxDurability:100}]},5000);
+ assert.equal(loadMachine(storage,20261123,100),null);
+});
