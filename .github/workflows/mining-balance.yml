@@ -1,0 +1,83 @@
+name: Mining balance simulation
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - feat/infinite-chunks-shop-protection-20261122
+    paths:
+      - 'scripts/mining-balance.mjs'
+      - 'tests/mining-balance.test.mjs'
+      - 'src/miningDurability.ts'
+      - 'src/autoMineController.ts'
+      - 'src/chunkCollapse.ts'
+      - 'src/chunkMicroGravity.ts'
+      - 'src/microGravityDrift.ts'
+      - 'src/microGravityOrientation.ts'
+      - 'src/microGravityCameraRoll.ts'
+      - 'tests/micro-gravity-camera-roll.test.mjs'
+      - 'src/microGravitySeed.ts'
+      - 'tests/micro-gravity-seed.test.mjs'
+      - 'tests/micro-gravity-orientation.test.mjs'
+      - 'tests/micro-gravity-drift.test.mjs'
+      - 'tests/chunk-micro-gravity.test.mjs'
+      - 'src/zeroGravityMovement.ts'
+      - 'src/main.ts'
+      - 'src/miningMachinePropulsion.ts'
+      - 'src/miningMachineView.ts'
+      - 'src/miningMachinePersonality.ts'
+      - 'src/miningMachineMemory.ts'
+      - 'tests/mining-machine-memory.test.mjs'
+      - 'tests/mining-machine-personality.test.mjs'
+      - 'src/mineralFuelTransaction.ts'
+      - 'tests/mineral-fuel-transaction.test.mjs'
+      - 'tests/mining-machine-propulsion.test.mjs'
+      - '.github/workflows/mining-balance.yml'
+  workflow_dispatch:
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Type-check and build
+        run: npm run build
+      - name: Test mining simulator
+        run: node --test tests/mining-balance.test.mjs
+      - name: Test mining machine propulsion
+        run: node --experimental-strip-types --test tests/mining-machine-propulsion.test.mjs
+      - name: Test mineral fuel transactions
+        run: node --experimental-strip-types --test tests/mineral-fuel-transaction.test.mjs
+      - name: Test machine personality
+        run: node --experimental-strip-types --test tests/mining-machine-personality.test.mjs
+      - name: Test machine memory loss
+        run: node --experimental-strip-types --test tests/mining-machine-memory.test.mjs
+      - name: Test chunk micro gravity
+        run: node --experimental-strip-types --test tests/chunk-micro-gravity.test.mjs
+      - name: Test microgravity drift
+        run: node --experimental-strip-types --test tests/micro-gravity-drift.test.mjs
+      - name: Test gravity-facing orientation
+        run: node --experimental-strip-types --test tests/micro-gravity-orientation.test.mjs
+      - name: Test gravity-down camera roll
+        run: node --experimental-strip-types --test tests/micro-gravity-camera-roll.test.mjs
+      - name: Test world-specific microgravity seed
+        run: node --experimental-strip-types --test tests/micro-gravity-seed.test.mjs
+      - name: Run 7200-scenario simulation
+        run: node scripts/mining-balance.mjs --hours=0 --seeds=100 --base-seconds=1 > mining-balance-results.json
+      - name: Summarize
+        run: |
+          node --input-type=module -e "import fs from 'node:fs'; const d=JSON.parse(fs.readFileSync('mining-balance-results.json')); console.log(JSON.stringify({config:d.config,summaries:d.summaries},null,2))" > mining-balance-summary.json
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: mining-balance-results
+          path: |
+            mining-balance-results.json
+            mining-balance-summary.json
+          retention-days: 14

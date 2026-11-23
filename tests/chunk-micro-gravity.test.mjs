@@ -1,0 +1,37 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {chunkMicroGravity,microGravityAt,MICRO_GRAVITY_MAX} from '../src/chunkMicroGravity.ts';
+test('seeded fields are stable and magnitude bounded',()=>{
+  const a=chunkMicroGravity(42,-12,3,7);
+  assert.deepEqual(a,chunkMicroGravity(42,-12,3,7));
+  assert.ok(Math.hypot(...a)<=MICRO_GRAVITY_MAX+1e-12);
+  assert.notDeepEqual(a,chunkMicroGravity(42,-11,3,7));
+});
+test('field remains continuous across positive and negative chunk boundaries',()=>{
+  for(const x of [-16,0,16,32]){
+    const a=microGravityAt(42,[x-0.0001,2,7]);
+    const b=microGravityAt(42,[x+0.0001,2,7]);
+    assert.ok(Math.hypot(...a.map((v,i)=>v-b[i]))<0.0001);
+  }
+});
+test('invalid positions and coordinates fail safely',()=>{
+  assert.throws(()=>microGravityAt(42,[Infinity,0,0]));
+  assert.throws(()=>chunkMicroGravity(42,0.1,0,0));
+});
+
+test('field interpolation stays bounded for varied 3D positions',()=>{
+  for(let i=0;i<100;i++){
+    const position=[i*1.31-48,i*0.73-37,18-i*1.9];
+    assert.ok(Math.hypot(...microGravityAt(42,position))<=MICRO_GRAVITY_MAX+1e-12);
+  }
+});
+test('out-of-range chunk coordinates are rejected',()=>{
+  assert.throws(()=>microGravityAt(42,[Number.MAX_VALUE,0,0]));
+});
+
+test('neighboring chunk interpolation rejects safe-integer overflow',()=>{
+  const edge=Number.MAX_SAFE_INTEGER*16;
+  assert.throws(()=>microGravityAt(42,[edge,0,0]),/chunk coordinate range/);
+  assert.throws(()=>microGravityAt(42,[0,edge,0]),/chunk coordinate range/);
+  assert.throws(()=>microGravityAt(42,[0,0,edge]),/chunk coordinate range/);
+});
