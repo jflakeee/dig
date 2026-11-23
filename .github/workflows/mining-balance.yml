@@ -69,6 +69,8 @@ jobs:
         run: node --experimental-strip-types --test tests/infinite-chunk-coordinates.test.mjs
       - name: Test infinite chunk terrain
         run: node --experimental-strip-types --test tests/infinite-chunk-terrain.test.mjs
+      - name: Test recovered drill equipment swap
+        run: node --experimental-strip-types --test tests/infinite-recovered-drill.test.mjs
       - name: Test IC chip salvage transactions
         run: node --experimental-strip-types --test tests/infinite-ic-chip-salvage.test.mjs
       - name: Test recovered equipment drops
