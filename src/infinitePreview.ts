@@ -178,8 +178,19 @@ export function startInfinitePreview():void {
         button.onclick=()=>{
           const next=discardMinerals(stock,mineral,amount);
           if(!next)return;
+          const removed=stock[mineral]-next[mineral];
+          if(amount==='all'&&!window.confirm('Discard all '+removed+' '+mineral+'? This cannot be undone.'))return;
+          const previous=stock;
           stock=next;
-          try{persistMachine();saveFailed=false}catch{saveFailed=true;nextSaveRetryAt=performance.now()+2000}
+          try{persistMachine();saveFailed=false}
+          catch{
+            stock=previous;saveFailed=true;nextSaveRetryAt=performance.now()+2000;
+            const error=document.createElement('p');
+            error.setAttribute('role','alert');
+            error.textContent='Discard cancelled: unable to save.';
+            workshop.prepend(error);
+            return;
+          }
           refreshWorkshop();
         };
         discard.append(button);
