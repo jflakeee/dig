@@ -319,7 +319,7 @@ let last=performance.now(),next=0,vy=0;const hud=document.querySelector('#hud')!
   memoryState=fading.state;
   if(fading.line)showMemoryLine(fading.line,now);
 }if(!document.hidden&&quality.sample(frameMs))renderer.setPixelRatio(quality.scale);impactPower=Math.max(0,impactPower-dt*1.7);const opacity=reducedMotion.matches||impactPower===0?'0':String(impactPower);if(opacity!==previousOpacity){impact.style.opacity=opacity;previousOpacity=opacity}if(zeroGravityEnabled&&microGravityEnabled&&gravityAutoFaceEnabled&&!document.hidden&&document.hasFocus()&&
-  journalPanel.style.display==='none'&&memoryLogPanel.hidden&&!trading){
+  !trading){
   const gravity=microGravityAt(microGravitySeed,[camera.position.x,camera.position.y,camera.position.z]);
   // Give touch/mouse look priority, then gradually point the machine into gravity.
   const manualLookIdle=look===-1&&now-lastManualLookAt>1800;
@@ -340,7 +340,7 @@ if(autoMineEnabled){
   const forward=probe.set(fx,fy,fz);
   if(!zeroGravityEnabled)forward.y=0;
   const ahead=camera.position.clone().addScaledVector(forward,.5);
-  const safe={menuOpen:journalPanel.style.display!=='none'||trading,
+  const safe={menuOpen:trading,
     appFocused:!document.hidden&&document.hasFocus(),chunksReady:chunks.size>0,
     saveHealthy:!saving,fallSafe:zeroGravityEnabled||Math.abs(vy)<.5};
   const decision=stepAutoMine(autoMineState,{
@@ -358,10 +358,10 @@ if(autoMineEnabled){
   vy=0;
   d.y=0;
 }for(const axis of ['x','z'] as const){if(d[axis]===0)continue;const p=probe.copy(camera.position);p[axis]+=d[axis];if(!blocked(p))camera.position.copy(p)}if(zeroGravityEnabled&&microGravityEnabled&&
-  (document.hidden||!document.hasFocus()||journalPanel.style.display!=='none'||!memoryLogPanel.hidden||trading)){
+  (document.hidden||!document.hasFocus()||trading)){
   microDrift=INITIAL_DRIFT;
 }
-if(zeroGravityEnabled&&microGravityEnabled&&!document.hidden&&document.hasFocus()&&journalPanel.style.display==='none'&&memoryLogPanel.hidden&&!trading){
+if(zeroGravityEnabled&&microGravityEnabled&&!document.hidden&&document.hasFocus()&&!trading){
   if(now>=microGravityIndicatorAt){
     microGravityIndicatorAt=now+250;
     const g=microGravityAt(microGravitySeed,[camera.position.x,camera.position.y,camera.position.z]);
