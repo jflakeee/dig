@@ -92,6 +92,7 @@ node --experimental-strip-types --test tests/*.test.mjs
 
 - [최신 설계 문서](docs/infinite-underground-world-20261122.md)
 - [프로젝트 메모리·결정사항](docs/PROJECT_MEMORY.md)
+- [온라인 3종 모드 설계 — 개발 보류](docs/online-multiplayer-modes-20261123.md)
 
 ## 개발 및 배포 현황
 
