@@ -7,7 +7,7 @@ import type {WorldPosition} from './infiniteChunkCoordinates.ts';
 export class InfiniteChunkScene {
   readonly stream:InfiniteChunkStream;
   readonly meshes=new Map<string,T.Mesh>();
-  constructor(readonly scene:T.Scene,seed:number,loadBudget=2){
+  constructor(readonly scene:T.Scene,seed:number,loadBudget=2,readonly applyEdits?:(coord:import('./infiniteChunkCoordinates.ts').ChunkCoord,terrain:Uint8Array)=>void){
     this.stream=new InfiniteChunkStream(seed,loadBudget);
   }
   update(position:WorldPosition):void {
@@ -20,6 +20,7 @@ export class InfiniteChunkScene {
     }
     for(const [key,record] of this.stream.loaded){
       if(this.meshes.has(key))continue;
+      this.applyEdits?.(record.coord,record.terrain);
       const mesh=infiniteChunkMesh(record.terrain,record.coord);
       this.scene.add(mesh);
       this.meshes.set(key,mesh);
