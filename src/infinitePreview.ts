@@ -30,6 +30,13 @@ export function startInfinitePreview():void {
   let collected=[...save.edits.values()].reduce((total,indices)=>total+indices.size,0);
   let saveFailed=false;
   let nextSaveRetryAt=0;
+  const flushOnExit=()=>{
+    try{save.flush();saveFailed=false}catch{saveFailed=true}
+  };
+  addEventListener('pagehide',flushOnExit);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='hidden')flushOnExit();
+  });
   const raycaster=new T.Raycaster();
   raycaster.far=5;
   const mine=(horizontal=false):boolean=>{
