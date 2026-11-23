@@ -140,7 +140,12 @@ export function startInfinitePreview():void {
       blocked=raycaster.intersectObjects([...stream.meshes.values()],false).length>0;
       raycaster.far=5;
     }
-    if(!blocked||!autoAdvance){
+    // Stop the automatic drill before crossing into unloaded or solid terrain.
+    // Manual movement remains unchanged in this experimental preview.
+    const candidate=new T.Vector3(camera.position.x+moveX,camera.position.y,camera.position.z+moveZ);
+    const nextChunk=chunkKey([Math.floor(candidate.x/16),Math.floor(candidate.y/16),Math.floor(candidate.z/16)]);
+    const chunkReady=stream.stream.loaded.has(nextChunk);
+    if(!autoAdvance||(!blocked&&chunkReady)){
       camera.position.x+=moveX;
       camera.position.z+=moveZ;
     }
