@@ -158,6 +158,10 @@ export function startInfinitePreview():void {
       refreshWorkshop();
     };
     workshop.append(repair);
+    const repairHint=document.createElement('p');
+    repairHint.style.cssText='font-size:13px;margin:4px 0 10px;color:#cbd5e1';
+    repairHint.textContent=repair.disabled?repair.title:'Repair available · restores up to 50% durability';
+    workshop.append(repairHint);
     const inventory=document.createElement('p');
     inventory.textContent=Object.entries(stock).map(([m,n])=>m+': '+n).join(' · ');
     workshop.append(inventory);
