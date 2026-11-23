@@ -12,6 +12,8 @@ on:
       - 'src/chunkMicroGravity.ts'
       - 'src/microGravityDrift.ts'
       - 'src/microGravityOrientation.ts'
+      - 'src/microGravityCameraRoll.ts'
+      - 'tests/micro-gravity-camera-roll.test.mjs'
       - 'src/microGravitySeed.ts'
       - 'tests/micro-gravity-seed.test.mjs'
       - 'tests/micro-gravity-orientation.test.mjs'
@@ -59,6 +61,8 @@ jobs:
         run: node --experimental-strip-types --test tests/micro-gravity-drift.test.mjs
       - name: Test gravity-facing orientation
         run: node --experimental-strip-types --test tests/micro-gravity-orientation.test.mjs
+      - name: Test gravity-down camera roll
+        run: node --experimental-strip-types --test tests/micro-gravity-camera-roll.test.mjs
       - name: Test world-specific microgravity seed
         run: node --experimental-strip-types --test tests/micro-gravity-seed.test.mjs
       - name: Run 7200-scenario simulation
