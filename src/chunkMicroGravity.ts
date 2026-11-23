@@ -2,6 +2,7 @@ import type { Vec3 } from './zeroGravityMovement.ts';
 
 /** Deterministic, bounded SF gravity anomalies; no terrain or save mutations. */
 export const MICRO_GRAVITY_MAX = 0.12; // m/s², ~1.2% of Earth's surface gravity
+export const MICRO_GRAVITY_DIRECTION_THRESHOLD = 0.008; // m/s²; below this, no stable heading
 export const MICRO_GRAVITY_CHUNK_METERS = 16;
 
 function hash(seed: number, x: number, y: number, z: number, channel: number) {
