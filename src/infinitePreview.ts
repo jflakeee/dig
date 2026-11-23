@@ -132,7 +132,8 @@ export function startInfinitePreview():void {
   function tick(now:number){
     const dt=Math.min((now-last)/1000,.05);last=now;
     camera.rotation.order='YXZ';camera.rotation.set(pitch,yaw,0);
-    const forward=Number(keys.has('w'))-Number(keys.has('s'))+Number(autoAdvance);
+    // Auto-forward is a single deliberate direction; manual reverse takes priority.
+    const forward=keys.has('s')?-1:(keys.has('w')||autoAdvance?1:0);
     const strafe=Number(keys.has('d'))-Number(keys.has('a'));
     const vertical=Number(keys.has('e'))-Number(keys.has('q'));
     const length=Math.hypot(forward,strafe,vertical)||1;
