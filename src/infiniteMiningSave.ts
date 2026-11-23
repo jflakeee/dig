@@ -21,7 +21,7 @@ export class InfiniteMiningSave {
         if(!Array.isArray(entry)||entry.length!==2||typeof entry[0]!=='string'||!Array.isArray(entry[1]))return;
         const key=entry[0];
         const parts=key.split(',').map(Number);
-        if(parts.length!==3||parts.some(n=>!Number.isSafeInteger(n))||chunkKey(parts as ChunkCoord)!==key)return;
+        if(parts.length!==3||parts.some(n=>!Number.isSafeInteger(n))||chunkKey([parts[0],parts[1],parts[2]])!==key)return;
         const indices=new Set<number>();
         for(const index of entry[1]){
           if(!Number.isInteger(index)||index<0||index>=CHUNK_VOXEL_COUNT)return;
