@@ -236,6 +236,9 @@ gravityFaceToggle.style.cssText='position:fixed;right:12px;top:274px;z-index:3;m
 actions.append(gravityFaceToggle);
 gravityFaceToggle.onclick=()=>{
   gravityAutoFaceEnabled=!gravityAutoFaceEnabled;
+  // Discard the old camera bank when auto-level is re-enabled after manual flight.
+  // Otherwise the previous area's gravity can briefly tilt the view.
+  gravityRoll=0;
   gravityFaceToggle.textContent=gravityAutoFaceEnabled?'Auto Level: On':'Auto Level: Off';
 };
 let autoMineState:AutoMineState=initialAutoMineState();
