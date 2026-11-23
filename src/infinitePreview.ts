@@ -126,6 +126,7 @@ export function startInfinitePreview():void {
     return true;
   };
   let lastFusionResult='';
+  let lastFusionSuccess=false;
   const refreshWorkshop=()=>{
     workshop.replaceChildren();
     const heading=document.createElement('h3');
@@ -205,7 +206,7 @@ export function startInfinitePreview():void {
     const fusionNotice=document.createElement('p');
     fusionNotice.setAttribute('role','status');
     fusionNotice.setAttribute('aria-live','polite');
-    fusionNotice.style.cssText='padding:10px 12px;margin:8px 0;border-radius:6px;font-weight:600';
+    fusionNotice.style.cssText='padding:10px 12px;margin:8px 0;border-radius:6px;font-weight:600;border:1px solid '+(lastFusionSuccess?'#69c99b':'#e6a47a');
     fusionNotice.textContent=lastFusionResult;
     if(lastFusionResult)workshop.append(fusionNotice);
     for(const recipe of FUSION_RECIPES){
@@ -240,6 +241,7 @@ export function startInfinitePreview():void {
           return;
         }
         lastFusionResult=result.success?'✓ Fusion success: +1 '+recipe.to:'✕ Fusion failed: '+recipe.cost+' '+recipe.from+' consumed';
+        lastFusionSuccess=result.success;
         refreshWorkshop();
       };
       workshop.append(button);
