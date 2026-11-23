@@ -41,7 +41,11 @@ function performance(durability, maximum) {
   return pct > 70 ? 1 : pct > 40 ? .9 : pct > 10 ? .7 : pct > 0 ? .5 : 0;
 }
 export function simulate({ tier = 0, upgrade = 0, hours = 1, seed = 1, baseMineSeconds = 1, autoRepair = true }) {
-  if (!equipment[tier] || !upgrades[upgrade] || !(hours > 0) || !(baseMineSeconds > 0)) throw Error('Invalid simulation inputs');
+  if (!Number.isInteger(tier) || !Number.isInteger(upgrade) ||
+      !equipment[tier] || !upgrades[upgrade] ||
+      !Number.isFinite(hours) || hours <= 0 || hours > 100 ||
+      !Number.isFinite(baseMineSeconds) || baseMineSeconds <= 0 ||
+      !Number.isSafeInteger(seed)) throw Error('Invalid simulation inputs');
   const rng = random(seed);
   const tool = equipment[tier], boost = upgrades[upgrade];
   let elapsed = 0, durability = 1000, maximum = 1000, repairs = 0, replacements = 0;
