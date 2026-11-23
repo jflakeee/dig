@@ -1,5 +1,8 @@
 name: Mining balance simulation
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - feat/infinite-chunks-shop-protection-20261122
