@@ -9,7 +9,10 @@ test('equipment only drops below probability threshold and is worn',()=>{
  for(let i=0;i<DROP_KINDS.length;i++){
   const drop=rollEquipmentDrop(0,(i+.01)/DROP_KINDS.length,.8);
   assert.equal(drop.kind,DROP_KINDS[i]);
-  assert.ok(drop.durability>=1&&drop.durability<drop.maxDurability);
+  if(drop.kind==='mineral-pile'){
+   assert.ok(drop.amount>=3&&drop.amount<=10);
+   assert.ok(['stone','copper','iron','crystal'].includes(drop.mineral));
+  }else assert.ok(drop.durability>=1&&drop.durability<drop.maxDurability);
  }
 });
 test('found equipment persists independently of mined chunks',()=>{
