@@ -29,6 +29,7 @@ export function startInfinitePreview():void {
   document.body.append(status);
   let collected=[...save.edits.values()].reduce((total,indices)=>total+indices.size,0);
   let saveFailed=false;
+  let nextSaveRetryAt=0;
   const raycaster=new T.Raycaster();
   raycaster.far=5;
   const mine=(horizontal=false):boolean=>{
@@ -53,7 +54,7 @@ export function startInfinitePreview():void {
     record.terrain[index]=0;
     save.mark(coord,index);
     collected++;
-    try{save.flush();saveFailed=false}catch{saveFailed=true}
+    try{save.flush();saveFailed=false}catch{saveFailed=true;nextSaveRetryAt=performance.now()+2000}
     scene.remove(mesh);disposeInfiniteChunkMesh(mesh);
     const replacement=infiniteChunkMesh(record.terrain,coord);
     stream.meshes.set(key,replacement);scene.add(replacement);
@@ -178,6 +179,10 @@ export function startInfinitePreview():void {
         camera.position.copy(original);
       }else mine(false);
       nextAutoMineAt=now+350;
+    }
+    // Retry transient storage errors without requiring another block to be mined.
+    if(saveFailed&&now>=nextSaveRetryAt){
+      try{save.flush();saveFailed=false}catch{nextSaveRetryAt=now+2000}
     }
     // Throttle expensive chunk generation to once every four frames.
     if(frame++%4===0){
