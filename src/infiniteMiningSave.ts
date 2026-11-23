@@ -5,8 +5,11 @@ import {CHUNK_VOXEL_COUNT} from './infiniteChunkTerrain.ts';
 export class InfiniteMiningSave {
   static readonly key='dig:infinite-preview:v1';
   readonly edits=new Map<string,Set<number>>();
-  constructor(readonly storage:Pick<Storage,'getItem'|'setItem'>,readonly seed:number){
+  readonly storage:Pick<Storage,'getItem'|'setItem'>;
+  readonly seed:number;
+  constructor(storage:Pick<Storage,'getItem'|'setItem'>,seed:number){
     if(!Number.isSafeInteger(seed))throw Error('Invalid seed');
+    this.storage=storage;this.seed=seed;
   }
   load():void {
     const raw=this.storage.getItem(InfiniteMiningSave.key);
