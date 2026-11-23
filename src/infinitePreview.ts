@@ -168,11 +168,12 @@ export function startInfinitePreview():void {
     // A full hold must never permanently block progression when upgrade recipes
     // require a mineral that the player has not yet collected.
     const discard=document.createElement('div');
-    discard.style.cssText='display:flex;flex-wrap:wrap;gap:4px;margin:8px 0';
+    discard.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0';
     for(const mineral of ['stone','copper','iron','crystal'] as const){
       for(const amount of [1,10,'all'] as const satisfies readonly DiscardAmount[]){
         const button=document.createElement('button');
-        button.textContent='Discard '+amount+' '+mineral;
+        button.textContent=amount==='all'?'All '+mineral:'−'+amount+' '+mineral;
+        button.style.cssText='min-height:44px;padding:8px 4px;white-space:normal;touch-action:manipulation';
         button.disabled=stock[mineral]===0;
         button.title='Permanently remove minerals to free cargo capacity';
         button.onclick=()=>{
