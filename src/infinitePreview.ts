@@ -1,4 +1,5 @@
 import * as T from 'three';
+import {createCargoTrain} from './infiniteCargoTrainView.ts';
 import {cargoAmount,cargoCapacity,cargoSpeed,canStore,wagonCost,engineCost,MAX_WAGONS,MAX_ENGINE} from './infiniteCargoTrain.ts';
 import {mineralAt,miningDuration,DRILLS,emptyStock,craft,bestCraftable,drillCountCost,rangeCost,canCraft,type DrillTier,type DrillState,type Stock} from './infiniteDrillEconomy.ts';
 import {InfiniteChunkScene} from './infiniteChunkScene.ts';
@@ -34,6 +35,8 @@ export function startInfinitePreview():void {
   let drill:DrillState={tier:0,durability:DRILLS[0].durability};
   let drillCount=1,drillRange=0;
   let wagons=1,engineLevel=0;
+  const cargoTrain=createCargoTrain(scene);
+  cargoTrain.setWagons(wagons);
   let miningTarget='',miningStartedAt=0;
   let crafting:{tier:DrillTier;readyAt:number;paid:boolean}|null=null;
   const queue:DrillState[]=[];
@@ -146,7 +149,7 @@ export function startInfinitePreview():void {
     const wagonButton=document.createElement('button');
     wagonButton.textContent='Add cargo wagon ('+'40 capacity'+')';
     wagonButton.disabled=wagons>=MAX_WAGONS||!(['stone','copper','iron','crystal'] as const).every(m=>stock[m]>=wagonCost(wagons+1)[m]);
-    wagonButton.onclick=()=>{if(wagons<MAX_WAGONS&&spend(wagonCost(wagons+1))){wagons++;refreshWorkshop()}};
+    wagonButton.onclick=()=>{if(wagons<MAX_WAGONS&&spend(wagonCost(wagons+1))){wagons++;cargoTrain.setWagons(wagons);refreshWorkshop()}};
     workshop.append(wagonButton);
     const engineButton=document.createElement('button');
     engineButton.textContent='Upgrade engine '+engineLevel+' → '+Math.min(MAX_ENGINE,engineLevel+1);
@@ -290,6 +293,7 @@ export function startInfinitePreview():void {
       stream.update([camera.position.x,camera.position.y,camera.position.z]);
       status.textContent='Infinite preview · '+stream.meshes.size+' chunks · '+camera.position.toArray().map(n=>n.toFixed(1)).join(', ')+'m · collected '+collected+' · auto mine '+(autoMine?'ON':'OFF')+' (R) · forward '+(autoAdvance?'ON':'OFF')+' (T)'+(saveFailed?' · ⚠ SAVE FAILED — storage unavailable':'');
     }
+    cargoTrain.update(camera.position,yaw,dt);
     renderer.render(scene,camera);
     requestAnimationFrame(tick);
   }
