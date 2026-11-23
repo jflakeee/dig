@@ -5,6 +5,7 @@ export type MachineState={
   stock:Stock;drill:DrillState;drillCount:number;drillRange:number;
   wagons:number;engineLevel:number;queue:DrillState[];
   crafting:{tier:DrillTier;readyAt:number;paid:boolean}|null;
+  collected?:number;
 };
 export const MACHINE_SAVE_KEY='dig:infinite-preview:machine:v1';
 const validDrill=(v:any):v is DrillState=>
@@ -25,11 +26,12 @@ export function loadMachine(storage:Pick<Storage,'getItem'>,seed:number,now:numb
     if(!Number.isInteger(state.engineLevel)||state.engineLevel<0||state.engineLevel>MAX_ENGINE||
       !Number.isInteger(state.drillCount)||state.drillCount<1||state.drillCount>4||
       !Number.isInteger(state.drillRange)||state.drillRange<0||state.drillRange>3)return null;
+    if(state.collected!==undefined&&(!Number.isSafeInteger(state.collected)||state.collected<0))return null;
     const job=state.crafting;
     if(job!==null&&(!job||!Number.isInteger(job.tier)||job.tier<0||job.tier>=DRILLS.length||
       typeof job.paid!=='boolean'||!Number.isFinite(job.readyAt)))return null;
     // Persist remaining crafting duration, never an old performance.now() absolute timestamp.
-    return {...state,stock:{...state.stock},drill:{...state.drill},queue:state.queue.map(d=>({...d})),
+    return {...state,collected:state.collected??0,stock:{...state.stock},drill:{...state.drill},queue:state.queue.map(d=>({...d})),
       crafting:job?{...job,readyAt:now+Math.max(0,Math.min(DRILLS[job.tier].craftMs,job.readyAt))}:null};
   }catch{return null}
 }
