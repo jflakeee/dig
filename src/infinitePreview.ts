@@ -1,3 +1,4 @@
+import {installRecoveredUpgrade} from './infiniteRecoveredUpgrade.ts';
 import {repairRecoveredDrill} from './infiniteRecoveredDrillRepair.ts';
 import {equipRecoveredDrill} from './infiniteRecoveredDrill.ts';
 import {dismantleIcChip} from './infiniteIcChipSalvage.ts';
@@ -255,6 +256,31 @@ export function startInfinitePreview():void {
         refreshWorkshop();
       };
       workshop.append(repairRecovered);
+    }
+    for(const {item,index} of foundEquipment.map((item,index)=>({item,index})).filter(({item})=>item.kind==='wagon'||item.kind==='engine').slice(-12)){
+      const install=document.createElement('button');
+      install.textContent='Install recovered '+item.kind+' ('+item.durability+'/'+item.maxDurability+')';
+      install.style.cssText='min-height:44px;width:100%;margin:4px 0';
+      install.disabled=!installRecoveredUpgrade(foundEquipment,index,wagons,engineLevel);
+      install.onclick=()=>{
+        const result=installRecoveredUpgrade(foundEquipment,index,wagons,engineLevel);
+        if(!result)return;
+        const previousEquipment=foundEquipment,previousWagons=wagons,previousEngine=engineLevel;
+        foundEquipment=result.equipment;wagons=result.wagons;engineLevel=result.engineLevel;
+        try{persistMachine();saveFailed=false}
+        catch{
+          foundEquipment=previousEquipment;wagons=previousWagons;engineLevel=previousEngine;
+          saveFailed=true;nextSaveRetryAt=performance.now()+2000;
+          const error=document.createElement('p');
+          error.setAttribute('role','alert');
+          error.textContent='Recovered upgrade installation cancelled: unable to save.';
+          workshop.prepend(error);
+          return;
+        }
+        cargoTrain.setWagons(wagons);
+        refreshWorkshop();
+      };
+      workshop.append(install);
     }
     const chips=foundEquipment.filter(e=>e.kind==='ic-chip').length;
     const dismantle=document.createElement('button');
