@@ -16,7 +16,8 @@ export function advanceDrillHazard(hazard: DrillHazard, now: number, drilling: b
   if (hazard.phase === 'failed') return hazard;
   if (hazard.phase === 'clearing') return hazard;
   if (now > hazard.deadline) return { ...hazard, phase: 'failed' };
-  if (!drilling) return { ...hazard, phase: 'clearing', clearedAt: now + HAZARD_CLEAR_MS };
+  // Do not auto-clear in the same instant the hazard is discovered.
+  if (!drilling && now > hazard.detectedAt) return { ...hazard, phase: 'clearing', clearedAt: now + HAZARD_CLEAR_MS };
   return hazard;
 }
 /** The UI can remove a clearing hazard after this timestamp. */
