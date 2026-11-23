@@ -47,3 +47,9 @@ test('missed rear acid destroys cargo without drill damage', () => {
  assert.deepEqual(hazardFailureEffect(failed,.8,1000),{drillDurabilityLoss:0,cargoLost:true});
  assert.throws(()=>hazardFailureEffect(discoverDrillHazard('acid','rear',0),.1,1000));
 });
+
+test('a hazard cannot self-clear at discovery time', () => {
+ const hazard=discoverDrillHazard('acid','rear',1000);
+ assert.equal(advanceDrillHazard(hazard,1000,false).phase,'warning');
+ assert.equal(advanceDrillHazard(hazard,1001,false).phase,'clearing');
+});
