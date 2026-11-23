@@ -143,7 +143,7 @@ export function startInfinitePreview():void {
     const moveY=vertical*speed;
     // Probe a small player-width tunnel, not only a single center ray.
     let blocked=false;
-    if(autoAdvance){
+    if(autoAdvance&&forward>0){
       const direction=new T.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
       const right=new T.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
       const objects=[...stream.meshes.values()];
@@ -164,7 +164,7 @@ export function startInfinitePreview():void {
     const candidate=new T.Vector3(camera.position.x+moveX,camera.position.y,camera.position.z+moveZ);
     const nextChunk=chunkKey([Math.floor(candidate.x/16),Math.floor(candidate.y/16),Math.floor(candidate.z/16)]);
     const chunkReady=stream.stream.loaded.has(nextChunk);
-    if(!autoAdvance||(!blocked&&chunkReady)){
+    if(!autoAdvance||forward<=0||(!blocked&&chunkReady)){
       camera.position.x+=moveX;
       camera.position.z+=moveZ;
     }
