@@ -1,3 +1,4 @@
+import { MICRO_GRAVITY_DIRECTION_THRESHOLD } from './chunkMicroGravity.ts';
 import type { Vec3 } from './zeroGravityMovement.ts';
 export type GravityOrientation = Readonly<{ yaw: number; pitch: number }>;
 /** Turn the machine's forward (-Z) axis toward the local gravity vector. */
@@ -7,7 +8,7 @@ export function faceMicroGravity(
   if (![current.yaw,current.pitch,...gravity,dt].every(Number.isFinite)||dt<0||dt>0.1)
     throw Error('Invalid orientation input');
   const length=Math.hypot(...gravity);
-  if(length<0.008||dt===0)return current;
+  if(length<MICRO_GRAVITY_DIRECTION_THRESHOLD||dt===0)return current;
   // Near vertical gravity has no meaningful yaw; retain heading to prevent spinning.
   const horizontal=Math.hypot(gravity[0],gravity[2]);
   const targetYaw=horizontal<length*0.05?current.yaw:Math.atan2(-gravity[0],-gravity[2]);
