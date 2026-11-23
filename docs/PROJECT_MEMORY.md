@@ -409,3 +409,8 @@
 - `src/microGravityOrientation.ts`: yaw/pitch 축별 제한을 합성 각변화량 `Math.hypot(yawStep,pitchStep)` 제한으로 변경, 0.9 rad/s 유지.
 - 대각선 중력 방향 세 가지에서 프레임별 합성 회전량 제한을 검증하는 테스트 추가.
 - 실제 CI/전체 빌드/모바일 실기기 검증 미확인. main/Pages 변경 없음.
+
+## 수직에 가까운 중력 자동 회전 목표 제한 (2026-11-23)
+- `faceMicroGravity`에서 targetPitch를 카메라 허용 범위 ±1.5로 먼저 제한한 후 합성 회전 속도 예산 배분.
+- 수직에 가까운 중력 방향에서 yaw=-π/4, pitch=1.5로 수렴하는 회귀 테스트 추가.
+- CI/전체 빌드/모바일 검증 미확인, 공개 main/Pages 미변경.
