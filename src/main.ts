@@ -1,6 +1,6 @@
 import { microGravityWorldSeed } from './microGravitySeed.ts';
 import { faceMicroGravity } from './microGravityOrientation';
-import { microGravityAt, MICRO_GRAVITY_MAX } from './chunkMicroGravity';
+import { microGravityAt, MICRO_GRAVITY_MAX, MICRO_GRAVITY_DIRECTION_THRESHOLD } from './chunkMicroGravity';
 import { INITIAL_DRIFT, microGravityDrift } from './microGravityDrift';
 import { INITIAL_MEMORY, advanceMemory, memoryMiningEvent } from './miningMachineMemory';
 import { machineDropReaction } from './miningMachinePersonality';
@@ -289,7 +289,7 @@ if(zeroGravityEnabled&&microGravityEnabled&&!document.hidden&&document.hasFocus(
     const dominant=Math.abs(g[0])>=Math.abs(g[1])&&Math.abs(g[0])>=Math.abs(g[2])
       ?(g[0]>=0?0:1):Math.abs(g[1])>=Math.abs(g[2])
       ?(g[1]>=0?2:3):(g[2]>=0?4:5);
-    microGravityIndicator.textContent=strength<0.008?'Micro G '+(strength/MICRO_GRAVITY_MAX*100).toFixed(0)+'% · Neutral':'Micro G '+(strength/MICRO_GRAVITY_MAX*100).toFixed(0)+'% '+directions[dominant];
+    microGravityIndicator.textContent=strength<MICRO_GRAVITY_DIRECTION_THRESHOLD?'Micro G '+(strength/MICRO_GRAVITY_MAX*100).toFixed(0)+'% · Neutral':'Micro G '+(strength/MICRO_GRAVITY_MAX*100).toFixed(0)+'% '+directions[dominant];
   }
   const drift=microGravityDrift(microDrift,microGravitySeed,
     [camera.position.x,camera.position.y,camera.position.z],dt);
