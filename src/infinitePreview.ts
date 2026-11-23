@@ -163,8 +163,22 @@ export function startInfinitePreview():void {
       button.onclick=()=>{
         const result=fuseMinerals(stock,recipe,Math.random());
         if(!result)return;
+        // Commit the random result to durable storage before showing it as settled.
+        const previous=stock;
         stock=result.stock;
-        try{persistMachine();saveFailed=false}catch{saveFailed=true;nextSaveRetryAt=performance.now()+2000}
+        try{
+          persistMachine();
+          saveFailed=false;
+        }catch{
+          stock=previous;
+          saveFailed=true;
+          nextSaveRetryAt=performance.now()+2000;
+          const error=document.createElement('p');
+          error.setAttribute('role','alert');
+          error.textContent='Storage unavailable: fusion cancelled, no minerals consumed.';
+          workshop.prepend(error);
+          return;
+        }
         refreshWorkshop();
         const notice=document.createElement('p');
         notice.setAttribute('role','status');
