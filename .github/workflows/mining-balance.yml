@@ -69,6 +69,8 @@ jobs:
         run: node --experimental-strip-types --test tests/infinite-chunk-coordinates.test.mjs
       - name: Test infinite chunk terrain
         run: node --experimental-strip-types --test tests/infinite-chunk-terrain.test.mjs
+      - name: Test recovered equipment drops
+        run: node --experimental-strip-types --test tests/infinite-equipment-drops.test.mjs
       - name: Test equipment-only save policy
         run: node --experimental-strip-types --test tests/infinite-save-policy.test.mjs
       - name: Test drill repairs
