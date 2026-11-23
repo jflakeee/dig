@@ -7,7 +7,6 @@ import {createCargoTrain} from './infiniteCargoTrainView.ts';
 import {cargoAmount,cargoCapacity,cargoSpeed,canStore,wagonCost,engineCost,MAX_WAGONS,MAX_ENGINE} from './infiniteCargoTrain.ts';
 import {mineralAt,miningDuration,DRILLS,emptyStock,craft,bestCraftable,drillCountCost,rangeCost,canCraft,type DrillTier,type DrillState,type Stock} from './infiniteDrillEconomy.ts';
 import {InfiniteChunkScene} from './infiniteChunkScene.ts';
-import {InfiniteMiningSave} from './infiniteMiningSave.ts';
 import {infiniteChunkMesh,disposeInfiniteChunkMesh} from './infiniteChunkMesh.ts';
 import {chunkKey} from './infiniteChunkCoordinates.ts';
 import {voxelIndex,VOXEL_METERS,CHUNK_VOXELS_PER_AXIS} from './infiniteChunkTerrain.ts';
@@ -27,14 +26,13 @@ export function startInfinitePreview():void {
   scene.add(new T.HemisphereLight(0x99b5d9,0x23232a,1.5));
   const lamp=new T.PointLight(0xffe5bd,25,30);
   camera.add(lamp);scene.add(camera);
-  const save=new InfiniteMiningSave(localStorage,20261123);
-  save.load();
-  const stream=new InfiniteChunkScene(scene,20261123,2,(coord,terrain)=>save.apply(coord,terrain));
+  // Terrain is session-only: revisiting/reloading a chunk restores its original voxels.
+  const stream=new InfiniteChunkScene(scene,20261123,2);
   const status=document.createElement('div');
   status.style.cssText='position:fixed;top:12px;left:12px;background:#101820d9;padding:12px;border-radius:8px;color:white;pointer-events:none;z-index:5';
   status.textContent='Infinite world preview · WASD move · Q/E vertical · drag to look · mining machine autosave (F/Drill)';
   document.body.append(status);
-  let collected=[...save.edits.values()].reduce((total,indices)=>total+indices.size,0);
+  let collected=0;
   let stock:Stock=emptyStock();
   let drill:DrillState={tier:0,durability:DRILLS[0].durability};
   let drillCount=1,drillRange=0;
@@ -48,9 +46,9 @@ export function startInfinitePreview():void {
   if(restored){
     stock=restored.stock;drill=restored.drill;drillCount=restored.drillCount;drillRange=restored.drillRange;
     wagons=restored.wagons;engineLevel=restored.engineLevel;queue.push(...restored.queue);
-    crafting=restored.crafting;cargoTrain.setWagons(wagons);
+    crafting=restored.crafting;collected=restored.collected??0;cargoTrain.setWagons(wagons);
   }
-  const persistMachine=()=>saveMachine(localStorage,20261123,{stock,drill,drillCount,drillRange,wagons,engineLevel,queue,crafting},performance.now());
+  const persistMachine=()=>saveMachine(localStorage,20261123,{stock,drill,drillCount,drillRange,wagons,engineLevel,queue,crafting,collected},performance.now());
   const ensureDrill=(now:number)=>{
     if(crafting&&now>=crafting.readyAt){
       const result=crafting.paid?{stock,drill:{tier:crafting.tier,durability:DRILLS[crafting.tier].durability}}:craft(stock,crafting.tier);
@@ -65,7 +63,7 @@ export function startInfinitePreview():void {
   let saveFailed=false;
   let nextSaveRetryAt=0;
   const flushOnExit=()=>{
-    try{save.flush();persistMachine();saveFailed=false}catch{saveFailed=true}
+    try{persistMachine();saveFailed=false}catch{saveFailed=true}
   };
   addEventListener('pagehide',flushOnExit);
   document.addEventListener('visibilitychange',()=>{
@@ -104,7 +102,6 @@ export function startInfinitePreview():void {
     drill={...drill,durability:drill.durability-1};
     stock[mineral]++;
     record.terrain[index]=0;
-    save.mark(coord,index);
     collected++;
     try{save.flush();persistMachine();saveFailed=false}catch{saveFailed=true;nextSaveRetryAt=performance.now()+2000}
     scene.remove(mesh);disposeInfiniteChunkMesh(mesh);
@@ -423,7 +420,7 @@ export function startInfinitePreview():void {
     if(frame%60===0){try{persistMachine()}catch{saveFailed=true;nextSaveRetryAt=now+2000}}
     // Retry transient storage errors without requiring another block to be mined.
     if(saveFailed&&now>=nextSaveRetryAt){
-      try{save.flush();persistMachine();saveFailed=false}catch{nextSaveRetryAt=now+2000}
+      try{persistMachine();saveFailed=false}catch{nextSaveRetryAt=now+2000}
     }
     // Throttle expensive chunk generation to once every four frames.
     if(frame++%4===0){
