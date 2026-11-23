@@ -6,7 +6,7 @@ export function equipRecoveredDrill(current:DrillState,equipment:EquipmentDrop[]
   {drill:DrillState;equipment:EquipmentDrop[]}|null{
   if(!Number.isInteger(index)||index<0||index>=equipment.length)return null;
   const found=equipment[index];
-  if(found.kind!=='drill'||found.durability<=0||current.durability<=0)return null;
+  if(found.kind!=='drill'||found.durability<=0)return null;
   return {
     drill:{tier:found.tier as DrillState['tier'],durability:found.durability},
     equipment:equipment.map((item,i)=>i===index?{
