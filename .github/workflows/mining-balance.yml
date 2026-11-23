@@ -39,6 +39,10 @@ on:
       - 'tests/mining-machine-propulsion.test.mjs'
       - '.github/workflows/mining-balance.yml'
   workflow_dispatch:
+# Avoid burning runner time on superseded commits in the active feature branch.
+concurrency:
+  group: mining-balance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   simulate:
     runs-on: ubuntu-latest
