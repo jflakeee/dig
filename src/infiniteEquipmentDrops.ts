@@ -1,6 +1,6 @@
 import {DRILLS,type DrillTier,type Mineral} from './infiniteDrillEconomy.ts';
 
-export const DROP_KINDS=['drill','lamp','warehouse','wagon','engine','drill-mount','drill-range','mineral-pile'] as const;
+export const DROP_KINDS=['drill','lamp','warehouse','wagon','engine','drill-mount','drill-range','mineral-pile','ic-chip'] as const;
 export type DropKind=typeof DROP_KINDS[number];
 export type EquipmentDrop={kind:Exclude<DropKind,'mineral-pile'>;tier:number;durability:number;maxDurability:number};
 export type MineralPileDrop={kind:'mineral-pile';mineral:Mineral;amount:number};
@@ -21,3 +21,6 @@ export function rollEquipmentDrop(roll:number,kindRoll:number,wearRoll:number):M
   return {kind,tier,durability,maxDurability};
 }
 export const DISCOVERY_STORY='How was this equipment made down here? ... Strange. The thought fades almost immediately.';
+
+/** IC chips cannot be equipped or crafted; dismantling yields only minerals. */
+export const IC_CHIP_SALVAGE={copper:3,iron:2} as const;
