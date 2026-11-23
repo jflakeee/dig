@@ -82,3 +82,12 @@ test('automatic orientation never exceeds the safe pitch range',()=>{
     assert.ok(facing.pitch<=1.5&&facing.pitch>=-1.5);
   }
 });
+
+test('combined yaw and pitch rotation stays within the angular speed cap',()=>{
+  const start={yaw:0,pitch:0};
+  for(const gravity of [[0.1,0.1,0.1],[-0.1,-0.1,0.1],[0.1,0.1,-0.1]]){
+    const dt=0.04;
+    const next=faceMicroGravity(start,gravity,dt);
+    assert.ok(Math.hypot(next.yaw-start.yaw,next.pitch-start.pitch)<=0.9*dt+1e-12);
+  }
+});
