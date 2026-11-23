@@ -30,8 +30,10 @@ export function startInfinitePreview():void {
   let collected=[...save.edits.values()].reduce((total,indices)=>total+indices.size,0);
   const raycaster=new T.Raycaster();
   raycaster.far=5;
-  const mine=()=>{
-    raycaster.setFromCamera(new T.Vector2(0,0),camera);
+  const mine=(horizontal=false)=>{
+    if(horizontal){
+      raycaster.set(camera.position,new T.Vector3(-Math.sin(yaw),0,-Math.cos(yaw)));
+    }else raycaster.setFromCamera(new T.Vector2(0,0),camera);
     const hit=raycaster.intersectObjects([...stream.meshes.values()],false)[0];
     if(!hit?.face)return;
     const mesh=hit.object as T.Mesh;
@@ -85,7 +87,7 @@ export function startInfinitePreview():void {
   const mineButton=document.createElement('button');
   mineButton.textContent='⛏ Mine';
   mineButton.style.cssText='position:fixed;right:16px;bottom:20px;min-height:52px;min-width:80px;z-index:7;touch-action:manipulation';
-  mineButton.addEventListener('click',mine);
+  mineButton.addEventListener('click',()=>mine());
   document.body.append(mineButton);
   const keys=new Set<string>();
   const down=(e:KeyboardEvent)=>{if(e.key.toLowerCase()==='f'&&!e.repeat)mine();if(e.key.toLowerCase()==='r'&&!e.repeat)toggleAutoMine();if(e.key.toLowerCase()==='t'&&!e.repeat)toggleAdvance();keys.add(e.key.toLowerCase());if(['w','a','s','d','q','e'].includes(e.key.toLowerCase()))e.preventDefault()};
@@ -144,7 +146,7 @@ export function startInfinitePreview():void {
     camera.position.y+=moveY;
     // Automatically mine only the closest block directly ahead, at a bounded rate.
     if(autoMine&&now>=nextAutoMineAt){
-      mine();
+      mine(autoAdvance);
       nextAutoMineAt=now+350;
     }
     // Throttle expensive chunk generation to once every four frames.
