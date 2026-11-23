@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {rollEquipmentDrop,DROP_CHANCE,DROP_KINDS} from '../src/infiniteEquipmentDrops.ts';
+import {rollEquipmentDrop,DROP_CHANCE,DROP_KINDS,IC_CHIP_SALVAGE} from '../src/infiniteEquipmentDrops.ts';
 import {saveMachine,loadMachine} from '../src/infiniteMachineSave.ts';
 
 test('equipment only drops below probability threshold and is worn',()=>{
@@ -23,4 +23,12 @@ test('found equipment persists independently of mined chunks',()=>{
  saveMachine(storage,20261123,state,100);
  assert.deepEqual(loadMachine(storage,20261123,200).foundEquipment,foundEquipment);
  assert.equal(data.size,1);
+});
+
+test('IC chip is a salvage-only mining drop',()=>{
+ const index=DROP_KINDS.indexOf('ic-chip');
+ assert.ok(index>=0);
+ const chip=rollEquipmentDrop(0,(index+.01)/DROP_KINDS.length,.5);
+ assert.equal(chip.kind,'ic-chip');
+ assert.deepEqual(IC_CHIP_SALVAGE,{copper:3,iron:2});
 });
