@@ -67,7 +67,18 @@ try {
   assert.ok(restored, 'restore should persist the validated train save');
   assert.equal(JSON.parse(restored).version, 1);
   assert.deepEqual(pageErrors, []);
-  console.log('4D share-code copy, invalid-code rejection, manual-copy fallback and restore passed');
+
+  page.once('dialog', async (dialog) => {
+    assert.match(dialog.message(), /처음부터 다시 시작/);
+    await dialog.accept();
+  });
+  await Promise.all([
+    page.waitForNavigation(),
+    page.getByRole('button', { name: '처음부터 다시 시작' }).click(),
+  ]);
+  assert.equal(await page.evaluate((key) => localStorage.getItem(key), saveKey), null);
+  assert.equal(await page.locator('#reconnect-line').isHidden(), true);
+  console.log('4D share/restore and restart-from-beginning reset passed');
 } finally {
   await browser.close();
 }
