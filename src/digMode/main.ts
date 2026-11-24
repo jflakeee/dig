@@ -359,7 +359,7 @@ binding.start(renderer, () => [], (frame) => {
   }, targets);
 
   // The automatic drill keeps pushing gently; collision stops it at the rock face.
-  binding.setAutonomousForward(autoMine.decision.mode === 'blocked' || autoMine.decision.mode === 'paused' ? 0 : 0.45);
+  binding.setAutonomousForward(autoMine.decision.state.mode === 'blocked' || autoMine.decision.state.mode === 'paused' ? 0 : 0.45);
 
   if (autoMine.mined.length > 0) {
     for (const mineral of autoMine.mined) {
@@ -367,7 +367,7 @@ binding.start(renderer, () => [], (frame) => {
     }
     persistTrainState();
   }
-  if (autoMine.decision.mode === 'mining' && elapsed - lastDrillSound > 0.14) {
+  if (autoMine.decision.state.mode === 'mining' && elapsed - lastDrillSound > 0.14) {
     const ramp = 0.25 + Math.min(1.25, elapsed / 4);
     digSound('drill', ramp);
     lastDrillSound = elapsed;
