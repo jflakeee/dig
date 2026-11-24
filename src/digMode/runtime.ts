@@ -31,6 +31,31 @@ export type DigModeMiningResult = Readonly<{
   refreshedNeighborChunks: number;
 }>;
 
+export type DigModeMovementInput = Readonly<{
+  position: LocalPosition;
+  yaw: number;
+  pitch: number;
+  forward: number;
+  strafe: number;
+  vertical: number;
+  deltaSeconds: number;
+  radius: number;
+  thrustAcceleration: number;
+  maximumSpeed: number;
+  passageFields: readonly PortalGravityField[];
+}>;
+
+export type DigModeMovementResult = Readonly<{
+  position: LocalPosition;
+  velocity: readonly [number, number, number];
+  collision: SphereCollisionResult;
+}>;
+
+export type DigModeAutoMiningFrame = Readonly<{
+  decision: AutoMineDecision;
+  mined: readonly SessionMineral[];
+}>;
+
 /**
  * Runtime coordinator for the isolated 4D mode. The host game loop calls
  * updateFrame; rendering and input remain owned by the host application.
