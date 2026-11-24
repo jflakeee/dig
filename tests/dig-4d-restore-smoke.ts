@@ -12,7 +12,7 @@ try {
     await mobile.addInitScript((roll) => { Math.random = () => roll; }, sample);
     await mobile.goto('http://127.0.0.1:4173/dig/dig-4d.html');
     await mobile.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('수집:'));
-    assert.equal((await mobile.locator('#status').textContent())?.includes('미세중력 감지'), expected);
+    assert.equal(await mobile.locator('#passage-sensor').isVisible(), expected);
     await mobile.close();
   }
   const page = await browser.newPage({ viewport: { width: 1000, height: 720 } });

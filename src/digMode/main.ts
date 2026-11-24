@@ -14,6 +14,7 @@ import { getReconnectMemoryDialogue } from './reconnectMemoryDialogue';
 
 const game = document.querySelector<HTMLElement>('#game')!;
 const status = document.querySelector<HTMLElement>('#status')!;
+const passageSensor = document.querySelector<HTMLElement>('#passage-sensor')!;
 const reconnectLine = document.querySelector<HTMLElement>('#reconnect-line')!;
 const upgradeButton = document.querySelector<HTMLButtonElement>('#upgrade')!;
 const addDrillButton = document.querySelector<HTMLButtonElement>('#add-drill')!;
@@ -383,10 +384,10 @@ binding.start(renderer, () => passageAt(binding.getPosition())?.fields ?? [], (f
   }
 
   const collectionSummary = [...collected.entries()].map(([mineral, amount]) => `${mineral} ${amount}`).join(', ');
-  const miningStatus = collectionSummary
+  status.textContent = collectionSummary
     ? `자동 채굴 중. 수집: ${collectionSummary}`
     : '자동 채굴 중. 주변 광물을 탐색하고 있습니다.';
-  status.textContent = passage ? `센서 · 소형 통로 미세중력 감지 | ${miningStatus}` : miningStatus;
+  passageSensor.hidden = !passage;
 });
 
 const reconnectDialogue = getReconnectMemoryDialogue(trainSave.isReconnect);
