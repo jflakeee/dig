@@ -8,6 +8,8 @@ import {
 } from './chunkRecord';
 import { mineralForExposure, type BaseMineral } from './exposedMineral';
 
+const BASE_MINERALS = new Set<BaseMineral>(['rock', 'coal', 'iron', 'gold', 'rare']);
+
 export type ExposureResult = Readonly<{
   resource: ExposedResourceId;
   mineral: BaseMineral;
@@ -33,6 +35,7 @@ export function resolveVoxelExposure(
   const key = String(input.voxelId);
   const existing = record.exposedResources[key];
   if (existing !== undefined) {
+    if (!BASE_MINERALS.has(existing as BaseMineral)) throw new Error('Existing resource is not a base mineral');
     return { resource: existing, mineral: existing as BaseMineral, newlyRecorded: false };
   }
   const mineral = mineralForExposure(input);
