@@ -35,6 +35,14 @@ try {
   });
 
   await page.goto('http://127.0.0.1:4173/dig/dig-4d.html');
+  const menuToggle = page.getByRole('button', { name: '메뉴', exact: true });
+  await menuToggle.waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#menu-items').isHidden(), true);
+  for (const selector of ['#upgrade', '#add-drill', '#restore-toggle', '#reset-record']) {
+    assert.equal(await page.locator(selector).isHidden(), true);
+  }
+  await menuToggle.click();
+  assert.equal(await page.locator('#menu-items').isVisible(), true);
   await page.getByRole('button', { name: '공유 코드' }).waitFor();
   await page.getByRole('button', { name: '공유 코드' }).click();
   await page.locator('#restore-panel').waitFor({ state: 'visible' });
@@ -68,17 +76,30 @@ try {
   assert.equal(JSON.parse(restored).version, 1);
   assert.deepEqual(pageErrors, []);
 
-  page.once('dialog', async (dialog) => {
+  const resetPage = await browser.newPage({ viewport: { width: 1000, height: 720 } });
+  await resetPage.addInitScript((key) => {
+    localStorage.setItem(key, JSON.stringify({
+      version: 1,
+      equipment: { drillEnhancement: 2, drillCount: 3 },
+      inventory: { rock: 0, coal: 4, iron: 0, gold: 0, rare: 0 },
+      research: [],
+      codex: [],
+    }));
+  }, saveKey);
+  await resetPage.goto('http://127.0.0.1:4173/dig/dig-4d.html');
+  await resetPage.getByRole('button', { name: '메뉴', exact: true }).click();
+  resetPage.once('dialog', async (dialog) => {
     assert.match(dialog.message(), /처음부터 다시 시작/);
     await dialog.accept();
   });
   await Promise.all([
-    page.waitForNavigation(),
-    page.getByRole('button', { name: '처음부터 다시 시작' }).click(),
+    resetPage.waitForNavigation(),
+    resetPage.getByRole('button', { name: '처음부터 다시 시작' }).click(),
   ]);
-  assert.equal(await page.evaluate((key) => localStorage.getItem(key), saveKey), null);
-  assert.equal(await page.locator('#reconnect-line').isHidden(), true);
-  console.log('4D share/restore and restart-from-beginning reset passed');
+  assert.equal(await resetPage.evaluate((key) => localStorage.getItem(key), saveKey), null);
+  assert.equal(await resetPage.locator('#reconnect-line').isHidden(), true);
+  console.log('4D menu disclosure, share/restore and restart reset passed');
+  await resetPage.close();
 } finally {
   await browser.close();
 }
