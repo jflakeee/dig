@@ -11,7 +11,7 @@
     body{background:#171411;color:#fff;font:15px system-ui,sans-serif;touch-action:none}
     #game{position:relative}
     #game canvas{display:block;width:100%;height:100%}
-    #actions{position:absolute;z-index:8;top:max(16px,env(safe-area-inset-top));right:max(16px,env(safe-area-inset-right));display:grid;gap:10px}\n    #menu-items{display:grid;gap:10px}\n    #menu-items[hidden]{display:none}
+    #actions{position:absolute;z-index:8;top:max(16px,env(safe-area-inset-top));right:max(16px,env(safe-area-inset-right));display:grid;gap:10px}\n    #menu-items{display:grid;gap:10px}\n    #action-items{display:grid;gap:10px}\n    #action-items[hidden]{display:none}\n    #menu-items[hidden]{display:none}
     #actions button{min-width:132px;min-height:48px;padding:10px 14px;border:1px solid #d6a65a;border-radius:12px;background:#30261be8;color:#ffe4ae;font:700 14px system-ui;touch-action:manipulation}
     #actions button:active{transform:scale(.97);background:#49351f}
     #restore-panel{position:absolute;z-index:12;top:50%;left:50%;transform:translate(-50%,-50%);width:min(92vw,560px);max-height:calc(100dvh - 32px);overflow:auto;padding:18px;border:1px solid #d6a65a;border-radius:16px;background:#201b16f5;color:#fff3dc;box-shadow:0 16px 60px #000b;touch-action:pan-y}
@@ -27,7 +27,7 @@
     @keyframes fade-line{0%,65%{opacity:1}100%{opacity:0}}
     #passage-sensor{position:absolute;z-index:7;top:max(16px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));max-width:calc(100% - 175px);padding:6px 9px;background:#171411dc;color:#ffe4ae;border-radius:6px;font-size:13px;pointer-events:none}
     #status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-    @media(max-height:430px){#actions{top:8px;right:8px;gap:6px}#actions button{min-height:40px;padding:6px 9px}#menu-items{gap:6px}}
+    @media(max-height:430px){#actions{top:8px;right:8px;gap:6px}#actions button{min-height:40px;padding:6px 9px}#menu-items,#action-items{gap:6px}}
   </style>
 </head>
 <body>
@@ -35,8 +35,10 @@
     <div id="actions">
       <button id="menu-toggle" type="button" aria-expanded="false" aria-controls="menu-items">메뉴</button>
       <div id="menu-items" hidden>
-        <button id="upgrade" type="button">드릴 강화 · Lv 0</button>
-        <button id="add-drill" type="button">드릴 추가 · 1대</button>
+        <div id="action-items">
+          <button id="upgrade" type="button">드릴 강화 · Lv 0</button>
+          <button id="add-drill" type="button">드릴 추가 · 1대</button>
+        </div>
         <button id="restore-toggle" type="button" aria-expanded="false" aria-controls="restore-panel">공유 코드</button>
         <button id="reset-record" type="button">처음부터 다시 시작</button>
       </div>
