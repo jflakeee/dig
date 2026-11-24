@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { chunkKey, DIG_VOXELS_PER_AXIS, type ChunkCoordinate } from './chunkCoordinates';
+import { chunkKey, DIG_VOXEL_SIZE_METERS, DIG_VOXELS_PER_AXIS, type ChunkCoordinate } from './chunkCoordinates';
 import {
   buildChunkVoxelSectionGroup,
   type ChunkMineralLookup,
@@ -25,7 +25,7 @@ export class ChunkSectionMeshSet {
     private readonly lookup: ChunkMineralLookup,
     private readonly materials: Readonly<Record<SessionMineral, THREE.Material>>,
   ) {
-    const worldSize = DIG_VOXELS_PER_AXIS * 0.5;
+    const worldSize = DIG_VOXELS_PER_AXIS * DIG_VOXEL_SIZE_METERS;
     this.root.position.set(chunk.x * worldSize, chunk.y * worldSize, chunk.z * worldSize);
     for (let sy = 0; sy < SECTIONS_PER_AXIS; sy++) {
       for (let sz = 0; sz < SECTIONS_PER_AXIS; sz++) {
