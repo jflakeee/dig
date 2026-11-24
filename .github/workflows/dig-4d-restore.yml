@@ -24,3 +24,4 @@ jobs:
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4173/dig/dig-4d.html && break; sleep 1; done
           node --experimental-strip-types tests/dig-4d-restore-smoke.ts
           node --experimental-strip-types tests/dig-4d-portal-generation.ts
+          node --experimental-strip-types tests/dig-4d-session-passage.test.ts
