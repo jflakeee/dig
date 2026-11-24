@@ -1,7 +1,7 @@
 name: DIG 4D restore smoke
 on:
   push:
-    branches: [feat/dig-4d-mode-foundation-20261124]
+    branches: [main, feat/dig-4d-mode-foundation-20261124]
   workflow_dispatch:
 permissions:
   contents: read
