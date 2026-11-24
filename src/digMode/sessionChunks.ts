@@ -28,6 +28,12 @@ export class SessionChunks {
     return { ...state };
   }
 
+  /** Read state without creating a voxel; used for neighboring chunk faces. */
+  readVoxel(chunk: ChunkCoordinate, voxel: VoxelCoordinate): ExposedVoxel | null {
+    const state = this.chunks.get(chunkKey(chunk))?.get(voxelKey(voxel));
+    return state ? { ...state } : null;
+  }
+
   /**
    * Mine an exposed voxel once. Returns null if it was never exposed or was
    * already mined, preventing duplicate rewards during the current session.
