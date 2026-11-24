@@ -28,9 +28,10 @@ const trainSave = openTrainSave({
 });
 let enhancement = trainSave.state.equipment.drillEnhancement;
 let drillCount = trainSave.state.equipment.drillCount;
-const collected = new Map<SessionMineral, number>(
-  (['rock', 'coal', 'iron', 'gold', 'rare'] as const).map((mineral) => [mineral, trainSave.state.inventory[mineral]]),
-);
+const collected = new Map<SessionMineral, number>();
+for (const mineral of ['rock', 'coal', 'iron', 'gold', 'rare'] as const) {
+  collected.set(mineral, trainSave.state.inventory[mineral]);
+}
 const runtime = new DigModeRuntime(materials, { aspect: innerWidth / innerHeight });
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
