@@ -1,5 +1,6 @@
 import { chunkKey, DIG_VOXELS_PER_AXIS, type ChunkCoordinate } from './chunkCoordinates';
 import { buildChunkVoxelGroup, type ChunkMineralLookup } from './chunkVoxelMesh';
+import { ChunkSectionMeshSet } from './chunkSectionMeshSet';
 import * as THREE from 'three';
 import { SessionChunks, type SessionMineral } from './sessionChunks';
 
@@ -49,4 +50,17 @@ export function createSessionChunkMineralLookup(
       : session.readVoxel(chunk, local);
     return state && !state.mined ? state.mineral : null;
   };
+}
+
+/** Build a partially refreshable section mesh set from transient session data. */
+export function buildSessionChunkSectionMeshes(
+  session: SessionChunks,
+  chunk: ChunkCoordinate,
+  materials: Readonly<Record<SessionMineral, THREE.Material>>,
+): ChunkSectionMeshSet {
+  return new ChunkSectionMeshSet(
+    chunk,
+    createSessionChunkMineralLookup(session, chunk),
+    materials,
+  );
 }
