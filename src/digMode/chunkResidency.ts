@@ -6,9 +6,9 @@ import {
   distanceToChunkMeters,
 } from './chunkResetPolicy';
 
-export type ChunkResidency = 'active' | 'nearby' | 'persisted' | 'visible-out-of-range' | 'reset-eligible';
+export type ChunkResidency = 'active' | 'nearby' | 'retained' | 'visible-out-of-range' | 'reset-eligible';
 
-/** Classifies lifecycle only; callers must persist before releasing chunk data. */
+/** Classifies transient session residency; distant chunks may be discarded. */
 export function classifyChunkResidency(
   position: LocalPosition,
   chunk: ChunkCoordinate,
@@ -17,6 +17,6 @@ export function classifyChunkResidency(
   const distance = distanceToChunkMeters(position, chunk);
   if (distance <= DIG_CHUNK_ACTIVE_DISTANCE_METERS) return 'active';
   if (distance <= DIG_CHUNK_UNLOAD_DISTANCE_METERS) return 'nearby';
-  if (distance <= DIG_CHUNK_RESET_DISTANCE_METERS) return 'persisted';
+  if (distance <= DIG_CHUNK_RESET_DISTANCE_METERS) return 'retained';
   return visible ? 'visible-out-of-range' : 'reset-eligible';
 }
