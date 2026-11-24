@@ -86,15 +86,15 @@ export function validateTrainSave(value: unknown): TrainSaveState {
 
   const drillEnhancement = value.equipment.drillEnhancement;
   const drillCount = value.equipment.drillCount;
-  if (!Number.isInteger(drillEnhancement) || drillEnhancement < 0 || drillEnhancement > 5 ||
-      !Number.isInteger(drillCount) || drillCount < 1 || drillCount > 5) {
+  if (typeof drillEnhancement !== 'number' || !Number.isInteger(drillEnhancement) || drillEnhancement < 0 || drillEnhancement > 5 ||
+      typeof drillCount !== 'number' || !Number.isInteger(drillCount) || drillCount < 1 || drillCount > 5) {
     throw new Error('Invalid train equipment');
   }
 
   const inventory = {} as Record<SessionMineral, number>;
   for (const mineral of ['rock', 'coal', 'iron', 'gold', 'rare'] as const) {
     const amount = value.inventory[mineral];
-    if (!Number.isSafeInteger(amount) || amount < 0) throw new Error('Invalid train inventory');
+    if (typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 0) throw new Error('Invalid train inventory');
     inventory[mineral] = amount;
   }
 
@@ -117,6 +117,6 @@ function validateIds(value: unknown): string[] {
   return [...new Set(value)];
 }
 
-function isRecord(value: unknown): value is Record<string, any> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
