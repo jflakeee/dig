@@ -13,6 +13,11 @@ import {
   ChunkSectionMeshSet,
 } from './chunkSectionMeshSet';
 import type { SessionMineral, VoxelCoordinate } from './sessionChunks';
+import { initialAutoMineState, stepAutoMine } from '../autoMineController';
+import type { AutoMineDecision, AutoMineInput, AutoMineState } from '../autoMineController';
+import { zeroGravityDisplacement } from '../zeroGravityMovement';
+import { portalGravityAcceleration } from './portalGravity';
+import type { PortalGravityField } from './portalGravity';
 import { reconcileSessionChunkStreaming } from './chunkStreaming';
 import type { ChunkStreamingFrame } from './chunkStreaming';
 import {
@@ -36,6 +41,8 @@ export class DigModeRuntime {
   readonly session: SessionChunks;
   private readonly registry: ChunkRenderRegistry;
   private readonly chunkMeshes = new Map<string, ChunkSectionMeshSet>();
+  private machineVelocity: [number, number, number] = [0, 0, 0];
+  private autoMineState: AutoMineState = initialAutoMineState();
 
   constructor(
     private readonly materials: Readonly<Record<SessionMineral, THREE.Material>>,
@@ -101,6 +108,66 @@ export class DigModeRuntime {
     };
   }
 
+  /** Advance the autonomous mining state and apply its requested voxel cuts. */
+  advanceAutomaticMining(
+    input: AutoMineInput,
+    targetVoxels: readonly Readonly<{ chunk: ChunkCoordinate; voxel: VoxelCoordinate }>[],
+  ): DigModeAutoMiningFrame {
+    const decision = stepAutoMine(this.autoMineState, input);
+    this.autoMineState = decision.state;
+    const mined: SessionMineral[] = [];
+    for (const target of targetVoxels.slice(0, decision.mineBlocks)) {
+      const result = this.mineVoxel(target.chunk, target.voxel);
+      if (result.mineral) mined.push(result.mineral);
+    }
+    return { decision, mined };
+  }
+
+  /** Move with zero-G thrusters and temporary passage gravity fields. */
+  moveMachine(input: DigModeMovementInput): DigModeMovementResult {
+    if (![input.deltaSeconds, input.thrustAcceleration, input.maximumSpeed].every(Number.isFinite) ||
+        input.deltaSeconds < 0 || input.thrustAcceleration < 0 || input.maximumSpeed <= 0) {
+      throw new Error('Invalid movement timing or speed');
+    }
+
+    const thrustDirection = zeroGravityDisplacement(
+      input.yaw, input.pitch, input.forward, input.strafe, input.vertical, 1, 1,
+    );
+    const gravity = portalGravityAcceleration(
+      [input.position.x, input.position.y, input.position.z],
+      input.passageFields,
+    );
+    const dt = input.deltaSeconds;
+    this.machineVelocity[0] += (thrustDirection[0] * input.thrustAcceleration + gravity[0]) * dt;
+    this.machineVelocity[1] += (thrustDirection[1] * input.thrustAcceleration + gravity[1]) * dt;
+    this.machineVelocity[2] += (thrustDirection[2] * input.thrustAcceleration + gravity[2]) * dt;
+
+    const speed = Math.hypot(...this.machineVelocity);
+    if (speed > input.maximumSpeed) {
+      const scale = input.maximumSpeed / speed;
+      this.machineVelocity = this.machineVelocity.map((component) => component * scale) as [number, number, number];
+    }
+
+    const proposed = {
+      x: input.position.x + this.machineVelocity[0] * dt,
+      y: input.position.y + this.machineVelocity[1] * dt,
+      z: input.position.z + this.machineVelocity[2] * dt,
+    };
+    this.loadChunk(addressChunk(proposed).chunk);
+    const collision = resolveSphereVoxelCollision(this.session, proposed, input.radius);
+
+    for (const normal of collision.contacts) {
+      const intoSurface = this.machineVelocity[0] * normal.x +
+        this.machineVelocity[1] * normal.y + this.machineVelocity[2] * normal.z;
+      if (intoSurface < 0) {
+        this.machineVelocity[0] -= normal.x * intoSurface;
+        this.machineVelocity[1] -= normal.y * intoSurface;
+        this.machineVelocity[2] -= normal.z * intoSurface;
+      }
+    }
+    return { position: collision.position, velocity: [...this.machineVelocity], collision };
+  }
+
   /** Resolve a proposed sphere position against generated session terrain. */
   resolveMachinePosition(position: LocalPosition, radius: number): SphereCollisionResult {
     return resolveSphereVoxelCollision(this.session, position, radius);
@@ -111,6 +178,8 @@ export class DigModeRuntime {
     this.registry.clear();
     this.chunkMeshes.clear();
     this.session.transitionThroughLargePassage();
+    this.machineVelocity = [0, 0, 0];
+    this.autoMineState = initialAutoMineState();
     this.loadChunk(exitChunk);
   }
 
