@@ -16,6 +16,7 @@ const game = document.querySelector<HTMLElement>('#game')!;
 const status = document.querySelector<HTMLElement>('#status')!;
 const menuToggleButton = document.querySelector<HTMLButtonElement>('#menu-toggle')!;
 const menuItems = document.querySelector<HTMLElement>('#menu-items')!;
+const actionItems = document.querySelector<HTMLElement>('#action-items')!;
 const passageSensor = document.querySelector<HTMLElement>('#passage-sensor')!;
 const reconnectLine = document.querySelector<HTMLElement>('#reconnect-line')!;
 const upgradeButton = document.querySelector<HTMLButtonElement>('#upgrade')!;
@@ -156,21 +157,30 @@ menuToggleButton.addEventListener('click', () => {
   menuToggleButton.setAttribute('aria-expanded', String(open));
 });
 
+function refreshActionAvailability(): void {
+  upgradeButton.hidden = enhancement >= 5;
+  addDrillButton.hidden = drillCount >= 5;
+  actionItems.hidden = upgradeButton.hidden && addDrillButton.hidden;
+}
+
 upgradeButton.textContent = `드릴 강화 · Lv ${enhancement}`;
 upgradeButton.disabled = restorePanelOpen || enhancement >= 5;
 addDrillButton.textContent = `드릴 추가 · ${drillCount}대`;
 addDrillButton.disabled = restorePanelOpen || drillCount >= 5;
+refreshActionAvailability();
 
 upgradeButton.addEventListener('click', () => {
   enhancement = Math.min(5, enhancement + 1);
   upgradeButton.textContent = `드릴 강화 · Lv ${enhancement}`;
   upgradeButton.disabled = enhancement >= 5;
+  refreshActionAvailability();
   persistTrainState();
 });
 addDrillButton.addEventListener('click', () => {
   drillCount = Math.min(5, drillCount + 1);
   addDrillButton.textContent = `드릴 추가 · ${drillCount}대`;
   addDrillButton.disabled = drillCount >= 5;
+  refreshActionAvailability();
   persistTrainState();
 });
 
