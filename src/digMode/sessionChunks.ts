@@ -44,6 +44,14 @@ export class SessionChunks {
     this.chunks.delete(chunkKey(chunk));
   }
 
+  /** Snapshot coordinates for the streaming controller; no world graph is stored. */
+  getLoadedChunkCoordinates(): ChunkCoordinate[] {
+    return [...this.chunks.keys()].map((key) => {
+      const [x, y, z] = key.split(',').map(Number);
+      return { x, y, z };
+    });
+  }
+
   /** A large passage starts a fresh local environment with no old map. */
   transitionThroughLargePassage(): void {
     this.chunks.clear();
