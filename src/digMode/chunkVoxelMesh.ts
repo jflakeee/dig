@@ -44,8 +44,8 @@ export function buildChunkVoxelGroup(
 }
 
 /**
- * Build a section mesh. Vertices remain chunk-local; the returned group is
- * positioned at the chunk origin and can be replaced independently.
+ * Build a section mesh with chunk-local vertices. The caller positions this
+ * group at the chunk origin; sections can then be replaced independently.
  */
 export function buildChunkVoxelSectionGroup(
   chunk: ChunkCoordinate,
