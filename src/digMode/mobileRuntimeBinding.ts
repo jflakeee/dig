@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { LocalPosition } from './chunkCoordinates';
+import { DIG_CHUNK_SIZE_METERS, type LocalPosition } from './chunkCoordinates';
 import {
   attachDigModeMobileControls,
   type DigModeMobileControls,
@@ -75,13 +75,15 @@ function visibleChunkKeys(scene: THREE.Scene, camera: THREE.PerspectiveCamera): 
     .multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
   const frustum = new THREE.Frustum().setFromProjectionMatrix(viewProjection);
   const visible = new Set<string>();
-  const chunkRadius = Math.sqrt(3) * 8;
+  const halfSize = DIG_CHUNK_SIZE_METERS / 2;
+  const chunkRadius = Math.sqrt(3) * halfSize;
 
   for (const object of scene.children) {
     const key = object.userData.digChunkKey;
     if (typeof key !== 'string') continue;
     const center = new THREE.Vector3();
     object.getWorldPosition(center);
+    center.addScalar(halfSize);
     if (frustum.intersectsSphere(new THREE.Sphere(center, chunkRadius))) visible.add(key);
   }
   return visible;
