@@ -35,9 +35,12 @@ export function buildChunkVoxelGroup(
   lookup: ChunkMineralLookup,
   materials: Readonly<Record<SessionMineral, THREE.Material>>,
 ): THREE.Group {
-  return buildChunkVoxelSectionGroup(
+  const group = buildChunkVoxelSectionGroup(
     chunk, { x: 0, y: 0, z: 0 }, DIG_VOXELS_PER_AXIS, lookup, materials,
   );
+  const chunkWorldSize = DIG_VOXEL_SIZE_METERS * DIG_VOXELS_PER_AXIS;
+  group.position.set(chunk.x * chunkWorldSize, chunk.y * chunkWorldSize, chunk.z * chunkWorldSize);
+  return group;
 }
 
 /**
@@ -106,8 +109,6 @@ export function buildChunkVoxelSectionGroup(
   }
 
   const group = new THREE.Group();
-  const chunkWorldSize = DIG_VOXEL_SIZE_METERS * DIG_VOXELS_PER_AXIS;
-  group.position.set(chunk.x * chunkWorldSize, chunk.y * chunkWorldSize, chunk.z * chunkWorldSize);
   for (const [mineral, data] of geometryData) {
     if (!data.indices.length) continue;
     const geometry = new THREE.BufferGeometry();
