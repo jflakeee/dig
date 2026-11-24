@@ -95,6 +95,11 @@ export class DigModeRuntime {
     this.loadChunk(current);
     const frame = reconcileSessionChunkStreaming(this.session, position, visibleChunkKeys);
     this.registry.reconcile(frame);
+    for (const chunk of frame.retained) {
+      const key = chunkKey(chunk);
+      this.registry.remove(chunk);
+      this.chunkMeshes.delete(key);
+    }
     for (const chunk of frame.evicted) this.chunkMeshes.delete(chunkKey(chunk));
     return frame;
   }
