@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { addressChunk, chunkKey, type ChunkCoordinate, type LocalPosition } from './chunkCoordinates';
+import { CargoCar, CARGO_RADIUS } from './cargoCar';
+import type { LargePassage } from './largePassage';
+import { DIG_CHUNK_SIZE_METERS, addressChunk, chunkKey, type ChunkCoordinate, type LocalPosition } from './chunkCoordinates';
 import {
   createDigModeRenderScene,
   type DigModeRenderScene,
@@ -64,6 +66,10 @@ export class DigModeRuntime {
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
   readonly session: SessionChunks;
+  private readonly cargo = new CargoCar();
+  private readonly cargoMesh: THREE.Mesh<THREE.SphereGeometry, THREE.Material>;
+  private towingThrough?: LargePassage;
+  private headCleared = false;
   private readonly registry: ChunkRenderRegistry;
   private readonly chunkMeshes = new Map<string, ChunkSectionMeshSet>();
   private machineVelocity: [number, number, number] = [0, 0, 0];
@@ -84,6 +90,9 @@ export class DigModeRuntime {
     this.scene = renderScene.scene;
     this.camera = renderScene.camera;
     this.session = new SessionChunks(options.random, options.portalRandom);
+    this.cargoMesh = new THREE.Mesh(new THREE.SphereGeometry(CARGO_RADIUS, 8, 6), materials.iron);
+    this.cargoMesh.visible = false;
+    this.scene.add(this.cargoMesh);
     this.registry = new ChunkRenderRegistry(this.scene);
   }
 
@@ -213,7 +222,7 @@ export class DigModeRuntime {
     const stopX = passage?.reverseContactX(input.position, proposed, input.radius);
     if (stopX !== undefined) proposed.x = stopX;
     const terrain = resolveSphereVoxelCollision(this.session, proposed, input.radius);
-    const collision = stopX === undefined ? terrain : {
+    let collision = stopX === undefined ? terrain : {
       position: terrain.position, collided: true,
       contacts: [...terrain.contacts, { x: 1, y: 0, z: 0 }],
     };
@@ -225,6 +234,25 @@ export class DigModeRuntime {
         this.machineVelocity[0] -= normal.x * intoSurface;
         this.machineVelocity[1] -= normal.y * intoSurface;
         this.machineVelocity[2] -= normal.z * intoSurface;
+      }
+    }
+    const previousCar = this.cargoMesh.visible ? this.cargoMesh.position.clone() : input.position;
+    const car = this.cargo.follow(input.position, collision.position);
+    this.cargoMesh.position.set(car.x, car.y, car.z);
+    this.cargoMesh.visible = true;
+    if (passage !== this.towingThrough || (passage && collision.position.x < passage.fields[0].center[0])) {
+      this.towingThrough = undefined;
+      this.headCleared = false;
+    }
+    if (passage?.crossesForward(input.position, collision.position, 0, input.radius)) this.towingThrough = passage;
+    if (passage && this.towingThrough === passage) {
+      if (passage.crossesForward(input.position, collision.position, 1, input.radius)) this.headCleared = true;
+      if (this.headCleared && passage.crossesForward(previousCar, car, 1, CARGO_RADIUS)) {
+        const next = { ...collision.position, x: collision.position.x + DIG_CHUNK_SIZE_METERS };
+        this.transitionThroughLargePassage(addressChunk(next).chunk);
+        this.cargo.shiftX(DIG_CHUNK_SIZE_METERS);
+        this.cargoMesh.position.x += DIG_CHUNK_SIZE_METERS;
+        collision = { ...collision, position: next };
       }
     }
     this.camera.position.set(collision.position.x, collision.position.y, collision.position.z);
@@ -243,14 +271,17 @@ export class DigModeRuntime {
     this.registry.clear();
     this.chunkMeshes.clear();
     this.session.transitionThroughLargePassage();
-    this.machineVelocity = [0, 0, 0];
-    this.lookYaw = 0;
-    this.lookPitch = 0;
+    this.towingThrough = undefined;
+    this.headCleared = false;
+    // Leave room for both vehicles before generating the destination mesh.
+    this.session.prepareArrival(exitChunk);
     this.autoMineState = initialAutoMineState();
     this.loadChunk(exitChunk);
   }
 
   dispose(): void {
+    this.scene.remove(this.cargoMesh);
+    this.cargoMesh.geometry.dispose();
     this.registry.clear();
     this.chunkMeshes.clear();
   }

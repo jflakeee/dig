@@ -77,6 +77,18 @@ export class SessionChunks {
     return { ...this.passagePresence.get(chunkKey(chunk))! };
   }
 
+  prepareArrival(chunk: ChunkCoordinate): void {
+    const voxels = this.getOrCreateChunk(chunk);
+    const key = chunkKey(chunk);
+    // The paired outlet exists independently of the new chunk's random roll.
+    const arrival = new LargePassage(chunk, true);
+    this.largePassages.set(key, arrival);
+    this.passagePresence.set(key, { ...this.passagePresence.get(key)!, large: true });
+    for (const cell of largePassageCavity()) {
+      if (cell.x >= arrival.firstExitVoxel) voxels.set(voxelKey(cell), { mineral: 'rock', mined: true });
+    }
+  }
+
   largePassageAt(chunk: ChunkCoordinate): LargePassage | undefined {
     this.getOrCreateChunk(chunk);
     return this.largePassages.get(chunkKey(chunk));

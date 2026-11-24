@@ -350,7 +350,7 @@ binding.start(renderer, () => {
   const chunk = addressChunk(binding.getPosition()).chunk;
   const small = runtime.session.smallPassageAt(chunk);
   const large = runtime.session.largePassageAt(chunk);
-  return small && large ? [...small.fields, ...large.fields] : small?.fields ?? large?.fields ?? [];
+  return small && large ? [...small.fields, ...large.gravityFields] : small?.fields ?? large?.gravityFields ?? [];
 }, (frame) => {
   const chunk = addressChunk(frame.position).chunk;
   const passage = runtime.session.smallPassageAt(chunk);

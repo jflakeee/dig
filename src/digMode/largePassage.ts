@@ -18,7 +18,10 @@ export function* largePassageCavity(): Iterable<ChunkCoordinate> {
 export class LargePassage {
   readonly fields: readonly PortalGravityField[];
 
-  constructor(chunk: ChunkCoordinate) {
+  readonly firstExitVoxel = LAST + 1;
+  readonly gravityFields: readonly PortalGravityField[];
+
+  constructor(chunk: ChunkCoordinate, readonly outletOnly = false) {
     const y = chunk.y * DIG_CHUNK_SIZE_METERS + (AXIS + 0.5) * DIG_VOXEL_SIZE_METERS;
     const z = chunk.z * DIG_CHUNK_SIZE_METERS + (AXIS + 0.5) * DIG_VOXEL_SIZE_METERS;
     this.fields = [FIRST, LAST + 1].map((index, i) => ({
@@ -28,6 +31,17 @@ export class LargePassage {
       influenceRadiusMeters: 2.5,
       accelerationMetersPerSecondSquared: 1,
     }));
+    this.gravityFields = outletOnly ? [this.fields[1]] : this.fields;
+  }
+
+  crossesForward(from: LocalPosition, to: LocalPosition, end: 0 | 1, radius: number): boolean {
+    if (this.outletOnly) return false;
+    const [x, y, z] = this.fields[end].center;
+    const plane = end === 0 ? x : x + radius;
+    if (from.x >= plane || to.x < plane) return false;
+    const t = (plane - from.x) / (to.x - from.x);
+    return Math.max(Math.abs(from.y + t * (to.y - from.y) - y),
+      Math.abs(from.z + t * (to.z - from.z) - z)) <= HALF_WIDTH - radius + 1e-5;
   }
 
   // Intersect the swept sphere with the exit aperture during reverse travel.

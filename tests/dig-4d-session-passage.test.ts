@@ -82,10 +82,21 @@ for (let i = 0; i < 420 && position.x < exitX + 0.5; i++) {
   position = runtime.moveMachine({ ...motion, position, strafe: 0 }).position;
 }
 assert.ok(position.x >= exitX + 0.5, 'gravity carries the machine completely through');
-for (let i = 0; i < 180; i++) {
-  position = runtime.moveMachine({ ...motion, position, strafe: -1 }).position;
+assert.equal(runtime.session.largePassageAt(chunk), machinePassage, 'lead alone must not reset the world');
+const marker = { x: chunk.x - 1, y: chunk.y, z: chunk.z };
+runtime.session.carveVoxelWithoutReward(marker, { x: 0, y: 0, z: 0 });
+for (let i = 0; i < 180 && position.x < exitX + 16; i++) {
+  position = runtime.moveMachine({ ...motion, position, strafe: 0 }).position;
 }
-assert.ok(Math.abs(position.x - exitX - motion.radius) < 0.001, 'reverse thrust stops at outlet');
-assert.equal(runtime.session.largePassageAt(chunk), machinePassage);
+assert.ok(position.x >= exitX + 16 + 0.95 + 0.2, 'rear of car must clear before transition');
+assert.deepEqual(runtime.session.getLoadedChunkCoordinates(), [{ ...chunk, x: chunk.x + 1 }]);
+assert.equal(runtime.session.readVoxel(marker, { x: 0, y: 0, z: 0 }), null);
+assert.equal(runtime.resolveMachinePosition(position, motion.radius).collided, false);
+const arrival = runtime.session.largePassageAt({ ...chunk, x: chunk.x + 1 })!;
+assert.deepEqual(arrival.gravityFields.map(f => f.end), ['outlet']);
+for (let i = 0; i < 180; i++) {
+  position = runtime.moveMachine({ ...motion, position, strafe: -1, passageFields: arrival.gravityFields }).position;
+}
+assert.ok(Math.abs(position.x - exitX - 16 - motion.radius) < 0.001, 'reverse thrust stops at the new outlet');
 runtime.dispose();
 material.dispose();
