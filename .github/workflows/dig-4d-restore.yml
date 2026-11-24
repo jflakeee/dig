@@ -15,7 +15,7 @@ jobs:
         with:
           node-version: 22
       - run: npm install
-      - run: npm install --no-save playwright@1.56.1
+      - run: npm install --no-save playwright@1.56.1 tsx@4.20.6
       - run: npx playwright install --with-deps chromium
       - run: npm run build -- --base=/dig/
       - name: Run 4D restore browser smoke
@@ -24,4 +24,4 @@ jobs:
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4173/dig/dig-4d.html && break; sleep 1; done
           node --experimental-strip-types tests/dig-4d-restore-smoke.ts
           node --experimental-strip-types tests/dig-4d-portal-generation.ts
-          node --experimental-strip-types tests/dig-4d-session-passage.test.ts
+          npx tsx tests/dig-4d-session-passage.test.ts
