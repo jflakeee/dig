@@ -1,5 +1,10 @@
 import type { ChunkCoordinate, LocalPosition } from './chunkCoordinates';
-import { distanceToChunkMeters } from './chunkResetPolicy';
+import {
+  DIG_CHUNK_ACTIVE_DISTANCE_METERS,
+  DIG_CHUNK_UNLOAD_DISTANCE_METERS,
+  DIG_CHUNK_RESET_DISTANCE_METERS,
+  distanceToChunkMeters,
+} from './chunkResetPolicy';
 
 export type ChunkResidency = 'active' | 'nearby' | 'persisted' | 'visible-out-of-range' | 'reset-eligible';
 
@@ -10,8 +15,8 @@ export function classifyChunkResidency(
   visible: boolean,
 ): ChunkResidency {
   const distance = distanceToChunkMeters(position, chunk);
-  if (distance <= 32) return 'active';
-  if (distance <= 64) return 'nearby';
-  if (distance <= 256) return 'persisted';
+  if (distance <= DIG_CHUNK_ACTIVE_DISTANCE_METERS) return 'active';
+  if (distance <= DIG_CHUNK_UNLOAD_DISTANCE_METERS) return 'nearby';
+  if (distance <= DIG_CHUNK_RESET_DISTANCE_METERS) return 'persisted';
   return visible ? 'visible-out-of-range' : 'reset-eligible';
 }
