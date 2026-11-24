@@ -14,6 +14,8 @@ import { getReconnectMemoryDialogue } from './reconnectMemoryDialogue';
 
 const game = document.querySelector<HTMLElement>('#game')!;
 const status = document.querySelector<HTMLElement>('#status')!;
+const menuToggleButton = document.querySelector<HTMLButtonElement>('#menu-toggle')!;
+const menuItems = document.querySelector<HTMLElement>('#menu-items')!;
 const passageSensor = document.querySelector<HTMLElement>('#passage-sensor')!;
 const reconnectLine = document.querySelector<HTMLElement>('#reconnect-line')!;
 const upgradeButton = document.querySelector<HTMLButtonElement>('#upgrade')!;
@@ -147,6 +149,12 @@ async function persistTrainState(): Promise<void> {
     status.textContent = '열차 기록을 저장하지 못했습니다.';
   }
 }
+
+menuToggleButton.addEventListener('click', () => {
+  const open = menuItems.hidden;
+  menuItems.hidden = !open;
+  menuToggleButton.setAttribute('aria-expanded', String(open));
+});
 
 upgradeButton.textContent = `드릴 강화 · Lv ${enhancement}`;
 upgradeButton.disabled = restorePanelOpen || enhancement >= 5;
