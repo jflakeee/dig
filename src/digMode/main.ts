@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { unlockAudio } from 'plinkfx';
 import { digSound } from '../audio';
-import { DIG_VOXEL_SIZE_METERS, DIG_VOXELS_PER_AXIS } from './chunkCoordinates';
+import { addressChunk, DIG_VOXEL_SIZE_METERS, DIG_VOXELS_PER_AXIS } from './chunkCoordinates';
 import { DigModeRuntime } from './runtime';
 import { DigModeMobileRuntimeBinding } from './mobileRuntimeBinding';
 import type { SessionMineral, VoxelCoordinate } from './sessionChunks';
@@ -14,6 +14,7 @@ import { getReconnectMemoryDialogue } from './reconnectMemoryDialogue';
 
 const game = document.querySelector<HTMLElement>('#game')!;
 const status = document.querySelector<HTMLElement>('#status')!;
+const passageSensor = document.querySelector<HTMLElement>('#passage-sensor')!;
 const reconnectLine = document.querySelector<HTMLElement>('#reconnect-line')!;
 const upgradeButton = document.querySelector<HTMLButtonElement>('#upgrade')!;
 const addDrillButton = document.querySelector<HTMLButtonElement>('#add-drill')!;
@@ -334,7 +335,33 @@ function findDrillTargets(): Array<{ chunk: { x: number; y: number; z: number };
 }
 
 window.addEventListener('pointerdown', () => unlockAudio(), { once: true });
-binding.start(renderer, () => [], (frame) => {
+const looseOre = new THREE.Mesh(new THREE.IcosahedronGeometry(0.12), materials.iron);
+looseOre.visible = false;
+runtime.scene.add(looseOre);
+const drone = new THREE.Group();
+const droneHull = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, 0.28), materials.iron);
+const lampMaterial = new THREE.MeshBasicMaterial({ color: 0x8be8dc });
+const droneLamp = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.035, 0.29), lampMaterial);
+droneLamp.position.y = 0.057;
+drone.add(droneHull, droneLamp);
+drone.visible = false;
+runtime.scene.add(drone);
+binding.start(renderer, () => {
+  const chunk = addressChunk(binding.getPosition()).chunk;
+  const small = runtime.session.smallPassageAt(chunk);
+  const large = runtime.session.largePassageAt(chunk);
+  return small && large ? [...small.fields, ...large.gravityFields] : small?.fields ?? large?.gravityFields ?? [];
+}, (frame) => {
+  const chunk = addressChunk(frame.position).chunk;
+  const passage = runtime.session.smallPassageAt(chunk);
+  const large = runtime.session.largePassageAt(chunk);
+  const pickedUp = !restorePanelOpen && passage?.step(frame.deltaSeconds, frame.position);
+  looseOre.visible = passage?.visible ?? false;
+  drone.visible = !!passage;
+  if (passage) {
+    looseOre.position.set(passage.x, passage.y, passage.z);
+    drone.position.set(passage.droneX, passage.y, passage.droneZ);
+  }
   elapsed += frame.deltaSeconds;
   const lightProgress = Math.min(1, elapsed / 2.2);
   ambient.intensity = 0.04 + 0.5 * lightProgress;
@@ -361,7 +388,8 @@ binding.start(renderer, () => [], (frame) => {
   // The automatic drill keeps pushing gently; collision stops it at the rock face.
   binding.setAutonomousForward(autoMine.decision.state.mode === 'blocked' || autoMine.decision.state.mode === 'paused' ? 0 : 0.45);
 
-  if (autoMine.mined.length > 0) {
+  if (pickedUp || autoMine.mined.length > 0) {
+    if (pickedUp) collected.set('iron', (collected.get('iron') ?? 0) + 1);
     for (const mineral of autoMine.mined) {
       collected.set(mineral, (collected.get(mineral) ?? 0) + 1);
     }
@@ -377,6 +405,10 @@ binding.start(renderer, () => [], (frame) => {
   status.textContent = collectionSummary
     ? `자동 채굴 중. 수집: ${collectionSummary}`
     : '자동 채굴 중. 주변 광물을 탐색하고 있습니다.';
+  const signal = passage && large ? '소형·대형' : large ? '대형' : '소형';
+  const sensorText = signal + ' 통로 · 미세중력 감지';
+  if (passageSensor.textContent !== sensorText) passageSensor.textContent = sensorText;
+  passageSensor.hidden = !passage && !large;
 });
 
 const reconnectDialogue = getReconnectMemoryDialogue(trainSave.isReconnect);
@@ -388,6 +420,10 @@ if (reconnectDialogue) {
 
 // Audio begins after the first user gesture; the opening light still comes on automatically.
 window.addEventListener('beforeunload', () => {
+  droneHull.geometry.dispose();
+  droneLamp.geometry.dispose();
+  lampMaterial.dispose();
+  looseOre.geometry.dispose();
   binding.dispose();
   runtime.dispose();
   renderer.dispose();

@@ -1,6 +1,9 @@
 import { chunkKey, type ChunkCoordinate } from './chunkCoordinates';
 import { rollPassagePresence, type PassagePresence } from './portalGeneration';
 
+import { LargePassage, largePassageCavity } from './largePassage';
+import { SmallPassage, smallPassageCavity } from './smallPassage';
+
 export type SessionMineral = 'rock' | 'coal' | 'iron' | 'gold' | 'rare';
 export type VoxelCoordinate = Readonly<{ x: number; y: number; z: number }>;
 export type ExposedVoxel = Readonly<{ mineral: SessionMineral; mined: boolean }>;
@@ -16,6 +19,8 @@ export class SessionChunks {
   private readonly chunks = new Map<string, Map<string, MutableVoxel>>();
   private readonly passagePresence = new Map<string, PassagePresence>();
   private readonly random: () => number;
+  private readonly largePassages = new Map<string, LargePassage>();
+  private readonly smallPassages = new Map<string, SmallPassage>();
   private readonly portalRandom: () => number;
 
   constructor(random: () => number = Math.random, portalRandom: () => number = Math.random) {
@@ -72,11 +77,35 @@ export class SessionChunks {
     return { ...this.passagePresence.get(chunkKey(chunk))! };
   }
 
+  prepareArrival(chunk: ChunkCoordinate): void {
+    const voxels = this.getOrCreateChunk(chunk);
+    const key = chunkKey(chunk);
+    // The paired outlet exists independently of the new chunk's random roll.
+    const arrival = new LargePassage(chunk, true);
+    this.largePassages.set(key, arrival);
+    this.passagePresence.set(key, { ...this.passagePresence.get(key)!, large: true });
+    for (const cell of largePassageCavity()) {
+      if (cell.x >= arrival.firstExitVoxel) voxels.set(voxelKey(cell), { mineral: 'rock', mined: true });
+    }
+  }
+
+  largePassageAt(chunk: ChunkCoordinate): LargePassage | undefined {
+    this.getOrCreateChunk(chunk);
+    return this.largePassages.get(chunkKey(chunk));
+  }
+
+  smallPassageAt(chunk: ChunkCoordinate): SmallPassage | undefined {
+    this.getOrCreateChunk(chunk);
+    return this.smallPassages.get(chunkKey(chunk));
+  }
+
   /** Forget one chunk's terrain, passage presence, and mining history. */
   resetChunk(chunk: ChunkCoordinate): void {
     const key = chunkKey(chunk);
     this.chunks.delete(key);
     this.passagePresence.delete(key);
+    this.smallPassages.delete(key);
+    this.largePassages.delete(key);
   }
 
   /** Snapshot coordinates for the streaming controller; no world graph is stored. */
@@ -91,6 +120,8 @@ export class SessionChunks {
   transitionThroughLargePassage(): void {
     this.chunks.clear();
     this.passagePresence.clear();
+    this.smallPassages.clear();
+    this.largePassages.clear();
   }
 
   /** Number of chunks currently held in memory; useful to the streaming layer. */
@@ -104,7 +135,20 @@ export class SessionChunks {
     if (!voxels) {
       voxels = new Map<string, MutableVoxel>();
       this.chunks.set(key, voxels);
-      this.passagePresence.set(key, rollPassagePresence(this.portalRandom));
+      const presence = rollPassagePresence(this.portalRandom);
+      this.passagePresence.set(key, presence);
+      if (presence.large) {
+        this.largePassages.set(key, new LargePassage(chunk));
+        for (const voxel of largePassageCavity()) {
+          voxels.set(voxelKey(voxel), { mineral: 'rock', mined: true });
+        }
+      }
+      if (presence.small) {
+        this.smallPassages.set(key, new SmallPassage(chunk));
+        for (const voxel of smallPassageCavity()) {
+          voxels.set(voxelKey(voxel), { mineral: 'rock', mined: true });
+        }
+      }
     }
     return voxels;
   }

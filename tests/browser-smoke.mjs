@@ -14,9 +14,18 @@ try{
  const page=await context.newPage();
  await page.goto('http://127.0.0.1:4173/dig/?perf=1');
  await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Removed 0'));
- const controls=await page.locator('#actions button,#move,#dig').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {id:e.id||e.textContent?.trim(),left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height}}));
+ const memory=page.locator('button[aria-label="View recovered memory fragments"]');
+ assert.equal(await memory.count(),1);
+ assert.equal(await memory.isVisible(),false);
+ await page.getByRole('button',{name:'Gravity: On',exact:true}).click();
+ assert.equal(await memory.isVisible(),true);
+ await memory.click();
+ assert.ok(await page.getByText('아직 기록된 기억 파편이 없습니다.',{exact:true}).isVisible());
+ await page.getByRole('button',{name:'Gravity: Off',exact:true}).click();
+ assert.equal(await memory.isVisible(),false);
+ const controls=await page.locator('#actions button:visible,#move,#dig').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {id:e.id||e.textContent?.trim(),left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height}}));
  for(const c of controls)assert.ok(c.left>=0&&c.right<=390&&c.top>=0&&c.bottom<=844&&c.width>=44&&c.height>=44,'portrait control must be visible and touchable: '+JSON.stringify(c));
- const portraitBoxes=await page.locator('#actions button,#move,#dig,#craft-toggle,#travel-toggle,#journal-toggle').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {id:e.id||e.textContent?.trim(),x:r.x,y:r.y,w:r.width,h:r.height}}));
+ const portraitBoxes=await page.locator('#actions button:visible,#move,#dig,#craft-toggle,#travel-toggle,#journal-toggle').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {id:e.id||e.textContent?.trim(),x:r.x,y:r.y,w:r.width,h:r.height}}));
  for(let i=0;i<portraitBoxes.length;i++)for(let j=i+1;j<portraitBoxes.length;j++){const a=portraitBoxes[i],b=portraitBoxes[j];assert.ok(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y,a.id+' overlaps '+b.id+' in portrait')}
  await page.screenshot({path:'artifacts/mobile-portrait.png'});
  await context.close();console.log('mobile portrait control bounds passed');
@@ -24,7 +33,7 @@ try{
 for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mobile',{...devices['iPhone 13'],viewport:{width:844,height:390},screen:{width:844,height:390}}]]){
  const context=await browser.newContext(options);const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error'&&/shader|webgl|three/i.test(m.text()))errors.push(m.text())});
  await page.goto('http://127.0.0.1:4173/dig/?perf=1');await page.waitForFunction(()=>document.querySelector('#hud')?.textContent?.includes('Removed 0'));
- const boxes=await page.locator('#actions button').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {top:r.top,bottom:r.bottom,height:r.height,left:r.left,right:r.right}}));assert.equal(boxes.length,5);for(let i=0;i<boxes.length;i++){const b=boxes[i];assert.ok(b.height>=44&&b.left>=0&&b.right<=options.viewport.width&&b.bottom<=options.viewport.height);if(i)assert.ok(b.top>=boxes[i-1].bottom)}
+ const boxes=await page.locator('#actions button:visible').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {top:r.top,bottom:r.bottom,height:r.height,left:r.left,right:r.right}}));assert.equal(boxes.length,7);for(let i=0;i<boxes.length;i++){const b=boxes[i];assert.ok(b.height>=44&&b.left>=0&&b.right<=options.viewport.width&&b.bottom<=options.viewport.height);for(const other of boxes.slice(0,i))assert.ok(b.left>=other.right||b.right<=other.left||b.top>=other.bottom||b.bottom<=other.top)}
  const leftControls=await page.locator('#craft-toggle,#travel-toggle,#journal-toggle,#move').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {id:e.id,x:r.x,y:r.y,w:r.width,h:r.height}}));for(let i=0;i<leftControls.length;i++)for(let j=i+1;j<leftControls.length;j++){const a=leftControls[i],b=leftControls[j];assert.ok(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y,a.id+' overlaps '+b.id)}
  assert.match(await page.locator('#upgrade-preview').textContent(),/Radius .*180.*169ms/);await page.screenshot({path:'artifacts/'+name+'-initial.png'});
  for(const tool of ['Pickaxe','Drill','Shovel']){const button=page.getByRole('button',{name:tool,exact:true});await button.click();assert.equal(await button.getAttribute('aria-pressed'),'true')}
@@ -57,7 +66,7 @@ for(const [name,options] of [['desktop',{viewport:{width:1280,height:720}}],['mo
  const compactViewport=await page.evaluate(()=>({innerWidth,innerHeight,visualWidth:visualViewport?.width,documentWidth:document.documentElement.clientWidth,screenWidth:screen.width}));
  assert.ok(compactViewport.innerWidth<=700,'compact layout viewport should fit emulated screen: '+JSON.stringify(compactViewport));
  const compact=await page.locator('#move').boundingBox();assert.ok(compact.width<spacious.width,'compact joystick should shrink when crossing the 450px height breakpoint');
- const compactButtons=await page.locator('#actions button').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,height:r.height}}));
+ const compactButtons=await page.locator('#actions button:visible').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,height:r.height}}));
  for(const b of compactButtons)assert.ok(b.left>=0&&b.right<=700&&b.top>=0&&b.bottom<=360&&b.height>=44,'compact action button must remain usable: '+JSON.stringify({button:b,all:compactButtons}));
  const compactLeft=await page.locator('#craft-toggle,#travel-toggle,#journal-toggle,#move').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {id:e.id,x:r.x,y:r.y,w:r.width,h:r.height}}));
  for(let i=0;i<compactLeft.length;i++)for(let k=i+1;k<compactLeft.length;k++){const a=compactLeft[i],b=compactLeft[k];assert.ok(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y,a.id+' overlaps '+b.id+' in compact landscape')}
