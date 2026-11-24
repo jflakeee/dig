@@ -14,6 +14,8 @@
     #actions{position:absolute;z-index:8;top:max(16px,env(safe-area-inset-top));right:max(16px,env(safe-area-inset-right));display:grid;gap:10px}
     #actions button{min-width:132px;min-height:48px;padding:10px 14px;border:1px solid #d6a65a;border-radius:12px;background:#30261be8;color:#ffe4ae;font:700 14px system-ui;touch-action:manipulation}
     #actions button:active{transform:scale(.97);background:#49351f}
+    #reconnect-line{position:absolute;z-index:7;top:20%;left:50%;transform:translateX(-50%);max-width:min(80vw,520px);padding:10px 16px;border-radius:10px;background:#191713bb;color:#eee0c8;text-align:center;font:500 16px system-ui;pointer-events:none;animation:fade-line 5s forwards}
+    @keyframes fade-line{0%,65%{opacity:1}100%{opacity:0}}
     #status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
     @media(max-height:430px){#actions{top:8px;right:8px;gap:6px}#actions button{min-height:40px;padding:6px 9px}}
   </style>
@@ -24,6 +26,7 @@
       <button id="upgrade" type="button">드릴 강화 · Lv 0</button>
       <button id="add-drill" type="button">드릴 추가 · 1대</button>
     </div>
+    <div id="reconnect-line" hidden></div>
     <div id="status" aria-live="polite"></div>
   </main>
   <script type="module" src="/src/digMode/main.ts"></script>
