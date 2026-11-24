@@ -4,38 +4,27 @@ import {
   type TrainSaveState,
 } from './trainSave';
 
-export type VerifiedMailbox = Readonly<{
-  email: string;
-  verificationToken: string;
-}>;
-
 export type RestoreWorkflowResult =
   | 'restored'
-  | 'verification-required'
-  | 'verification-failed'
   | 'invalid-code'
   | 'backup-failed'
+  | 'clipboard-failed'
   | 'save-failed';
 
 export type RestoreWorkflowServices = Readonly<{
-  /** Must return a mailbox grant issued only after successful email verification. */
-  verifyMailbox(): Promise<VerifiedMailbox | null>;
   /** Decode/decrypt a shared restore code using the service's managed keys. */
   decodeRestoreCode(code: string): Promise<unknown>;
-  /** Encrypt the current train snapshot for the verified mailbox. */
-  encryptCurrentBackup(
-    mailbox: VerifiedMailbox,
-    snapshot: TrainSaveState,
-  ): Promise<string>;
-  /** Resolve only after the backup email has been accepted for delivery. */
-  sendBackupEmail(mailbox: VerifiedMailbox, encryptedBackup: string): Promise<void>;
+  /** Encode the current train snapshot as a code that can later be restored. */
+  encodeBackupCode(snapshot: TrainSaveState): Promise<string>;
+  /** Copy the generated backup code to the user's clipboard. */
+  copyToClipboard(code: string): Promise<void>;
   /** Persist the incoming train state without changing the current world session. */
   persistRestoredState(state: TrainSaveState): Promise<TrainSaveResult>;
 }>;
 
 /**
  * A restore is committed only after the current train snapshot has been
- * encrypted and emailed to a verified address. World/session data is excluded.
+ * encoded as a backup code and copied to the clipboard. World/session data is excluded.
  */
 export async function restoreTrainFromSharedCode(
   code: string,
@@ -46,16 +35,6 @@ export async function restoreTrainFromSharedCode(
     return 'invalid-code';
   }
 
-  let mailbox: VerifiedMailbox | null;
-  try {
-    mailbox = await services.verifyMailbox();
-  } catch {
-    return 'verification-failed';
-  }
-  if (!mailbox || !mailbox.email || !mailbox.verificationToken) {
-    return 'verification-required';
-  }
-
   let restoredState: TrainSaveState;
   try {
     restoredState = validateTrainSave(await services.decodeRestoreCode(code));
@@ -63,14 +42,21 @@ export async function restoreTrainFromSharedCode(
     return 'invalid-code';
   }
 
-  let encryptedBackup: string;
+  let backupCode: string;
   try {
     const snapshot = validateTrainSave(currentState);
-    encryptedBackup = await services.encryptCurrentBackup(mailbox, snapshot);
-    if (!encryptedBackup || typeof encryptedBackup !== 'string') return 'backup-failed';
-    await services.sendBackupEmail(mailbox, encryptedBackup);
+    backupCode = await services.encodeBackupCode(snapshot);
+    if (typeof backupCode !== 'string' || backupCode.trim().length < 8 || backupCode.length > 200000) {
+      return 'backup-failed';
+    }
   } catch {
     return 'backup-failed';
+  }
+
+  try {
+    await services.copyToClipboard(backupCode);
+  } catch {
+    return 'clipboard-failed';
   }
 
   try {
