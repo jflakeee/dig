@@ -33,8 +33,8 @@ export type DigModeMiningResult = Readonly<{
 
 export type DigModeMovementInput = Readonly<{
   position: LocalPosition;
-  yaw: number;
-  pitch: number;
+  yaw?: number;
+  pitch?: number;
   forward: number;
   strafe: number;
   vertical: number;
@@ -67,6 +67,8 @@ export class DigModeRuntime {
   private readonly registry: ChunkRenderRegistry;
   private readonly chunkMeshes = new Map<string, ChunkSectionMeshSet>();
   private machineVelocity: [number, number, number] = [0, 0, 0];
+  private lookYaw = 0;
+  private lookPitch = 0;
   private autoMineState: AutoMineState = initialAutoMineState();
 
   constructor(
@@ -148,6 +150,17 @@ export class DigModeRuntime {
     return { decision, mined };
   }
 
+  /** Apply touch-drag deltas to the first-person camera orientation. */
+  applyLookDelta(deltaX: number, deltaY: number, sensitivity = 0.003): void {
+    if (![deltaX, deltaY, sensitivity].every(Number.isFinite) || sensitivity < 0) {
+      throw new Error('Invalid camera look input');
+    }
+    this.lookYaw -= deltaX * sensitivity;
+    this.lookPitch = Math.max(-1.52, Math.min(1.52, this.lookPitch - deltaY * sensitivity));
+    this.camera.rotation.order = 'YXZ';
+    this.camera.rotation.set(this.lookPitch, this.lookYaw, 0, 'YXZ');
+  }
+
   /** Move with zero-G thrusters and temporary passage gravity fields. */
   moveMachine(input: DigModeMovementInput): DigModeMovementResult {
     if (![input.deltaSeconds, input.thrustAcceleration, input.maximumSpeed].every(Number.isFinite) ||
@@ -155,8 +168,10 @@ export class DigModeRuntime {
       throw new Error('Invalid movement timing or speed');
     }
 
+    const yaw = input.yaw ?? this.lookYaw;
+    const pitch = input.pitch ?? this.lookPitch;
     const thrustDirection = zeroGravityDisplacement(
-      input.yaw, input.pitch, input.forward, input.strafe, input.vertical, 1, 1,
+      yaw, pitch, input.forward, input.strafe, input.vertical, 1, 1,
     );
     const gravity = portalGravityAcceleration(
       [input.position.x, input.position.y, input.position.z],
@@ -190,6 +205,9 @@ export class DigModeRuntime {
         this.machineVelocity[2] -= normal.z * intoSurface;
       }
     }
+    this.camera.position.set(collision.position.x, collision.position.y, collision.position.z);
+    this.camera.rotation.order = 'YXZ';
+    this.camera.rotation.set(pitch, yaw, 0, 'YXZ');
     return { position: collision.position, velocity: [...this.machineVelocity], collision };
   }
 
@@ -204,6 +222,8 @@ export class DigModeRuntime {
     this.chunkMeshes.clear();
     this.session.transitionThroughLargePassage();
     this.machineVelocity = [0, 0, 0];
+    this.lookYaw = 0;
+    this.lookPitch = 0;
     this.autoMineState = initialAutoMineState();
     this.loadChunk(exitChunk);
   }
