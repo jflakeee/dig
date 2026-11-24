@@ -31,6 +31,18 @@ runtime.scene.add(ambient);
 const workLamp = new THREE.PointLight(0xffd99a, 0, 24, 2);
 workLamp.position.set(0, 0.1, 0.1);
 runtime.camera.add(workLamp);
+const machineBody = new THREE.Mesh(
+  new THREE.SphereGeometry(0.25, 20, 14),
+  new THREE.MeshStandardMaterial({ color: 0x80633e, metalness: 0.55, roughness: 0.42 }),
+);
+machineBody.position.set(0.36, -0.34, -0.62);
+const drillBit = new THREE.Mesh(
+  new THREE.ConeGeometry(0.1, 0.34, 10),
+  new THREE.MeshStandardMaterial({ color: 0xb8b4ac, metalness: 0.8, roughness: 0.28 }),
+);
+drillBit.rotation.x = -Math.PI / 2;
+drillBit.position.set(0.36, -0.28, -0.92);
+runtime.camera.add(machineBody, drillBit);
 runtime.scene.add(runtime.camera);
 
 // Dust motes make the opening space readable as a confined, dusty mine.
@@ -131,13 +143,13 @@ function findDrillTargets(): Array<{ chunk: { x: number; y: number; z: number };
 }
 
 window.addEventListener('pointerdown', () => unlockAudio(), { once: true });
-const startTime = performance.now();
 binding.start(renderer, () => [], (frame) => {
   elapsed += frame.deltaSeconds;
   const lightProgress = Math.min(1, elapsed / 2.2);
   ambient.intensity = 0.04 + 0.5 * lightProgress;
   workLamp.intensity = 35 * lightProgress;
   dust.rotation.y += frame.deltaSeconds * 0.012;
+  drillBit.rotation.z += frame.deltaSeconds * 7;
 
   const targets = findDrillTargets();
   const autoMine = runtime.advanceAutomaticMining({
@@ -182,4 +194,3 @@ window.addEventListener('beforeunload', () => {
   renderer.dispose();
 }, { once: true });
 
-void startTime;
