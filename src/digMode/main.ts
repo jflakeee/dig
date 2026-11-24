@@ -147,9 +147,9 @@ async function persistTrainState(): Promise<void> {
 }
 
 upgradeButton.textContent = `드릴 강화 · Lv ${enhancement}`;
-upgradeButton.disabled = enhancement >= 5;
+upgradeButton.disabled = restorePanelOpen || enhancement >= 5;
 addDrillButton.textContent = `드릴 추가 · ${drillCount}대`;
-addDrillButton.disabled = drillCount >= 5;
+addDrillButton.disabled = restorePanelOpen || drillCount >= 5;
 
 upgradeButton.addEventListener('click', () => {
   enhancement = Math.min(5, enhancement + 1);
@@ -167,6 +167,8 @@ addDrillButton.addEventListener('click', () => {
 function setRestorePanelOpen(open: boolean): void {
   restorePanelOpen = open;
   restorePanel.hidden = !open;
+  upgradeButton.disabled = open || enhancement >= 5;
+  addDrillButton.disabled = open || drillCount >= 5;
   restoreToggleButton.setAttribute('aria-expanded', String(open));
   if (open) restoreCodeField.focus();
 }
