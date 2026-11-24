@@ -1,13 +1,13 @@
 import { chunkKey, DIG_VOXELS_PER_AXIS, type ChunkCoordinate } from './chunkCoordinates';
 import { buildChunkVoxelGroup, type ChunkMineralLookup } from './chunkVoxelMesh';
 import * as THREE from 'three';
-import { SessionChunks } from './sessionChunks';
+import { SessionChunks, type SessionMineral } from './sessionChunks';
 
 /** Build a renderable mesh group from this session's voxel state. */
 export function buildSessionChunkMesh(
   session: SessionChunks,
   chunk: ChunkCoordinate,
-  materials: Readonly<Record<import('./sessionChunks').SessionMineral, THREE.Material>>,
+  materials: Readonly<Record<SessionMineral, THREE.Material>>,
 ): THREE.Group {
   return buildChunkVoxelGroup(
     chunk,
