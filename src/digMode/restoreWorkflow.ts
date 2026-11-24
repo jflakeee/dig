@@ -6,8 +6,8 @@ import {
 
 export type CurrentTrainSnapshot = Readonly<{
   state: TrainSaveState;
-  /** Opaque storage revision used for compare-and-swap on restore. */
-  revision: string;
+  /** Raw localStorage value; null represents an empty train save. */
+  revision: string | null;
 }>;
 
 export type RestoreWorkflowResult =
@@ -19,18 +19,18 @@ export type RestoreWorkflowResult =
   | 'save-failed';
 
 export type RestoreWorkflowServices = Readonly<{
-  /** Decode/decrypt a shared restore code using the service's managed keys. */
+  /** Decode and validate a shareable train-progress code. */
   decodeRestoreCode(code: string): Promise<unknown>;
-  /** Read a fresh train save and its storage revision immediately before restore. */
+  /** Read the current train save and its raw storage revision. */
   readCurrentSnapshot(): Promise<CurrentTrainSnapshot>;
-  /** Encode the current train snapshot as a code that can later be restored. */
+  /** Encode train progress as an obfuscated, non-secret share code. */
   encodeBackupCode(snapshot: TrainSaveState): Promise<string>;
   /** Copy the generated backup code to the user's clipboard. */
   copyToClipboard(code: string): Promise<void>;
-  /** Persist only if the current storage revision still matches the snapshot. */
+  /** Persist only if storage still matches the supplied revision. */
   persistRestoredState(
     state: TrainSaveState,
-    expectedRevision: string,
+    expectedRevision: string | null,
   ): Promise<TrainSaveResult>;
 }>;
 
@@ -42,13 +42,13 @@ function sameTrainSave(left: TrainSaveState, right: TrainSaveState): boolean {
  * A restore is committed only after the current train snapshot has been
  * encoded, round-trip validated, and copied to the clipboard. The write uses
  * compare-and-swap so progress made during asynchronous work cannot be lost.
- * World/session data is excluded.
+ * The share code is obfuscated, not encrypted; it contains train progress only.
  */
 export async function restoreTrainFromSharedCode(
   code: string,
   services: RestoreWorkflowServices,
 ): Promise<RestoreWorkflowResult> {
-  if (typeof code !== 'string' || code.trim().length < 8 || code.length > 200000) {
+  if (typeof code !== 'string' || code.trim().length < 16 || code.length > 200000) {
     return 'invalid-code';
   }
 
@@ -64,12 +64,12 @@ export async function restoreTrainFromSharedCode(
   let backupCode: string;
   try {
     snapshot = await services.readCurrentSnapshot();
-    if (!snapshot || typeof snapshot.revision !== 'string' || snapshot.revision.length === 0) {
+    if (!snapshot || (snapshot.revision !== null && typeof snapshot.revision !== 'string')) {
       return 'backup-failed';
     }
     snapshotState = validateTrainSave(snapshot.state);
     backupCode = await services.encodeBackupCode(snapshotState);
-    if (typeof backupCode !== 'string' || backupCode.trim().length < 8 || backupCode.length > 200000) {
+    if (typeof backupCode !== 'string' || backupCode.trim().length < 16 || backupCode.length > 200000) {
       return 'backup-failed';
     }
     const verifiedBackup = validateTrainSave(await services.decodeRestoreCode(backupCode));
