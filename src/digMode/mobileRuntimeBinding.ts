@@ -9,6 +9,7 @@ import type { PortalGravityField } from './portalGravity';
 
 export type MobileRuntimeFrame = Readonly<{
   position: LocalPosition;
+  deltaSeconds: number;
   streaming: ReturnType<DigModeRuntime['updateFrame']>;
 }>;
 
@@ -16,6 +17,7 @@ export type MobileRuntimeFrame = Readonly<{
 export class DigModeMobileRuntimeBinding {
   private readonly controls: DigModeMobileControls;
   private position: LocalPosition;
+  private autonomousForward = 0;
   private animationFrame: number | null = null;
   private resizeHandler: (() => void) | null = null;
 
@@ -46,7 +48,7 @@ export class DigModeMobileRuntimeBinding {
     );
     const movement = this.runtime.moveMachine({
       position: this.position,
-      forward: input.forward,
+      forward: Math.max(-1, Math.min(1, input.forward + this.autonomousForward)),
       strafe: input.strafe,
       vertical: input.vertical,
       deltaSeconds,
@@ -58,7 +60,7 @@ export class DigModeMobileRuntimeBinding {
     this.position = movement.position;
     const visible = visibleChunkKeys(this.runtime.scene, this.runtime.camera);
     const streaming = this.runtime.updateFrame(this.position, visible);
-    return { position: this.position, streaming };
+    return { position: this.position, deltaSeconds, streaming };
   }
 
   /** Start the animation loop and render the bound 4D scene. */
@@ -96,6 +98,12 @@ export class DigModeMobileRuntimeBinding {
       this.animationFrame = requestAnimationFrame(tick);
     };
     this.animationFrame = requestAnimationFrame(tick);
+  }
+
+  /** Set a gentle forward command used by the opening auto-drill sequence. */
+  setAutonomousForward(value: number): void {
+    if (!Number.isFinite(value)) throw new Error('Autonomous forward input must be finite');
+    this.autonomousForward = Math.max(-1, Math.min(1, value));
   }
 
   getPosition(): LocalPosition {
