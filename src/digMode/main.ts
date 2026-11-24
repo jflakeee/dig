@@ -5,9 +5,12 @@ import { DIG_VOXEL_SIZE_METERS, DIG_VOXELS_PER_AXIS } from './chunkCoordinates';
 import { DigModeRuntime } from './runtime';
 import { DigModeMobileRuntimeBinding } from './mobileRuntimeBinding';
 import type { SessionMineral, VoxelCoordinate } from './sessionChunks';
+import { openTrainSave } from './trainSave';
+import { getReconnectMemoryDialogue } from './reconnectMemoryDialogue';
 
 const game = document.querySelector<HTMLElement>('#game')!;
 const status = document.querySelector<HTMLElement>('#status')!;
+const reconnectLine = document.querySelector<HTMLElement>('#reconnect-line')!;
 const upgradeButton = document.querySelector<HTMLButtonElement>('#upgrade')!;
 const addDrillButton = document.querySelector<HTMLButtonElement>('#add-drill')!;
 
@@ -19,6 +22,15 @@ const materials: Record<SessionMineral, THREE.Material> = {
   rare: new THREE.MeshStandardMaterial({ color: 0x8b7bdf, roughness: 0.55, emissive: 0x261f50 }),
 };
 
+const trainSave = openTrainSave({
+  getItem: (key) => localStorage.getItem(key),
+  setItem: (key, value) => localStorage.setItem(key, value),
+});
+let enhancement = trainSave.state.equipment.drillEnhancement;
+let drillCount = trainSave.state.equipment.drillCount;
+const collected = new Map<SessionMineral, number>(
+  (['rock', 'coal', 'iron', 'gold', 'rare'] as const).map((mineral) => [mineral, trainSave.state.inventory[mineral]]),
+);
 const runtime = new DigModeRuntime(materials, { aspect: innerWidth / innerHeight });
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -91,21 +103,43 @@ const binding = new DigModeMobileRuntimeBinding(runtime, game, spawn, {
   thrustAcceleration: 5,
   maximumSpeed: 3.5,
 });
-let enhancement = 0;
-let drillCount = 1;
 let elapsed = 0;
 let lastDrillSound = 0;
-let collected = new Map<SessionMineral, number>();
+
+function persistTrainState(): void {
+  const inventory = {
+    rock: collected.get('rock') ?? 0,
+    coal: collected.get('coal') ?? 0,
+    iron: collected.get('iron') ?? 0,
+    gold: collected.get('gold') ?? 0,
+    rare: collected.get('rare') ?? 0,
+  };
+  const result = trainSave.save({
+    ...trainSave.current,
+    equipment: { drillEnhancement: enhancement, drillCount },
+    inventory,
+  });
+  if (result !== 'saved') status.textContent = result === 'conflict'
+    ? '저장 충돌이 감지되었습니다.'
+    : '열차 기록을 저장하지 못했습니다.';
+}
+
+upgradeButton.textContent = `드릴 강화 · Lv ${enhancement}`;
+upgradeButton.disabled = enhancement >= 5;
+addDrillButton.textContent = `드릴 추가 · ${drillCount}대`;
+addDrillButton.disabled = drillCount >= 5;
 
 upgradeButton.addEventListener('click', () => {
   enhancement = Math.min(5, enhancement + 1);
   upgradeButton.textContent = `드릴 강화 · Lv ${enhancement}`;
   upgradeButton.disabled = enhancement >= 5;
+  persistTrainState();
 });
 addDrillButton.addEventListener('click', () => {
   drillCount = Math.min(5, drillCount + 1);
   addDrillButton.textContent = `드릴 추가 · ${drillCount}대`;
   addDrillButton.disabled = drillCount >= 5;
+  persistTrainState();
 });
 
 function findDrillTargets(): Array<{ chunk: { x: number; y: number; z: number }; voxel: VoxelCoordinate }> {
@@ -174,6 +208,7 @@ binding.start(renderer, () => [], (frame) => {
     for (const mineral of autoMine.mined) {
       collected.set(mineral, (collected.get(mineral) ?? 0) + 1);
     }
+    persistTrainState();
   }
   if (autoMine.decision.mode === 'mining' && elapsed - lastDrillSound > 0.14) {
     const ramp = 0.25 + Math.min(1.25, elapsed / 4);
@@ -186,6 +221,13 @@ binding.start(renderer, () => [], (frame) => {
     ? `자동 채굴 중. 수집: ${collectionSummary}`
     : '자동 채굴 중. 주변 광물을 탐색하고 있습니다.';
 });
+
+const reconnectDialogue = getReconnectMemoryDialogue(trainSave.isReconnect);
+if (reconnectDialogue) {
+  reconnectLine.textContent = reconnectDialogue;
+  reconnectLine.hidden = false;
+  window.setTimeout(() => { reconnectLine.hidden = true; }, 5000);
+}
 
 // Audio begins after the first user gesture; the opening light still comes on automatically.
 window.addEventListener('beforeunload', () => {
