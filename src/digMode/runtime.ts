@@ -150,6 +150,15 @@ export class DigModeRuntime {
     return { decision, mined };
   }
 
+  /** Set an initial or restored camera orientation. */
+  setCameraLook(yaw: number, pitch: number): void {
+    if (![yaw, pitch].every(Number.isFinite)) throw new Error('Invalid camera orientation');
+    this.lookYaw = yaw;
+    this.lookPitch = Math.max(-1.52, Math.min(1.52, pitch));
+    this.camera.rotation.order = 'YXZ';
+    this.camera.rotation.set(this.lookPitch, this.lookYaw, 0, 'YXZ');
+  }
+
   /** Apply touch-drag deltas to the first-person camera orientation. */
   applyLookDelta(deltaX: number, deltaY: number, sensitivity = 0.003): void {
     if (![deltaX, deltaY, sensitivity].every(Number.isFinite) || sensitivity < 0) {
