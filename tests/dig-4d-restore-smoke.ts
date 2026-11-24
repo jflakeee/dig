@@ -43,6 +43,7 @@ try {
   }
   await menuToggle.click();
   assert.equal(await page.locator('#menu-items').isVisible(), true);
+  assert.equal(await page.locator('#action-items button:visible').count(), 2);
   await page.getByRole('button', { name: '공유 코드' }).waitFor();
   await page.getByRole('button', { name: '공유 코드' }).click();
   await page.locator('#restore-panel').waitFor({ state: 'visible' });
