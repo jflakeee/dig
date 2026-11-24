@@ -338,12 +338,24 @@ window.addEventListener('pointerdown', () => unlockAudio(), { once: true });
 const looseOre = new THREE.Mesh(new THREE.IcosahedronGeometry(0.12), materials.iron);
 looseOre.visible = false;
 runtime.scene.add(looseOre);
+const drone = new THREE.Group();
+const droneHull = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, 0.28), materials.iron);
+const lampMaterial = new THREE.MeshBasicMaterial({ color: 0x8be8dc });
+const droneLamp = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.035, 0.29), lampMaterial);
+droneLamp.position.y = 0.057;
+drone.add(droneHull, droneLamp);
+drone.visible = false;
+runtime.scene.add(drone);
 const passageAt = (position: typeof spawn) => runtime.session.smallPassageAt(addressChunk(position).chunk);
 binding.start(renderer, () => passageAt(binding.getPosition())?.fields ?? [], (frame) => {
   const passage = passageAt(frame.position);
   const pickedUp = !restorePanelOpen && passage?.step(frame.deltaSeconds, frame.position);
   looseOre.visible = passage?.visible ?? false;
-  if (passage) looseOre.position.set(passage.x, passage.y, passage.z);
+  drone.visible = !!passage;
+  if (passage) {
+    looseOre.position.set(passage.x, passage.y, passage.z);
+    drone.position.set(passage.droneX, passage.y, passage.droneZ);
+  }
   elapsed += frame.deltaSeconds;
   const lightProgress = Math.min(1, elapsed / 2.2);
   ambient.intensity = 0.04 + 0.5 * lightProgress;
@@ -399,6 +411,9 @@ if (reconnectDialogue) {
 
 // Audio begins after the first user gesture; the opening light still comes on automatically.
 window.addEventListener('beforeunload', () => {
+  droneHull.geometry.dispose();
+  droneLamp.geometry.dispose();
+  lampMaterial.dispose();
   looseOre.geometry.dispose();
   binding.dispose();
   runtime.dispose();

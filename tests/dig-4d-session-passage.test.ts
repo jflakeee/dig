@@ -23,13 +23,26 @@ const passage = smallSession.smallPassageAt(chunk)!;
 assert.ok(passage);
 const receiver = { x: passage.x, y: passage.y, z: passage.fields[1].center[2] };
 let pickups = 0;
+let previousDroneZ = passage.droneZ;
+let droneZAtPickup = Infinity;
+assert.ok(previousDroneZ < passage.fields[0].center[2]);
 let previousZ = passage.z;
 for (let frame = 0; frame < 900; frame++) {
-  if (passage.step(1 / 60, receiver)) pickups++;
+  if (passage.step(1 / 60, receiver)) {
+    pickups++;
+    droneZAtPickup = passage.droneZ;
+  }
+  assert.ok(passage.droneZ >= previousDroneZ);
+  previousDroneZ = passage.droneZ;
   assert.ok(passage.z >= previousZ);
   previousZ = passage.z;
 }
 assert.ok(passage.z >= receiver.z);
+assert.ok(passage.droneZ > droneZAtPickup, 'drone continues after ore pickup');
+assert.ok(passage.droneZ - 0.14 > receiver.z, 'whole hull exits the bore');
+const parkedZ = passage.droneZ;
+assert.equal(passage.step(0.05, receiver), false);
+assert.equal(passage.droneZ, parkedZ);
 assert.equal(pickups, 1);
 assert.equal(passage.visible, false);
 assert.equal(smallSession.smallPassageAt(chunk), passage);

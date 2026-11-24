@@ -24,8 +24,8 @@ export class SmallPassage {
   readonly fields: readonly PortalGravityField[];
   readonly x: number;
   readonly y: number;
-  z: number;
-  private velocity = 0;
+  private readonly ore: { z: number; speed: number };
+  private readonly drone: { z: number; speed: number };
   private collected = false;
 
   constructor(chunk: ChunkCoordinate) {
@@ -39,22 +39,32 @@ export class SmallPassage {
       influenceRadiusMeters: 1.6,
       accelerationMetersPerSecondSquared: 0.85,
     }));
-    this.z = this.fields[0].center[2] - 0.7;
+    const inlet = this.fields[0].center[2];
+    this.ore = { z: inlet - 0.7, speed: 0 };
+    this.drone = { z: inlet - 1.1, speed: 0 };
   }
 
+  get z(): number { return this.ore.z; }
+  get droneZ(): number { return this.drone.z; }
+  get droneX(): number { return this.x + 0.1; }
   get visible(): boolean { return !this.collected; }
 
   step(dt: number, machine: LocalPosition): boolean {
-    if (this.collected) return false;
     const outlet = this.fields[1].center[2];
-    const gravity = portalGravityAcceleration([this.x, this.y, this.z], this.fields);
-    this.velocity += gravity[2] * dt;
-    // Stop at the far wall of the receiving pocket.
-    const wall = outlet + 3 * DIG_VOXEL_SIZE_METERS - 0.12;
-    this.z = Math.min(wall, this.z + this.velocity * dt);
-    if (this.z === wall) this.velocity = 0;
+    // The drone brakes once its entire hull clears the outlet.
+    this.advanceBody(this.drone, this.droneX, outlet + 0.25, dt);
+    if (this.collected) return false;
+    this.advanceBody(this.ore, this.x, outlet + 3 * DIG_VOXEL_SIZE_METERS - 0.12, dt);
     if (this.z < outlet || Math.hypot(machine.x - this.x, machine.y - this.y, machine.z - this.z) > 0.8) return false;
     this.collected = true;
     return true;
+  }
+
+  private advanceBody(body: { z: number; speed: number }, x: number, stopZ: number, dt: number): void {
+    if (body.z >= stopZ) return;
+    const gravity = portalGravityAcceleration([x, this.y, body.z], this.fields);
+    body.speed += gravity[2] * dt;
+    body.z = Math.min(stopZ, body.z + body.speed * dt);
+    if (body.z === stopZ) body.speed = 0;
   }
 }
