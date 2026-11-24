@@ -1,4 +1,8 @@
 import { chunkKey, type ChunkCoordinate, type LocalPosition } from './chunkCoordinates';
+import {
+  DIG_CHUNK_RESET_DISTANCE_METERS,
+  distanceToChunkMeters,
+} from './chunkResetPolicy';
 import { classifyChunkResidency } from './chunkResidency';
 import { SessionChunks } from './sessionChunks';
 
@@ -9,15 +13,17 @@ export type ChunkStreamingFrame = Readonly<{
   nearby: ChunkCoordinate[];
   /** Session data retained beyond the render range, up to 256m. */
   retained: ChunkCoordinate[];
-  /** Visible chunks stay resident even when beyond the normal range. */
+  /** Visible chunks stay resident between 64m and the dust boundary. */
   visibleOutOfRange: ChunkCoordinate[];
-  /** Chunks discarded because they are distant and no longer visible. */
+  /** Chunks beyond 256m; renderer must hide them behind dense dust. */
+  dustOccluded: ChunkCoordinate[];
+  /** Distant chunks discarded from this session. */
   evicted: ChunkCoordinate[];
 }>;
 
 /**
  * Reconcile only chunks already encountered in this runtime session.
- * The caller creates newly streamed chunks around the player separately.
+ * Beyond 256m, dust overrides renderer visibility and the chunk is discarded.
  */
 export function reconcileSessionChunkStreaming(
   session: SessionChunks,
@@ -29,14 +35,26 @@ export function reconcileSessionChunkStreaming(
     nearby: ChunkCoordinate[];
     retained: ChunkCoordinate[];
     visibleOutOfRange: ChunkCoordinate[];
+    dustOccluded: ChunkCoordinate[];
     evicted: ChunkCoordinate[];
-  } = { active: [], nearby: [], retained: [], visibleOutOfRange: [], evicted: [] };
+  } = {
+    active: [],
+    nearby: [],
+    retained: [],
+    visibleOutOfRange: [],
+    dustOccluded: [],
+    evicted: [],
+  };
 
   for (const chunk of session.getLoadedChunkCoordinates()) {
+    const beyondDustBoundary =
+      distanceToChunkMeters(position, chunk) > DIG_CHUNK_RESET_DISTANCE_METERS;
+    if (beyondDustBoundary) frame.dustOccluded.push(chunk);
+
     const residency = classifyChunkResidency(
       position,
       chunk,
-      visibleChunkKeys.has(chunkKey(chunk)),
+      !beyondDustBoundary && visibleChunkKeys.has(chunkKey(chunk)),
     );
 
     switch (residency) {
