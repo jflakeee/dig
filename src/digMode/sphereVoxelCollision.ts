@@ -1,6 +1,6 @@
 import {
-  DIG_CHUNK_SIZE_METERS,
   DIG_VOXEL_SIZE_METERS,
+  DIG_VOXELS_PER_AXIS,
   type ChunkCoordinate,
   type LocalPosition,
 } from './chunkCoordinates';
@@ -127,14 +127,14 @@ function isSolidVoxel(
 ): boolean {
   if (![globalX, globalY, globalZ].every(Number.isSafeInteger)) return false;
   const chunk: ChunkCoordinate = {
-    x: Math.floor(globalX / 32),
-    y: Math.floor(globalY / 32),
-    z: Math.floor(globalZ / 32),
+    x: Math.floor(globalX / DIG_VOXELS_PER_AXIS),
+    y: Math.floor(globalY / DIG_VOXELS_PER_AXIS),
+    z: Math.floor(globalZ / DIG_VOXELS_PER_AXIS),
   };
   const local = {
-    x: globalX - chunk.x * 32,
-    y: globalY - chunk.y * 32,
-    z: globalZ - chunk.z * 32,
+    x: globalX - chunk.x * DIG_VOXELS_PER_AXIS,
+    y: globalY - chunk.y * DIG_VOXELS_PER_AXIS,
+    z: globalZ - chunk.z * DIG_VOXELS_PER_AXIS,
   };
   const voxel = session.readVoxel(chunk, local);
   return voxel !== null && !voxel.mined;
