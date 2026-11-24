@@ -14,8 +14,8 @@ export type DigModeMobileControls = Readonly<{
 }>;
 
 /**
- * Add a left movement stick, right-side look surface, and vertical thrust
- * buttons to a positioned game container. Pointer events support touch and pen.
+ * Add a left movement stick and right-side look surface to a positioned game
+ * container. Pitching up or down then pushing forward provides vertical thrust.
  */
 export function attachDigModeMobileControls(
   container: HTMLElement,
