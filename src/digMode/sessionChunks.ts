@@ -1,6 +1,7 @@
 import { chunkKey, type ChunkCoordinate } from './chunkCoordinates';
 import { rollPassagePresence, type PassagePresence } from './portalGeneration';
 
+import { LargePassage, largePassageCavity } from './largePassage';
 import { SmallPassage, smallPassageCavity } from './smallPassage';
 
 export type SessionMineral = 'rock' | 'coal' | 'iron' | 'gold' | 'rare';
@@ -18,6 +19,7 @@ export class SessionChunks {
   private readonly chunks = new Map<string, Map<string, MutableVoxel>>();
   private readonly passagePresence = new Map<string, PassagePresence>();
   private readonly random: () => number;
+  private readonly largePassages = new Map<string, LargePassage>();
   private readonly smallPassages = new Map<string, SmallPassage>();
   private readonly portalRandom: () => number;
 
@@ -75,6 +77,11 @@ export class SessionChunks {
     return { ...this.passagePresence.get(chunkKey(chunk))! };
   }
 
+  largePassageAt(chunk: ChunkCoordinate): LargePassage | undefined {
+    this.getOrCreateChunk(chunk);
+    return this.largePassages.get(chunkKey(chunk));
+  }
+
   smallPassageAt(chunk: ChunkCoordinate): SmallPassage | undefined {
     this.getOrCreateChunk(chunk);
     return this.smallPassages.get(chunkKey(chunk));
@@ -86,6 +93,7 @@ export class SessionChunks {
     this.chunks.delete(key);
     this.passagePresence.delete(key);
     this.smallPassages.delete(key);
+    this.largePassages.delete(key);
   }
 
   /** Snapshot coordinates for the streaming controller; no world graph is stored. */
@@ -101,6 +109,7 @@ export class SessionChunks {
     this.chunks.clear();
     this.passagePresence.clear();
     this.smallPassages.clear();
+    this.largePassages.clear();
   }
 
   /** Number of chunks currently held in memory; useful to the streaming layer. */
@@ -116,6 +125,12 @@ export class SessionChunks {
       this.chunks.set(key, voxels);
       const presence = rollPassagePresence(this.portalRandom);
       this.passagePresence.set(key, presence);
+      if (presence.large) {
+        this.largePassages.set(key, new LargePassage(chunk));
+        for (const voxel of largePassageCavity()) {
+          voxels.set(voxelKey(voxel), { mineral: 'rock', mined: true });
+        }
+      }
       if (presence.small) {
         this.smallPassages.set(key, new SmallPassage(chunk));
         for (const voxel of smallPassageCavity()) {

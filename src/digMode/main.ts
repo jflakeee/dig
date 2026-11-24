@@ -346,9 +346,15 @@ droneLamp.position.y = 0.057;
 drone.add(droneHull, droneLamp);
 drone.visible = false;
 runtime.scene.add(drone);
-const passageAt = (position: typeof spawn) => runtime.session.smallPassageAt(addressChunk(position).chunk);
-binding.start(renderer, () => passageAt(binding.getPosition())?.fields ?? [], (frame) => {
-  const passage = passageAt(frame.position);
+binding.start(renderer, () => {
+  const chunk = addressChunk(binding.getPosition()).chunk;
+  const small = runtime.session.smallPassageAt(chunk);
+  const large = runtime.session.largePassageAt(chunk);
+  return small && large ? [...small.fields, ...large.fields] : small?.fields ?? large?.fields ?? [];
+}, (frame) => {
+  const chunk = addressChunk(frame.position).chunk;
+  const passage = runtime.session.smallPassageAt(chunk);
+  const large = runtime.session.largePassageAt(chunk);
   const pickedUp = !restorePanelOpen && passage?.step(frame.deltaSeconds, frame.position);
   looseOre.visible = passage?.visible ?? false;
   drone.visible = !!passage;
@@ -399,7 +405,10 @@ binding.start(renderer, () => passageAt(binding.getPosition())?.fields ?? [], (f
   status.textContent = collectionSummary
     ? `자동 채굴 중. 수집: ${collectionSummary}`
     : '자동 채굴 중. 주변 광물을 탐색하고 있습니다.';
-  passageSensor.hidden = !passage;
+  const signal = passage && large ? '소형·대형' : large ? '대형' : '소형';
+  const sensorText = signal + ' 통로 · 미세중력 감지';
+  if (passageSensor.textContent !== sensorText) passageSensor.textContent = sensorText;
+  passageSensor.hidden = !passage && !large;
 });
 
 const reconnectDialogue = getReconnectMemoryDialogue(trainSave.isReconnect);

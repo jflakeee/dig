@@ -76,13 +76,14 @@ export class DigModeRuntime {
     options: {
       aspect?: number;
       random?: () => number;
+      portalRandom?: () => number;
       renderScene?: DigModeRenderScene;
     } = {},
   ) {
     const renderScene = options.renderScene ?? createDigModeRenderScene(options.aspect ?? 1);
     this.scene = renderScene.scene;
     this.camera = renderScene.camera;
-    this.session = new SessionChunks(options.random);
+    this.session = new SessionChunks(options.random, options.portalRandom);
     this.registry = new ChunkRenderRegistry(this.scene);
   }
 
@@ -208,7 +209,14 @@ export class DigModeRuntime {
       z: input.position.z + this.machineVelocity[2] * dt,
     };
     this.loadChunk(addressChunk(proposed).chunk);
-    const collision = resolveSphereVoxelCollision(this.session, proposed, input.radius);
+    const passage = this.session.largePassageAt(addressChunk(input.position).chunk);
+    const stopX = passage?.reverseContactX(input.position, proposed, input.radius);
+    if (stopX !== undefined) proposed.x = stopX;
+    const terrain = resolveSphereVoxelCollision(this.session, proposed, input.radius);
+    const collision = stopX === undefined ? terrain : {
+      position: terrain.position, collided: true,
+      contacts: [...terrain.contacts, { x: 1, y: 0, z: 0 }],
+    };
 
     for (const normal of collision.contacts) {
       const intoSurface = this.machineVelocity[0] * normal.x +
