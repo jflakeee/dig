@@ -15,11 +15,13 @@ type MutableVoxel = { mineral: SessionMineral; mined: boolean };
 export class SessionChunks {
   private readonly chunks = new Map<string, Map<string, MutableVoxel>>();
   private readonly passagePresence = new Map<string, PassagePresence>();
+  private readonly random: () => number;
+  private readonly portalRandom: () => number;
 
-  constructor(
-    private readonly random: () => number = Math.random,
-    private readonly portalRandom: () => number = Math.random,
-  ) {}
+  constructor(random: () => number = Math.random, portalRandom: () => number = Math.random) {
+    this.random = random;
+    this.portalRandom = portalRandom;
+  }
 
   /** Resolve a mineral on first exposure and keep it stable for this session. */
   exposeVoxel(chunk: ChunkCoordinate, voxel: VoxelCoordinate): ExposedVoxel {
