@@ -1,4 +1,5 @@
 import { chunkKey, type ChunkCoordinate } from './chunkCoordinates';
+import { rollPassagePresence, type PassagePresence } from './portalGeneration';
 
 export type SessionMineral = 'rock' | 'coal' | 'iron' | 'gold' | 'rare';
 export type VoxelCoordinate = Readonly<{ x: number; y: number; z: number }>;
@@ -13,8 +14,12 @@ type MutableVoxel = { mineral: SessionMineral; mined: boolean };
  */
 export class SessionChunks {
   private readonly chunks = new Map<string, Map<string, MutableVoxel>>();
+  private readonly passagePresence = new Map<string, PassagePresence>();
 
-  constructor(private readonly random: () => number = Math.random) {}
+  constructor(
+    private readonly random: () => number = Math.random,
+    private readonly portalRandom: () => number = Math.random,
+  ) {}
 
   /** Resolve a mineral on first exposure and keep it stable for this session. */
   exposeVoxel(chunk: ChunkCoordinate, voxel: VoxelCoordinate): ExposedVoxel {
@@ -59,9 +64,17 @@ export class SessionChunks {
     return state.mineral;
   }
 
-  /** Forget one chunk's terrain and mining history. */
+  /** Passage presence is rolled once when this session first creates the chunk. */
+  getPassagePresence(chunk: ChunkCoordinate): PassagePresence {
+    this.getOrCreateChunk(chunk);
+    return { ...this.passagePresence.get(chunkKey(chunk))! };
+  }
+
+  /** Forget one chunk's terrain, passage presence, and mining history. */
   resetChunk(chunk: ChunkCoordinate): void {
-    this.chunks.delete(chunkKey(chunk));
+    const key = chunkKey(chunk);
+    this.chunks.delete(key);
+    this.passagePresence.delete(key);
   }
 
   /** Snapshot coordinates for the streaming controller; no world graph is stored. */
@@ -75,6 +88,7 @@ export class SessionChunks {
   /** A large passage starts a fresh local environment with no old map. */
   transitionThroughLargePassage(): void {
     this.chunks.clear();
+    this.passagePresence.clear();
   }
 
   /** Number of chunks currently held in memory; useful to the streaming layer. */
@@ -88,6 +102,7 @@ export class SessionChunks {
     if (!voxels) {
       voxels = new Map<string, MutableVoxel>();
       this.chunks.set(key, voxels);
+      this.passagePresence.set(key, rollPassagePresence(this.portalRandom));
     }
     return voxels;
   }
