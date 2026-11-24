@@ -1,7 +1,7 @@
 name: Browser smoke
 on:
   push:
-    branches: [chore/toolchain-integration, feature/p4-exploration, feature/p7-visuals, feature/p8-exploration, feature/p9-performance, feature/p10-gameplay, feature/p11-world, feature/p12-mobile, feature/p13-mobile-ux, feature/p14-portrait-smoke, feature/p15-rotation-regression, feature/p16-mobile-input-smoke]
+    branches: [chore/toolchain-integration, feature/p4-exploration, feature/p7-visuals, feature/p8-exploration, feature/p9-performance, feature/p10-gameplay, feature/p11-world, feature/p12-mobile, feature/p13-mobile-ux, feature/p14-portrait-smoke, feature/p15-rotation-regression, feature/p16-mobile-input-smoke, feat/dig-4d-mode-foundation-20261124]
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,6 +22,7 @@ jobs:
           npx vite preview --host 127.0.0.1 --port 4173 --base=/dig/ > /tmp/dig-preview.log 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4173/dig/ && break; sleep 1; done
           node --experimental-strip-types tests/browser-smoke.mjs
+          node --experimental-strip-types tests/dig-4d-restore-smoke.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with:
