@@ -16,10 +16,12 @@ export type MobileRuntimeFrame = Readonly<{
 export class DigModeMobileRuntimeBinding {
   private readonly controls: DigModeMobileControls;
   private position: LocalPosition;
+  private animationFrame: number | null = null;
+  private resizeHandler: (() => void) | null = null;
 
   constructor(
     private readonly runtime: DigModeRuntime,
-    container: HTMLElement,
+    private readonly container: HTMLElement,
     initialPosition: LocalPosition,
     private readonly settings: {
       radius: number;
@@ -59,11 +61,52 @@ export class DigModeMobileRuntimeBinding {
     return { position: this.position, streaming };
   }
 
+  /** Start the animation loop and render the bound 4D scene. */
+  start(
+    renderer: THREE.WebGLRenderer,
+    passageFields: () => readonly PortalGravityField[] = () => [],
+    onFrame?: (frame: MobileRuntimeFrame) => void,
+  ): void {
+    if (this.animationFrame !== null) return;
+    if (renderer.domElement.parentElement !== this.container) {
+      this.container.append(renderer.domElement);
+    }
+    const resize = () => {
+      const width = Math.max(1, this.container.clientWidth);
+      const height = Math.max(1, this.container.clientHeight);
+      renderer.setSize(width, height, false);
+      this.runtime.camera.aspect = width / height;
+      this.runtime.camera.updateProjectionMatrix();
+    };
+    this.resizeHandler = resize;
+    window.addEventListener('resize', resize);
+    resize();
+
+    let previousTime = performance.now();
+    const tick = (now: number) => {
+      if (document.hidden) {
+        previousTime = now;
+      } else {
+        const deltaSeconds = Math.min(0.05, Math.max(0, (now - previousTime) / 1000));
+        previousTime = now;
+        const frame = this.step(deltaSeconds, passageFields());
+        renderer.render(this.runtime.scene, this.runtime.camera);
+        onFrame?.(frame);
+      }
+      this.animationFrame = requestAnimationFrame(tick);
+    };
+    this.animationFrame = requestAnimationFrame(tick);
+  }
+
   getPosition(): LocalPosition {
     return { ...this.position };
   }
 
   dispose(): void {
+    if (this.animationFrame !== null) cancelAnimationFrame(this.animationFrame);
+    this.animationFrame = null;
+    if (this.resizeHandler) window.removeEventListener('resize', this.resizeHandler);
+    this.resizeHandler = null;
     this.controls.dispose();
   }
 }
