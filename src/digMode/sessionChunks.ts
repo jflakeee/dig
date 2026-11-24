@@ -28,6 +28,20 @@ export class SessionChunks {
     return { ...state };
   }
 
+  /** Clear a voxel for spawn/setup without granting a mining reward. */
+  carveVoxelWithoutReward(chunk: ChunkCoordinate, voxel: VoxelCoordinate): boolean {
+    const voxels = this.getOrCreateChunk(chunk);
+    const key = voxelKey(voxel);
+    let state = voxels.get(key);
+    if (!state) {
+      state = { mineral: rollMineral(this.random), mined: false };
+      voxels.set(key, state);
+    }
+    if (state.mined) return false;
+    state.mined = true;
+    return true;
+  }
+
   /** Read state without creating a voxel; used for neighboring chunk faces. */
   readVoxel(chunk: ChunkCoordinate, voxel: VoxelCoordinate): ExposedVoxel | null {
     const state = this.chunks.get(chunkKey(chunk))?.get(voxelKey(voxel));
