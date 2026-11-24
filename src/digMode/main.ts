@@ -19,6 +19,7 @@ const reconnectLine = document.querySelector<HTMLElement>('#reconnect-line')!;
 const upgradeButton = document.querySelector<HTMLButtonElement>('#upgrade')!;
 const addDrillButton = document.querySelector<HTMLButtonElement>('#add-drill')!;
 const restoreToggleButton = document.querySelector<HTMLButtonElement>('#restore-toggle')!;
+const resetRecordButton = document.querySelector<HTMLButtonElement>('#reset-record')!;
 const restorePanel = document.querySelector<HTMLElement>('#restore-panel')!;
 const restoreCloseButton = document.querySelector<HTMLButtonElement>('#restore-close')!;
 const copyProgressButton = document.querySelector<HTMLButtonElement>('#copy-progress-code')!;
@@ -163,6 +164,20 @@ addDrillButton.addEventListener('click', () => {
   addDrillButton.textContent = `드릴 추가 · ${drillCount}대`;
   addDrillButton.disabled = drillCount >= 5;
   persistTrainState();
+});
+
+resetRecordButton.addEventListener('click', async () => {
+  if (!window.confirm('저장된 열차 기록을 지우고 처음부터 다시 시작할까요?')) return;
+  resetRecordButton.disabled = true;
+  try {
+    const clearRecord = () => localStorage.removeItem(DIG_4D_TRAIN_SAVE_KEY);
+    if (navigator.locks) await navigator.locks.request(DIG_4D_TRAIN_SAVE_KEY, clearRecord);
+    else clearRecord();
+    window.location.reload();
+  } catch {
+    resetRecordButton.disabled = false;
+    status.textContent = '기록을 초기화하지 못했습니다. 다시 시도하세요.';
+  }
 });
 
 function setRestorePanelOpen(open: boolean): void {
