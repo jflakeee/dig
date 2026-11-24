@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { unlockAudio } from 'plinkfx';
 import { digSound } from '../audio';
-import { DIG_VOXEL_SIZE_METERS, DIG_VOXELS_PER_AXIS } from './chunkCoordinates';
+import { addressChunk, DIG_VOXEL_SIZE_METERS, DIG_VOXELS_PER_AXIS } from './chunkCoordinates';
 import { DigModeRuntime } from './runtime';
 import { DigModeMobileRuntimeBinding } from './mobileRuntimeBinding';
 import type { SessionMineral, VoxelCoordinate } from './sessionChunks';
@@ -334,7 +334,15 @@ function findDrillTargets(): Array<{ chunk: { x: number; y: number; z: number };
 }
 
 window.addEventListener('pointerdown', () => unlockAudio(), { once: true });
-binding.start(renderer, () => [], (frame) => {
+const looseOre = new THREE.Mesh(new THREE.IcosahedronGeometry(0.12), materials.iron);
+looseOre.visible = false;
+runtime.scene.add(looseOre);
+const passageAt = (position: typeof spawn) => runtime.session.smallPassageAt(addressChunk(position).chunk);
+binding.start(renderer, () => passageAt(binding.getPosition())?.fields ?? [], (frame) => {
+  const passage = passageAt(frame.position);
+  const pickedUp = !restorePanelOpen && passage?.step(frame.deltaSeconds, frame.position);
+  looseOre.visible = passage?.visible ?? false;
+  if (passage) looseOre.position.set(passage.x, passage.y, passage.z);
   elapsed += frame.deltaSeconds;
   const lightProgress = Math.min(1, elapsed / 2.2);
   ambient.intensity = 0.04 + 0.5 * lightProgress;
@@ -361,7 +369,8 @@ binding.start(renderer, () => [], (frame) => {
   // The automatic drill keeps pushing gently; collision stops it at the rock face.
   binding.setAutonomousForward(autoMine.decision.state.mode === 'blocked' || autoMine.decision.state.mode === 'paused' ? 0 : 0.45);
 
-  if (autoMine.mined.length > 0) {
+  if (pickedUp || autoMine.mined.length > 0) {
+    if (pickedUp) collected.set('iron', (collected.get('iron') ?? 0) + 1);
     for (const mineral of autoMine.mined) {
       collected.set(mineral, (collected.get(mineral) ?? 0) + 1);
     }
@@ -374,9 +383,10 @@ binding.start(renderer, () => [], (frame) => {
   }
 
   const collectionSummary = [...collected.entries()].map(([mineral, amount]) => `${mineral} ${amount}`).join(', ');
-  status.textContent = collectionSummary
+  const miningStatus = collectionSummary
     ? `자동 채굴 중. 수집: ${collectionSummary}`
     : '자동 채굴 중. 주변 광물을 탐색하고 있습니다.';
+  status.textContent = passage ? `센서 · 소형 통로 미세중력 감지 | ${miningStatus}` : miningStatus;
 });
 
 const reconnectDialogue = getReconnectMemoryDialogue(trainSave.isReconnect);
@@ -388,6 +398,7 @@ if (reconnectDialogue) {
 
 // Audio begins after the first user gesture; the opening light still comes on automatically.
 window.addEventListener('beforeunload', () => {
+  looseOre.geometry.dispose();
   binding.dispose();
   runtime.dispose();
   renderer.dispose();

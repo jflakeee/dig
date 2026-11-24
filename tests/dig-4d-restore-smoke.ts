@@ -7,6 +7,14 @@ const browser = await chromium.launch({
 });
 
 try {
+  for (const [sample, expected] of [[0.05, true], [0.8, false]] as const) {
+    const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await mobile.addInitScript((roll) => { Math.random = () => roll; }, sample);
+    await mobile.goto('http://127.0.0.1:4173/dig/dig-4d.html');
+    await mobile.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('수집:'));
+    assert.equal((await mobile.locator('#status').textContent())?.includes('미세중력 감지'), expected);
+    await mobile.close();
+  }
   const page = await browser.newPage({ viewport: { width: 1000, height: 720 } });
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
