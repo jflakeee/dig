@@ -36,13 +36,7 @@ export function attachDigModeMobileControls(
   look.setAttribute('aria-label', 'Look around');
   look.style.cssText = 'position:absolute;left:42%;right:0;top:0;bottom:110px;pointer-events:auto;touch-action:none';
 
-  const vertical = document.createElement('div');
-  vertical.style.cssText = 'position:absolute;right:22px;bottom:22px;display:flex;flex-direction:column;gap:8px;pointer-events:auto';
-  const rise = makeThrustButton('Ascend', '▲');
-  const descend = makeThrustButton('Descend', '▼');
-  vertical.append(rise, descend);
-
-  overlay.append(stick, look, vertical);
+  overlay.append(stick, look);
   const priorPosition = getComputedStyle(container).position;
   if (priorPosition === 'static') container.style.position = 'relative';
   container.append(overlay);
@@ -50,7 +44,6 @@ export function attachDigModeMobileControls(
   let pointerId: number | null = null;
   let forward = 0;
   let strafe = 0;
-  let verticalAxis = 0;
   let lookDeltaX = 0;
   let lookDeltaY = 0;
   let lookPointer: number | null = null;
@@ -104,24 +97,6 @@ export function attachDigModeMobileControls(
     if (event.pointerId === lookPointer) lookPointer = null;
   };
 
-  const setVertical = (value: number) => (event: PointerEvent) => {
-    event.preventDefault();
-    verticalAxis = value;
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-  };
-  const clearVertical = (event: PointerEvent) => {
-    event.preventDefault();
-    verticalAxis = 0;
-  };
-  rise.addEventListener('pointerdown', setVertical(1));
-  descend.addEventListener('pointerdown', setVertical(-1));
-  rise.addEventListener('pointerup', clearVertical);
-  descend.addEventListener('pointerup', clearVertical);
-  rise.addEventListener('pointercancel', clearVertical);
-  descend.addEventListener('pointercancel', clearVertical);
-  rise.addEventListener('lostpointercapture', clearVertical);
-  descend.addEventListener('lostpointercapture', clearVertical);
-
   stick.addEventListener('pointerdown', onStickDown);
   stick.addEventListener('pointermove', onStickMove);
   stick.addEventListener('pointerup', resetStick);
@@ -135,7 +110,7 @@ export function attachDigModeMobileControls(
 
   return {
     consumeFrameInput() {
-      const frame = { forward, strafe, vertical: verticalAxis, lookDeltaX, lookDeltaY };
+      const frame = { forward, strafe, vertical: 0, lookDeltaX, lookDeltaY };
       lookDeltaX = 0;
       lookDeltaY = 0;
       return frame;
@@ -149,11 +124,3 @@ export function attachDigModeMobileControls(
   };
 }
 
-function makeThrustButton(label: string, symbol: string): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.setAttribute('aria-label', label);
-  button.textContent = symbol;
-  button.style.cssText = 'width:48px;height:48px;border:1px solid #ffffff88;border-radius:12px;background:#17202a99;color:white;font-size:20px;touch-action:none';
-  return button;
-}
