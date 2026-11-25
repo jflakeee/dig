@@ -45,6 +45,8 @@
 
 출현 확률, 수리 비용, 경매 수수료율 등 미정 수치는 시험 설정으로 기록한다. 첫 시험판은 [인트로](dig-4d-intro-implementation-detail-20261125.md)와 [포탈](dig-4d-portal-implementation-detail-20261125.md), 후속 기능은 [통합설계](DIG_unified_design.md)와 [최신 결정](PROJECT_MEMORY.md)을 기준으로 구현한다.
 
+첫 시험판의 저장값별 재접속, 운행 버튼, 센서·흡인 판정은 [인트로 상세설계 3–6절](dig-4d-intro-implementation-detail-20261125.md)을 적용한다.
+
 ## 5. 공개 판정과 롤백
 
 - 기존 재시작 검사에서는 초기 데이터를 넣는 스크립트가 페이지를 다시 열 때도 실행된다. 초기 데이터를 최초 한 번만 주입한 뒤, 재시작 시 이전 진행이 사라지는지와 다른 판의 저장이 유지되는지 확인한다. 수동 클립보드 복원과 다중 탭 충돌도 별도로 확인한다. [기존 검사](../tests/dig-4d-restore-smoke.ts)
