@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "extraKnownMarketplaces": {
+    "claude-gamedev-kit": {
+      "source": {
+        "source": "github",
+        "repo": "dudwns0921/claude-gamedev-kit"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "gamedev-kit@claude-gamedev-kit": true
+  }
+}
