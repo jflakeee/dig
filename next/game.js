@@ -162,7 +162,15 @@ el('reset').onclick = () => {
   el('reset').hidden = true;
   el('reset-prompt').hidden = false;
 };
-el('confirm-reset').onclick = () => write('reset', () => location.reload());
+el('confirm-reset').onclick = () => {
+  write('reset', () => {
+    loadWorld();
+    releaseLook();
+    panel = false;
+    age = 0;
+    message('');
+  });
+};
 canvas.onpointerdown = (e) => {
   pointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
   canvas.setPointerCapture(e.pointerId);
