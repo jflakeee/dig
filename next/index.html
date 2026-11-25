@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#07090b" />
+    <title>DIG · 심층 채굴</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main aria-label="채굴 기계 시야">
+      <canvas id="scene" aria-label="화면을 드래그해 채굴 방향 변경"></canvas>
+      <header>
+        <output id="rock">일반 암석 <b>0</b></output
+        ><button id="menu" hidden aria-expanded="false">메뉴</button>
+      </header>
+      <aside>
+        <output id="sensor" hidden></output
+        ><output id="message" role="status"></output>
+      </aside>
+      <footer>
+        <button id="craft" hidden>드릴 제작 <small>암석 3</small></button
+        ><button id="stop" hidden>정지</button
+        ><button id="resume" hidden>재개</button>
+      </footer>
+      <section id="panel" aria-label="메뉴" hidden>
+        <button id="reset">처음부터 다시 시작</button
+        ><button id="close">닫기</button>
+      </section>
+    </main>
+    <script type="module" src="./game.js"></script>
+  </body>
+</html>

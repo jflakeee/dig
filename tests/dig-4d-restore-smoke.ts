@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 const browser = await chromium.launch({
   headless: true,
+  executablePath: process.env.CHROME_BIN,
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 });
 
@@ -78,7 +79,9 @@ try {
   assert.deepEqual(pageErrors, []);
 
   const resetPage = await browser.newPage({ viewport: { width: 1000, height: 720 } });
-  await resetPage.addInitScript((key) => {
+  await resetPage.goto('http://127.0.0.1:4173/dig/dig-4d.html');
+  await resetPage.waitForURL('**/versions/2026-11-25/dig-4d.html');
+  await resetPage.evaluate((key) => {
     localStorage.setItem(key, JSON.stringify({
       version: 1,
       equipment: { drillEnhancement: 2, drillCount: 3 },
@@ -87,7 +90,7 @@ try {
       codex: [],
     }));
   }, saveKey);
-  await resetPage.goto('http://127.0.0.1:4173/dig/dig-4d.html');
+  await resetPage.reload();
   await resetPage.getByRole('button', { name: '메뉴', exact: true }).click();
   resetPage.once('dialog', async (dialog) => {
     assert.match(dialog.message(), /처음부터 다시 시작/);
