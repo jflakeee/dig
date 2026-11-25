@@ -66,6 +66,29 @@ button {
 button:focus-visible {
   outline: 2px solid #ffc783;
 }
+#sensor {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #8fded7;
+  border-radius: 50%;
+  box-shadow: 0 0 5px #061712;
+  pointer-events: none;
+}
+#sensor.exposed {
+  border-color: #ffce86;
+}
+#sensor.offscreen {
+  width: 13px;
+  height: 13px;
+  border-radius: 0;
+  border: 0;
+  background: #8fded7;
+  clip-path: polygon(0 0, 100% 50%, 0 100%, 28% 50%);
+}
+#sensor.offscreen.exposed {
+  background: #ffce86;
+}
 aside {
   top: 16%;
   left: 5%;

@@ -40,48 +40,68 @@ try {
     document.querySelector('#craft').click();
     document.querySelector('#craft').click();
   });
-  await page.locator('#stop').waitFor();
+  assert.equal(
+    await page
+      .getByRole('button', { name: /^(정지|재개|후진)$/, includeHidden: true })
+      .count(),
+    0,
+  );
+  await page.locator('#menu').waitFor();
   let save = await read();
   assert.equal(save.rocks, 0);
   assert.deepEqual(save.drills, ['drill-1']);
   await page.reload();
-  await page.locator('#resume').click();
   await page.locator('#sensor').waitFor();
   await page.waitForFunction(
-    () => document.querySelector('#sensor').textContent.includes('입구 노출'),
+    () => document.querySelector('#sensor').classList.contains('exposed'),
     {},
     { timeout: 60000 },
   );
-  await page.locator('#stop').click();
-  await page.locator('#resume').waitFor();
-  assert.equal((await read()).transited, false);
-  await page.locator('#resume').click();
-  await page.waitForTimeout(750);
+  assert.equal(await page.locator('#sensor').textContent(), '');
   await page.mouse.move(15, 400);
   await page.mouse.down();
   await page.mouse.move(375, 400, { steps: 4 });
   await page.mouse.up();
   await page.waitForFunction(() =>
-    document.querySelector('#sensor').textContent.includes('후방'),
+    document.querySelector('#sensor').classList.contains('offscreen'),
   );
   await page.waitForTimeout(1200);
   assert.equal((await read()).transited, false);
   await page.locator('#menu').click();
+  const beforeMenu = (await read()).rocks;
+  await page.waitForFunction(
+    ([k, n]) => JSON.parse(localStorage.getItem(k)).rocks > n,
+    [key, beforeMenu],
+  );
   await page.locator('#close').click();
-  await page.locator('#resume').waitFor();
   await page.reload();
-  await page.locator('#resume').click();
   await page.waitForFunction(
     (k) => JSON.parse(localStorage.getItem(k))?.transited,
     key,
     { timeout: 60000 },
   );
-  await page.reload();
-  await page.locator('#resume').waitFor();
-  assert.equal(await page.locator('#sensor').isHidden(), true);
+  const afterPortal = (await read()).rocks;
+  // At most 15 forward layers of 9 voxels fit before the old boundary.
+  // Collecting 170 rocks on this straight course requires crossing it.
   await page.locator('#menu').click();
-  page.once('dialog', (d) => d.accept());
+  await page.waitForFunction(
+    ([k, n]) => JSON.parse(localStorage.getItem(k)).rocks >= n + 170,
+    [key, afterPortal],
+    { timeout: 150000 },
+  );
+  assert.equal(await page.locator('#panel').isVisible(), true);
+  assert.equal(await page.getByText(/청크 경계/).count(), 0);
+  await page.reload();
+  await page.locator('#menu').waitFor();
+  await page.locator('#sensor.offscreen').waitFor();
+  await page.locator('#menu').click();
   await page.locator('#reset').click();
+  const beforeConfirm = (await read()).rocks;
+  await page.waitForFunction(
+    ([k, n]) => JSON.parse(localStorage.getItem(k)).rocks > n,
+    [key, beforeConfirm],
+  );
+  await page.locator('#confirm-reset').click();
   await page.waitForFunction(
     (k) => JSON.parse(localStorage.getItem(k))?.front === null,
     key,
@@ -148,7 +168,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    'First craft, reload, steering, braking, transit, isolated reset and legacy bookmark passed.',
+    'First craft, reload, automatic driving through menus, steering, transit, isolated reset and legacy bookmark passed.',
   );
 } finally {
   await browser.close();

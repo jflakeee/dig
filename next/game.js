@@ -1,16 +1,13 @@
 import { createWorld, forward, offset, radius, entrance } from './world.js';
 import { readSave, commit, saveKey } from './save.js';
-import { createView } from './view.js';
+import { createView, portalMarker } from './view.js';
 const el = (id) => document.getElementById(id);
 const canvas = el('scene'),
   render = createView(canvas);
 let save,
   fatal = false,
   busy = false,
-  active = false,
-  panel = false,
-  brake = false,
-  escape = false;
+  panel = false;
 let world,
   pos,
   yaw,
@@ -27,8 +24,7 @@ let age = 0,
   pointer = null,
   audio,
   osc,
-  gain,
-  requestEpoch = 0;
+  gain;
 function loadWorld() {
   world = createWorld(!save?.transited);
   pos = [0.5, 0.5, 0.5];
@@ -40,8 +36,6 @@ function loadWorld() {
   anchors = [];
   timer = 0;
   targetTag = '';
-  brake = false;
-  escape = false;
 }
 function message(text) {
   el('message').textContent = text;
@@ -53,37 +47,44 @@ function hud() {
   el('menu').hidden = !save?.front;
   el('menu').setAttribute('aria-expanded', String(panel));
   el('panel').hidden = !panel;
-  el('stop').hidden = !save?.front || !active || panel;
-  el('resume').hidden =
-    !save?.front || active || brake || panel || fatal || busy;
-  el('sensor').hidden = !sensor;
-  if (sensor) {
-    let angle = Math.atan2(entrance[0] - pos[0], entrance[2] - pos[2]) - yaw;
-    angle = Math.atan2(Math.sin(angle), Math.cos(angle));
-    const direction =
-      Math.abs(angle) < 0.52
-        ? '전방'
-        : Math.abs(angle) > 2.5
-          ? '후방'
-          : angle > 0
-            ? '오른쪽'
-            : '왼쪽';
-    el('sensor').textContent =
-      (world.uncovered() ? '입구 노출' : '미세중력 감지') + ' · ' + direction;
+  if (!panel) {
+    el('reset-prompt').hidden = true;
+    el('reset').hidden = false;
+  }
+  el('confirm-reset').disabled = busy;
+  const marker = el('sensor');
+  const mouth = world.mouth;
+  marker.hidden =
+    !sensor || !mouth || Math.hypot(...mouth.map((v, i) => v - pos[i])) > 32;
+  if (!marker.hidden) {
+    const mark = portalMarker(
+      mouth,
+      pos,
+      yaw,
+      pitch,
+      canvas.clientWidth,
+      canvas.clientHeight,
+    );
+    marker.classList.toggle('offscreen', mark.offscreen);
+    marker.style.left = mark.x + 'px';
+    marker.style.top = mark.y + 'px';
+    marker.style.transform =
+      'translate(-50%, -50%) rotate(' + mark.angle + 'rad)';
+    marker.classList.toggle('exposed', !world.tutorial || world.uncovered());
   }
 }
 function distance() {
   return Math.hypot(...pos.map((n, i) => entrance[i] - n));
 }
-function halt() {
-  requestEpoch++;
-  pointer = null;
-  active = false;
-  timer = 0;
-  anchors = [];
-  escape = !entered && world.uncovered() && distance() < 4;
-  brake = escape || Math.hypot(...velocity) > 0.04;
-  hud();
+function syncSave() {
+  const latest = readSave();
+  const newWorld =
+    latest.front !== save?.front || latest.transited !== save?.transited;
+  save = latest;
+  if (newWorld) {
+    loadWorld();
+    if (!save.front) panel = false;
+  }
 }
 try {
   save = readSave();
@@ -101,13 +102,8 @@ async function write(op, after) {
     save = await commit(save.revision, op);
     after?.();
   } catch (e) {
-    halt();
     try {
-      const latest = readSave();
-      if (latest.revision !== save.revision) {
-        save = latest;
-        loadWorld();
-      }
+      syncSave();
     } catch {
       fatal = true;
     }
@@ -119,10 +115,8 @@ async function write(op, after) {
 }
 window.addEventListener('storage', (e) => {
   if (e.key !== saveKey && e.key !== null) return;
-  halt();
   try {
-    save = readSave();
-    loadWorld();
+    syncSave();
     message('다른 탭의 진행을 불러왔습니다.');
   } catch (e) {
     fatal = true;
@@ -151,23 +145,12 @@ function sound() {
 sound();
 document.addEventListener('pointerdown', sound);
 el('craft').onclick = () => {
-  const epoch = requestEpoch;
   write('craft', () => {
-    active = epoch === requestEpoch && !document.hidden;
     timer = 0;
     message('');
   });
 };
-el('stop').onclick = halt;
-el('resume').onclick = () => {
-  if (!busy && !fatal && !brake && !panel) {
-    active = true;
-    message('');
-    hud();
-  }
-};
 el('menu').onclick = () => {
-  halt();
   panel = !panel;
   hud();
 };
@@ -176,14 +159,13 @@ el('close').onclick = () => {
   hud();
 };
 el('reset').onclick = () => {
-  if (confirm('이 시험판의 기록을 지우고 처음부터 다시 시작할까요?'))
-    write('reset', () => location.reload());
+  el('reset').hidden = true;
+  el('reset-prompt').hidden = false;
 };
+el('confirm-reset').onclick = () => write('reset', () => location.reload());
 canvas.onpointerdown = (e) => {
-  if (!panel) {
-    pointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
-    canvas.setPointerCapture(e.pointerId);
-  }
+  pointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  canvas.setPointerCapture(e.pointerId);
 };
 canvas.onpointermove = (e) => {
   if (!pointer || pointer.id !== e.pointerId) return;
@@ -195,16 +177,19 @@ canvas.onpointermove = (e) => {
   pointer.x = e.clientX;
   pointer.y = e.clientY;
 };
-canvas.onpointerup = () => {
+function releaseLook() {
   pointer = null;
-};
-canvas.onpointercancel = halt;
-window.addEventListener('orientationchange', halt);
+}
+canvas.onpointerup = releaseLook;
+canvas.onpointercancel = releaseLook;
+window.addEventListener('orientationchange', releaseLook);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    halt();
+    releaseLook();
     previous = 0;
     if (audio) audio.suspend().catch(() => {});
+  } else if (audio) {
+    audio.resume().catch(() => {});
   }
 });
 function holdChains() {
@@ -223,6 +208,7 @@ function move(dt) {
   }
   const crossed = pos[2] < entrance[2] && next[2] >= entrance[2];
   pos = next;
+  world.stream(pos);
   if (
     world.uncovered() &&
     crossed &&
@@ -231,11 +217,10 @@ function move(dt) {
     entered = true;
   if (pos[2] < entrance[2]) entered = false;
   if (entered && pos[2] >= entrance[2] + radius && !busy) {
-    active = false;
     velocity = [0, 0, 0];
     write('transit', () => {
       loadWorld();
-      message('통과 완료 · 중력 신호 소실');
+      message('포탈 통과 완료');
     });
   }
   return true;
@@ -253,23 +238,10 @@ function tick(dt) {
     }
     return;
   }
-  if (busy || (!active && !brake)) return;
+  if (busy) return;
   const length = distance(),
     field = world.uncovered() && length < 4;
   const inward = pos.map((n, i) => (entrance[i] - n) / Math.max(0.01, length));
-  if (brake) {
-    const desired = escape && field ? inward.map((n) => -n * 2) : [0, 0, 0];
-    velocity = velocity.map(
-      (n, i) => n + (desired[i] - n) * Math.min(1, dt * 7),
-    );
-    if (!move(dt) || ((!field || !escape) && Math.hypot(...velocity) < 0.04)) {
-      brake = false;
-      escape = false;
-      velocity = [0, 0, 0];
-      hud();
-    }
-    return;
-  }
   // The probe extends beyond one integration step so the entire body fits.
   const blocks = world.blockers(offset(pos, d, 0.7));
   if (blocks.length) {
@@ -280,11 +252,6 @@ function tick(dt) {
     if (targetTag !== tag) {
       timer = 0;
       targetTag = tag;
-    }
-    if (!world.bounded(...target)) {
-      halt();
-      message('청크 경계 · 방향을 돌려 주세요.');
-      return;
     }
     timer += dt;
     if (timer >= 0.16) {
@@ -303,7 +270,11 @@ function tick(dt) {
   velocity = velocity.map(
     (n, i) => n + ((d[i] * 1.9 - n) * 3 + inward[i] * force) * dt,
   );
-  if (move(dt) && world.tutorial && !sensor) {
+  // Turning redirects propulsion. Inertia and portal pull may deflect the hull
+  // sideways, but never translate it behind its current heading.
+  const along = velocity.reduce((sum, v, i) => sum + v * d[i], 0);
+  if (along < 0) velocity = velocity.map((v, i) => v - along * d[i]);
+  if (move(dt) && !sensor) {
     sensor = true;
     hud();
   }

@@ -1,4 +1,4 @@
-import { entrance, exitMouth, forward } from './world.js';
+import { forward } from './world.js';
 
 import { createDust } from './dust.js';
 function noise(x, y, z) {
@@ -8,6 +8,37 @@ function noise(x, y, z) {
     Math.imul(z, 1274126177);
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+// Project into the view when visible. Otherwise pin an arrow to the edge;
+// a target directly behind the hull defaults to a rightward turn.
+export function portalMarker(mouth, pos, yaw, pitch, width, height) {
+  const [x, y, z] = mouth.map((v, i) => v - pos[i]);
+  const horizontal = x * Math.sin(yaw) + z * Math.cos(yaw);
+  let right = x * Math.cos(yaw) - z * Math.sin(yaw);
+  const down = horizontal * Math.sin(pitch) - y * Math.cos(pitch);
+  const depth = horizontal * Math.cos(pitch) + y * Math.sin(pitch);
+  const focal = Math.min(width, height) * 0.82;
+  const edgeX = Math.max(1, width / 2 - 28),
+    edgeY = Math.max(1, height / 2 - 58);
+  if (
+    depth > 0.001 &&
+    Math.abs((right * focal) / depth) <= edgeX &&
+    Math.abs((down * focal) / depth) <= edgeY
+  )
+    return {
+      x: width / 2 + (right * focal) / depth,
+      y: height / 2 + (down * focal) / depth,
+      angle: 0,
+      offscreen: false,
+    };
+  if (Math.hypot(right, down) < 0.0001) right = 1;
+  const scale = 1 / Math.max(Math.abs(right) / edgeX, Math.abs(down) / edgeY);
+  return {
+    x: width / 2 + right * scale,
+    y: height / 2 + down * scale,
+    angle: Math.atan2(down, right),
+    offscreen: true,
+  };
 }
 export function createView(canvas) {
   const ctx = canvas.getContext('2d', { alpha: false });
@@ -36,7 +67,7 @@ export function createView(canvas) {
     ];
     const source = pixels.data;
     const open = world.uncovered();
-    const mouth = world.tutorial ? entrance : exitMouth;
+    const mouth = world.mouth;
     for (let j = 0; j < h; j++)
       for (let i = 0; i < w; i++) {
         const u = (i + 0.5 - w / 2) / f,
@@ -85,10 +116,13 @@ export function createView(canvas) {
           g += lum * 1.01;
           b += lum * 0.86;
         }
-        if ((open && dz > 0.001) || (!world.tutorial && dz < -0.001)) {
+        if (
+          mouth &&
+          ((open && dz > 0.001) || (!world.tutorial && dz < -0.001))
+        ) {
           const t = (mouth[2] - pos[2]) / dz;
-          const ex = pos[0] + dx * t - entrance[0],
-            ey = pos[1] + dy * t - entrance[1],
+          const ex = pos[0] + dx * t - mouth[0],
+            ey = pos[1] + dy * t - mouth[1],
             dist = ex * ex + ey * ey;
           if (
             t > 0 &&

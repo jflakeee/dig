@@ -8,19 +8,58 @@ export const forward = (yaw, pitch) => [
   Math.cos(yaw) * Math.cos(pitch),
 ];
 export const offset = (p, d, t) => p.map((v, i) => v + d[i] * t);
-const key = (x, y, z) => (x + 64) * 16384 + (y + 64) * 128 + z + 64;
-
+// Chunks are 16 m wide. Their voxel coordinates share one world frame.
+const side = 32;
+const chunkOf = (cell) => Math.floor((cell + 15) / side);
 export function createWorld(tutorial) {
-  const air = new Set();
-  const bounded = (x, y, z) => [x, y, z].every((v) => v >= -15 && v <= 16);
-  const dig = (x, y, z) => air.add(key(x, y, z));
+  const chunks = new Map();
+  let cached,
+    center = [0, 0, 0],
+    hasMouth = true;
+  function chunkAt(x, y, z, create) {
+    const cx = chunkOf(x),
+      cy = chunkOf(y),
+      cz = chunkOf(z);
+    if (cached && cached.x === cx && cached.y === cy && cached.z === cz)
+      return cached;
+    const key = [cx, cy, cz].join(',');
+    cached = chunks.get(key);
+    if (!cached && create) {
+      cached = { x: cx, y: cy, z: cz, air: new Set() };
+      chunks.set(key, cached);
+    }
+    return cached;
+  }
+  function localIndex(x, y, z) {
+    return (((x + 15) & 31) * side + ((y + 15) & 31)) * side + ((z + 15) & 31);
+  }
+  const dig = (x, y, z) => chunkAt(x, y, z, true).air.add(localIndex(x, y, z));
+  const solid = (x, y, z) =>
+    !chunkAt(x, y, z, false)?.air.has(localIndex(x, y, z));
+  function stream(pos) {
+    const next = pos.map(chunkOf);
+    if (next.every((n, i) => n === center[i])) return;
+    center = next;
+    for (const [key, chunk] of chunks) {
+      if (
+        Math.max(
+          Math.abs(chunk.x - next[0]),
+          Math.abs(chunk.y - next[1]),
+          Math.abs(chunk.z - next[2]),
+        ) <= 1
+      )
+        continue;
+      chunks.delete(key);
+      if (chunk === cached) cached = undefined;
+      if (chunk.x === 0 && chunk.y === 0 && chunk.z === 0) hasMouth = false;
+    }
+  }
   for (let x = -1; x <= 1; x++)
     for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) dig(x, y, z);
   if (tutorial) {
     for (let x = -2; x <= 2; x++)
       for (let y = -2; y <= 2; y++) for (let z = 6; z <= 10; z++) dig(x, y, z);
   }
-  const solid = (x, y, z) => !air.has(key(x, y, z));
   function blockers(p) {
     const found = [];
     for (let x = Math.floor(p[0] - radius); x <= p[0] + radius; x++)
@@ -36,7 +75,7 @@ export function createWorld(tutorial) {
     return found;
   }
   function uncovered() {
-    if (!tutorial) return false;
+    if (!tutorial || !hasMouth) return false;
     for (let x = -1; x <= 1; x++)
       for (let y = -1; y <= 1; y++) if (solid(x, y, 5)) return false;
     return true;
@@ -75,5 +114,16 @@ export function createWorld(tutorial) {
     }
     return null;
   }
-  return { tutorial, solid, dig, bounded, blockers, uncovered, trace };
+  return {
+    tutorial,
+    solid,
+    dig,
+    stream,
+    blockers,
+    uncovered,
+    trace,
+    get mouth() {
+      return hasMouth ? (tutorial ? entrance : exitMouth) : null;
+    },
+  };
 }

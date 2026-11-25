@@ -15,7 +15,9 @@ export function createDust() {
       mote.life -= dt;
       if (mote.life <= 0) {
         const source =
-          !world.tutorial && Math.random() < 0.4 ? exitMouth : origin;
+          world.mouth && !world.tutorial && Math.random() < 0.4
+            ? exitMouth
+            : origin;
         mote.p = source.map(
           (v, i) =>
             v +
@@ -37,7 +39,8 @@ export function createDust() {
         mote.life = 0;
         continue;
       }
-      const accel = world.tutorial ? 12 / (1 + distance * distance) : 0;
+      const accel =
+        world.mouth && world.tutorial ? 12 / (1 + distance * distance) : 0;
       for (let i = 0; i < 3; i++) {
         mote.v[i] +=
           dt * ((accel * gap[i]) / Math.max(0.2, distance) - 0.12 * mote.v[i]);
