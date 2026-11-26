@@ -1,10 +1,10 @@
 import { cellOwner, savedAir } from './world.js';
-import { blockYield, mineralIds } from './minerals.js';
+import { blockYield, mineralIds, variants, defaultVariant, rockVariantAt } from './minerals.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 3;
+export const saveVersion = 4;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -15,7 +15,33 @@ export const migrations = {
   }),
   // Rocks stay in `rocks`; the other 15 catalog minerals start at zero.
   2: s => ({...s, minerals: {}, mineralLog: s.rocks > 0 || s.front ? ['rock'] : [], blocksMined: 0}),
+  // Every existing piece counts as its mineral's first sub-species.
+  3: s => ({...s, variants: {}}),
 };
+// Sub-species counts. `variants` holds only non-default sub-species, keyed
+// "mineral:variant"; the rest of a mineral's total is its default sub-species.
+const total = (s, id) => id === 'rock' ? s.rocks : s.minerals[id] ?? 0;
+export function variantCounts(s, id) {
+  const counts = Object.fromEntries(variants[id].map(([v]) => [v, s.variants?.[id + ':' + v] ?? 0]));
+  counts[defaultVariant(id)] = total(s, id) - variants[id].slice(1).reduce((n, [v]) => n + counts[v], 0);
+  return counts;
+}
+function grant(s, id, variant) {
+  if (id === 'rock') s.rocks++;
+  else s.minerals[id] = (s.minerals[id] ?? 0) + 1;
+  if (variant && variant !== defaultVariant(id)) s.variants[id + ':' + variant] = (s.variants[id + ':' + variant] ?? 0) + 1;
+}
+// Spends rocks from the default sub-species first, then in table order.
+function spendRocks(s, n) {
+  let left = n - Math.min(n, variantCounts(s, 'rock')[defaultVariant('rock')]);
+  for (const [v] of variants.rock.slice(1)) {
+    const key = 'rock:' + v, take = Math.min(left, s.variants[key] ?? 0);
+    if (take) s.variants[key] -= take;
+    if (s.variants[key] === 0) delete s.variants[key];
+    left -= take;
+  }
+  s.rocks -= n;
+}
 const fresh = () => ({
   version: saveVersion,
   revision: 0,
@@ -32,6 +58,7 @@ const fresh = () => ({
   minerals: {},
   mineralLog: [],
   blocksMined: 0,
+  variants: {},
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
@@ -49,7 +76,13 @@ function validMinerals(s) {
     Object.entries(s.minerals).every(([id, n]) => id !== 'rock' && mineralIds.includes(id) && Number.isSafeInteger(n) && n >= 0) &&
     Array.isArray(s.mineralLog) && s.mineralLog.every(id => mineralIds.includes(id)) &&
     new Set(s.mineralLog).size === s.mineralLog.length &&
-    Number.isSafeInteger(s.blocksMined) && s.blocksMined >= 0;
+    Number.isSafeInteger(s.blocksMined) && s.blocksMined >= 0 &&
+    s.variants && typeof s.variants === 'object' && !Array.isArray(s.variants) &&
+    Object.entries(s.variants).every(([key, n]) => {
+      const [id, v] = key.split(':');
+      return variants[id]?.slice(1).some(entry => entry[0] === v) && Number.isSafeInteger(n) && n > 0;
+    }) &&
+    mineralIds.every(id => variantCounts(s, id)[defaultVariant(id)] >= 0);
 }
 function validSession(s) {
   const w = s?.world;
@@ -152,8 +185,10 @@ export async function commit(revision, operation, session) {
       const prior = find(s.session?.world);
       if (prior && (prior.epoch ?? 0) === (next.epoch ?? 0) && savedAir(prior, index)) return s;
       // Before the first drill the laser only gathers ordinary rock.
-      found = s.front && Number.isSafeInteger(session.world.seed)
-        ? blockYield(session.world.seed, chunk, next.epoch ?? 0, index) : {base: 'rock', companion: null};
+      const seed = session.world.seed, epoch = next.epoch ?? 0;
+      found = !Number.isSafeInteger(seed) ? {base: 'rock', companion: null}
+        : s.front ? blockYield(seed, chunk, epoch, index)
+        : {base: 'rock', baseVariant: rockVariantAt(seed, chunk, epoch, index), companion: null};
     }
     switch (type) {
       case 'blast':
@@ -175,7 +210,7 @@ export async function commit(revision, operation, session) {
       }
       case 'fire-ceramic':
         if (!s.front || s.rocks < rocksPerCeramic) throw Error('가열할 암석이 부족합니다.');
-        s.rocks -= rocksPerCeramic;
+        spendRocks(s, rocksPerCeramic);
         s.ceramic = (s.ceramic ?? 0) + 1;
         break;
       case 'repair':
@@ -201,7 +236,7 @@ export async function commit(revision, operation, session) {
       case 'craft':
         if (s.front || s.rocks < 3 || !s.craftReadyAt || Date.now() < s.craftReadyAt)
           throw Error('제작 조건을 다시 확인해 주세요.');
-        s.rocks -= 3;
+        spendRocks(s, 3);
         s.craftReadyAt = null;
         s.front = 'drill-1';
         s.drills.push(s.front);
@@ -231,10 +266,9 @@ export async function commit(revision, operation, session) {
     }
     // One mining event pays its base and companion together, after validation.
     if (found) s.blocksMined++;
-    for (const id of found ? [found.base, found.companion] : []) {
+    for (const [id, variant] of found ? [[found.base, found.baseVariant], [found.companion, found.companionVariant]] : []) {
       if (!id) continue;
-      if (id === 'rock') s.rocks++;
-      else s.minerals[id] = (s.minerals[id] ?? 0) + 1;
+      grant(s, id, variant);
       if (!s.mineralLog.includes(id)) s.mineralLog.push(id);
     }
     if (type === 'collect' && s.rocks === 3) s.craftReadyAt = Date.now()+fabricationMs;
