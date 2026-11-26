@@ -32,6 +32,17 @@
         <output id="cargo"></output>
         <output id="materials"></output>
         <output id="minerals"></output>
+        <details id="decomposer" hidden>
+          <summary>분해기</summary>
+          <label for="decompose-source">원료</label>
+          <select id="decompose-source"></select>
+          <output id="decompose-preview" for="decompose-source"></output>
+          <button id="decompose">원료 1개 분해</button>
+        </details>
+        <details id="element-book" hidden>
+          <summary>원소 도감 <span id="element-count"></span></summary>
+          <p id="element-list"></p>
+        </details>
         <details id="discoveries" hidden>
           <summary>발견 도감</summary>
           <ul id="discovery-list"></ul>

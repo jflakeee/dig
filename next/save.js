@@ -1,10 +1,11 @@
 import { cellOwner, savedAir } from './world.js';
-import { blockYield, mineralIds, variants, defaultVariant, rockVariantAt } from './minerals.js';
+import { blockYield, mineralIds, variants, defaultVariant, rockVariantAt, elementUnits } from './minerals.js';
+import { elementSymbols } from './elements.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 4;
+export const saveVersion = 5;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -17,6 +18,8 @@ export const migrations = {
   2: s => ({...s, minerals: {}, mineralLog: s.rocks > 0 || s.front ? ['rock'] : [], blocksMined: 0}),
   // Every existing piece counts as its mineral's first sub-species.
   3: s => ({...s, variants: {}}),
+  // Element inventory by symbol and the order each element was first recovered.
+  4: s => ({...s, elements: {}, elementLog: []}),
 };
 // Sub-species counts. `variants` holds only non-default sub-species, keyed
 // "mineral:variant"; the rest of a mineral's total is its default sub-species.
@@ -30,6 +33,16 @@ function grant(s, id, variant) {
   if (id === 'rock') s.rocks++;
   else s.minerals[id] = (s.minerals[id] ?? 0) + 1;
   if (variant && variant !== defaultVariant(id)) s.variants[id + ':' + variant] = (s.variants[id + ':' + variant] ?? 0) + 1;
+}
+// Removes one piece of a given sub-species.
+function spendVariant(s, id, variant) {
+  if (variantCounts(s, id)[variant] < 1) throw Error('분해할 원료가 없습니다.');
+  if (variant !== defaultVariant(id)) {
+    const key = id + ':' + variant;
+    if (--s.variants[key] === 0) delete s.variants[key];
+  }
+  if (id === 'rock') s.rocks--;
+  else if (--s.minerals[id] === 0) delete s.minerals[id];
 }
 // Spends rocks from the default sub-species first, then in table order.
 function spendRocks(s, n) {
@@ -59,6 +72,8 @@ const fresh = () => ({
   mineralLog: [],
   blocksMined: 0,
   variants: {},
+  elements: {},
+  elementLog: [],
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
@@ -82,7 +97,11 @@ function validMinerals(s) {
       const [id, v] = key.split(':');
       return variants[id]?.slice(1).some(entry => entry[0] === v) && Number.isSafeInteger(n) && n > 0;
     }) &&
-    mineralIds.every(id => variantCounts(s, id)[defaultVariant(id)] >= 0);
+    mineralIds.every(id => variantCounts(s, id)[defaultVariant(id)] >= 0) &&
+    s.elements && typeof s.elements === 'object' && !Array.isArray(s.elements) &&
+    Object.entries(s.elements).every(([symbol, n]) => s.elementLog.includes(symbol) && Number.isSafeInteger(n) && n > 0) &&
+    Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
+    new Set(s.elementLog).size === s.elementLog.length;
 }
 function validSession(s) {
   const w = s?.world;
@@ -258,6 +277,18 @@ export async function commit(revision, operation, session) {
         s.transited = false;
         s.drillCondition = Math.floor((s.drillCondition ?? 100)*0.4);
         break;
+      case 'decompose': {
+        // One piece leaves and its element units arrive in the same save.
+        const units = elementUnits(operation?.mineral, operation?.variant);
+        if (!s.front || !units) throw Error('분해할 원료를 다시 선택해 주세요.');
+        spendVariant(s, operation.mineral, operation.variant);
+        for (const [symbol, n] of Object.entries(units)) {
+          if ((s.elements[symbol] ?? 0) > Number.MAX_SAFE_INTEGER - n) throw Error('원소 보관 한도에 도달했습니다.');
+          s.elements[symbol] = (s.elements[symbol] ?? 0) + n;
+          if (!s.elementLog.includes(symbol)) s.elementLog.push(symbol);
+        }
+        break;
+      }
       case 'reset':
         Object.assign(s, fresh(), { revision });
         break;

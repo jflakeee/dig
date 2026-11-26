@@ -3,7 +3,8 @@ import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, portalRayDistance, radius } from './world.js';
 import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts } from './save.js';
-import { mineralIds, mineralName, variantName } from './minerals.js';
+import { mineralIds, mineralName, variantName, elementUnits } from './minerals.js';
+import { elementSymbols } from './elements.js';
 import { createView, portalMarker } from './view.js';
 const el = (id) => document.getElementById(id);
 const canvas = el('scene'),
@@ -89,6 +90,37 @@ function showDiscoveries() {
     return row;
   }));
 }
+// Owned sub-species as [mineral, variant, count], in catalog order.
+function ownedPieces() {
+  return mineralIds.flatMap(id => Object.entries(variantCounts(save, id))
+    .filter(([, n]) => n > 0).map(([v, n]) => [id, v, n]));
+}
+const unitText = units => Object.entries(units).map(([symbol, n]) => symbol + ' ' + n).join(' · ');
+function showDecomposer() {
+  const box = el('decomposer');
+  box.hidden = !save?.front;
+  if (!panel || box.hidden) return;
+  const select = el('decompose-source');
+  const pieces = ownedPieces();
+  const options = pieces.map(([id, v, n]) => [id + ':' + v,
+    (variantName(id, v) === mineralName(id) ? mineralName(id) : variantName(id, v) + ' (' + mineralName(id) + ')') + ' · ' + n + '개']);
+  if (select.dataset.options !== JSON.stringify(options)) {
+    const chosen = select.value;
+    select.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
+    select.dataset.options = JSON.stringify(options);
+    if (options.some(([value]) => value === chosen)) select.value = chosen;
+  }
+  const [id, v] = select.value ? select.value.split(':') : [];
+  const units = id && elementUnits(id, v);
+  el('decompose-preview').textContent = units ? variantName(id, v) + ' 1개 → ' + unitText(units) : '분해할 원료가 없습니다.';
+  el('decompose').disabled = busy || !units;
+  const book = el('element-book');
+  const log = save.elementLog ?? [];
+  book.hidden = !log.length;
+  el('element-count').textContent = log.length + ' / ' + elementSymbols.length + '종';
+  el('element-list').textContent = elementSymbols.filter(symbol => log.includes(symbol))
+    .map(symbol => symbol + ' ' + (save.elements[symbol] ?? 0)).join(' · ');
+}
 function recoverCargo(item, label) {
   const isNew = !save.discoveries.some(entry => entry.item === item);
   write({type:'pickup', item}, () => {
@@ -105,6 +137,7 @@ function hud() {
   el('menu').setAttribute('aria-expanded', String(panel));
   el('panel').hidden = !panel;
   showDiscoveries();
+  showDecomposer();
   if (!panel) {
     el('reset-prompt').hidden = true;
     el('reset').hidden = false;
@@ -262,6 +295,21 @@ el('stabilize').onclick = () => {
       Math.hypot(...h.point.map((v,i) => v-pos[i])) > 2.5) return;
   h.spent = true;
   recoverCargo(2, '밀봉 회수 · 미확인 결정');
+};
+el('decompose-source').onchange = () => hud();
+el('decompose').onclick = () => {
+  const [mineral, variant] = el('decompose-source').value.split(':');
+  const units = elementUnits(mineral, variant);
+  if (!units) return;
+  const known = new Set(save.elementLog ?? []);
+  write({type: 'decompose', mineral, variant}, () => {
+    message(variantName(mineral, variant) + ' 분해 · ' + Object.entries(units).map(([symbol, n]) => symbol + ' +' + n).join(' · '));
+    const first = Object.keys(units).find(symbol => !known.has(symbol));
+    if (first) {
+      discoveryNoticeUntil = age + 2;
+      el('discovery-notice').textContent = '원소 도감에 기록됨 · ' + first;
+    }
+  });
 };
 el('fire-ceramic').onclick = () => write('fire-ceramic', () => message('암석 가열 완료 · 세라믹 1개'));
 el('repair').onclick = () => write('repair', () => {

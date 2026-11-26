@@ -153,6 +153,30 @@ section {
   margin: 0 0 12px;
   padding-left: 20px;
 }
+#decomposer label {
+  display: block;
+  margin: 4px 0;
+  font-size: 0.9em;
+  color: #b9c4c2;
+}
+#decompose-source {
+  width: 100%;
+  min-height: 44px;
+  background: #192022;
+  color: #e9efed;
+  border: 1px solid #697574;
+  border-radius: 5px;
+  font: inherit;
+}
+#decompose-preview {
+  display: block;
+  margin: 8px 0 4px;
+}
+#element-list {
+  margin: 0 0 12px;
+  line-height: 1.6;
+  word-break: keep-all;
+}
 section button {
   display: block;
   width: 100%;
