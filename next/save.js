@@ -23,6 +23,9 @@ function validSession(s) {
     (w.cargoTime === undefined || (Number.isFinite(w.cargoTime) && w.cargoTime >= 0 && w.cargoTime < 0.05)) &&
     typeof w.hasMouth === 'boolean' && Array.isArray(w.chunks) && w.chunks.every(c =>
       c && vector([c.x,c.y,c.z], Number.isSafeInteger) &&
+      (c.hazard == null || (vector(c.hazard.point) && [null,'lava','volatile'].includes(c.hazard.kind) &&
+        Number.isFinite(c.hazard.seed) && typeof c.hazard.spent === 'boolean' &&
+        (c.hazard.fuse === null || (Number.isFinite(c.hazard.fuse) && c.hazard.fuse >= 0)))) &&
       (c.debris === undefined || (c.debris && Number.isSafeInteger(c.debris.tick) && c.debris.tick >= 0 &&
         Number.isFinite(c.debris.time) && c.debris.time >= 0 && c.debris.time < 0.05 &&
         Array.isArray(c.debris.parts) && c.debris.parts.every(p => p && vector(p.point) && vector(p.speed) &&
@@ -85,6 +88,10 @@ export async function commit(revision, operation, session) {
     if (s.revision !== revision)
       throw Error('다른 탭에서 진행이 바뀌었습니다. 다시 열어 주세요.');
     switch (operation?.type ?? operation) {
+      case 'blast':
+        if (!session || !Number.isInteger(operation.wear) || operation.wear < 0) throw Error('폭발 저장 오류');
+        s.drillCondition = Math.max(0,(s.drillCondition ?? 100)-operation.wear);
+        break;
       case 'checkpoint':
         break;
       case 'pickup':
@@ -111,6 +118,10 @@ export async function commit(revision, operation, session) {
         s.session = null;
         break;
       case 'reboot':
+        if (operation.loss) {
+          if (!vector(operation.loss,n => n === 0 || n === 1)) throw Error('화물 기록 오류');
+          s.cargo = (s.cargo ?? [0,0,0]).map((n,i) => Math.max(0,n-operation.loss[i]));
+        }
         s.session = null;
         s.transited = false;
         s.drillCondition = Math.floor((s.drillCondition ?? 100)*0.4);

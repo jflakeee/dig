@@ -1,3 +1,4 @@
+import { senseHazard, cargoLoss } from '../next/hazards.js';
 import { contactDamage } from '../next/debris.js';
 import { commit, readSave, saveKey } from '../next/save.js';
 import { hitHull } from '../next/debris.js';
@@ -279,4 +280,24 @@ test('fatal collision reboots once, retaining cargo and damaging the mounted dri
   assert.equal(next.session,null);
   await assert.rejects(commit(previous.revision,'reboot'));
   assert.equal(readSave().drillCondition,40);
+});
+
+test('exposure arms a volatile mineral; the countdown survives reload and blasts once', () => {
+  const h = {point:[2,0,0],seed:0.1,fuse:null,kind:null,spent:false};
+  const pos = [0,0,0], clear = () => null;
+  assert.equal(senseHazard(h,pos,1,() => ({x:1,y:0,z:0})).visible,false);
+  assert.equal(h.kind,null);
+  assert.equal(senseHazard(h,pos,1,clear).damage,0);
+  const saved = JSON.parse(JSON.stringify(h));
+  assert.equal(senseHazard(saved,pos,2,clear).damage,90);
+  assert.equal(senseHazard(saved,pos,1,clear).damage,0);
+});
+
+test('heat stops outside contact and fatal exposure reaches only susceptible outer cargo', () => {
+  const h = {point:[0,0,0],seed:0.9,fuse:null,kind:null,spent:false};
+  assert.equal(senseHazard(h,[1,0,0],0.5,()=>null).damage,21);
+  assert.equal(senseHazard(h,[2,0,0],0.5,()=>null).damage,0);
+  assert.deepEqual(cargoLoss('lava',[0,0,-1],[0,0,0],0,0),[1,1,0]);
+  assert.deepEqual(cargoLoss('blast',[0,0,-1],[0,0,0],0,0),[1,0,0]);
+  assert.deepEqual(cargoLoss('impact',[0,0,1],[0,0,0],0,0),[0,0,0]);
 });

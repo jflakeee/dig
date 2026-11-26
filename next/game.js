@@ -1,3 +1,4 @@
+import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, radius } from './world.js';
 import { readSave, commit, saveKey } from './save.js';
@@ -29,9 +30,11 @@ let age = 0,
   gain;
 let checkpointAge = 0;
 let hull = 100;
+let hazardVisible = false;
 function loadWorld() {
   const session = save?.session;
   checkpointAge = 0;
+  hazardVisible = false;
   hull = session?.hull ?? 100;
   world = createWorld(!save?.transited, Math.random, save?.arrivalRadius, save?.arrivalStrength, session?.world);
   pos = session?.pos ?? [0.5, 0.5, 0.5];
@@ -65,6 +68,13 @@ function hud() {
     const cargo = el('cargo');
     cargo.textContent = [cargo.textContent, '기체 ' + Math.ceil(hull) + '% · 드릴 ' + (save.drillCondition ?? 100) + '%'].filter(Boolean).join(' | ');
   }
+  const hazard = world.hazard;
+  const alerted = hazardVisible && hazard && !hazard.spent;
+  el('hazard-alert').hidden = !alerted;
+  el('hazard-alert').textContent = alerted ? (hazard.kind === 'lava' ? '고열 감지 · 방향 전환' :
+    hazard.fuse === null ? '불안정 광물 감지' : '충격 경고 · ' + Math.ceil(hazard.fuse) + '초') : '';
+  el('stabilize').hidden = !(alerted && hazard.kind === 'volatile' && hazard.fuse !== null && Math.hypot(...hazard.point.map((v,i) => v-pos[i])) <= 2.5);
+  el('stabilize').disabled = busy;
   const marker = el('sensor');
   const nearest = world.portals().reduce((best, portal) => {
     const distance = Math.hypot(...portal.point.map((v, i) => v - pos[i]));
@@ -111,7 +121,7 @@ async function write(op, after) {
   busy = true;
   hud();
   try {
-    let session = save.front && (op === 'collect' || op === 'checkpoint' || op?.type === 'pickup')
+    let session = save.front && (op === 'collect' || op === 'checkpoint' || op?.type === 'blast' || op?.type === 'pickup')
       ? {hull, pos, velocity, drift, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
       : null;
     if (op?.type === 'transit') {
@@ -164,6 +174,13 @@ function sound() {
 }
 sound();
 document.addEventListener('pointerdown', sound);
+el('stabilize').onclick = () => {
+  const h = world.hazard;
+  if (busy || fatal || !h || h.spent || h.fuse === null || !world.sense(pos,0).visible ||
+      Math.hypot(...h.point.map((v,i) => v-pos[i])) > 2.5) return;
+  h.spent = true;
+  write({type:'pickup',item:2}, () => message('밀봉 회수 · 미확인 결정'));
+};
 el('craft').onclick = () => {
   write('craft', () => {
     timer = 0;
@@ -271,18 +288,27 @@ function tick(dt) {
     return;
   }
   if (busy) return;
-  const {push,damage} = world.hullContacts(dt,pos,velocity.map((v,i) => v+drift[i]),anchors.length > 0);
-  if (damage > 0) {
-    hull = Math.max(0,hull-damage);
-    if (hull === 0) {
-      write('reboot', () => {
+  const {push,damage,impactPoint} = world.hullContacts(dt,pos,velocity.map((v,i) => v+drift[i]),anchors.length > 0);
+  const hazard = world.sense(pos,dt,damage > 0);
+  hazardVisible = hazard.visible;
+  for (const [loss,cause,origin] of [[damage,'impact',impactPoint],
+    [hazard.damage,hazard.blast ? 'blast' : 'lava',world.hazard?.point]]) {
+    if (loss <= 0) continue;
+    hull = Math.max(0,hull-loss);
+    if (!hull) {
+      write({type:'reboot',loss:cargoLoss(cause,origin,pos,yaw,pitch)}, () => {
         age = 0;
         loadWorld();
         message('기체 파손 · 재기동');
       });
       return;
     }
-    message('충격·압착 감지 · 기체 ' + Math.ceil(hull) + '%');
+    const label = {impact:'충격·압착',blast:'광물 폭발',lava:'용암 접촉'}[cause];
+    message(label + ' · 기체 ' + Math.ceil(hull) + '%');
+  }
+  if (hazard.blast) {
+    write({type:'blast', wear:Math.ceil(hazard.damage/8)});
+    return;
   }
   drift = drift.map((v,i) => (v+push[i])*Math.exp(-1.2*dt));
   if (Math.hypot(...drift) > 0.001) {
@@ -365,7 +391,7 @@ function frame(time) {
         audio.currentTime,
         0.14,
       );
-    if (sensor) hud();
+    if (sensor || hazardVisible || !el('hazard-alert').hidden) hud();
   }
   requestAnimationFrame(frame);
 }

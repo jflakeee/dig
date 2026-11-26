@@ -170,6 +170,25 @@ try {
   assert.equal(rebooted.drillCondition,40);
   await page.reload();
   assert.equal((await read()).drillCondition,40);
+  const hazards = createWorld(false, () => 0.6).snapshot();
+  const room = hazards.chunks.find(c => c.x===0 && c.y===0 && c.z===0);
+  room.hazard = {point:[0.5,0.5,2.3],kind:null,seed:0.1,fuse:null,spent:false};
+  const danger = {...session,pos:[0.5,0.5,0.5],world:hazards};
+  async function enterHazard(hull) {
+    await page.evaluate(([k,v]) => localStorage.setItem(k,JSON.stringify(v)),
+      [key,{...recovered,cargo:[2,2,2],session:{...danger,hull}}]);
+    await page.reload();
+  }
+  await enterHazard(100);
+  await page.locator('#stabilize').click();
+  await page.waitForFunction(k => JSON.parse(localStorage.getItem(k)).cargo[2]===3,key);
+  assert.ok((await read()).session.world.chunks.some(c => c.hazard?.spent));
+  room.hazard = {point:[0.5,0.5,0],kind:null,seed:0.8,fuse:null,spent:false};
+  await enterHazard(0.1);
+  await page.locator('#message').filter({hasText:'기체 파손'}).waitFor();
+  assert.deepEqual((await read()).cargo,[1,1,2]);
+  await page.reload();
+  assert.deepEqual((await read()).cargo,[1,1,2]);
   await page.evaluate((k) => localStorage.setItem(k, 'broken-save'), key);
   await page.reload();
   await page.locator('#message').filter({ hasText: '원본을 보존' }).waitFor();

@@ -150,6 +150,20 @@ export function createView(canvas) {
       if (depth < 0.01) return null;
       return [w / 2 + (f * dot(right)) / depth, h / 2 - (f * dot(up)) / depth];
     }
+    const hazard = world.hazard;
+    if (hazard?.kind && !hazard.spent) {
+      const at = project(hazard.point);
+      const ray = hazard.point.map((v,i) => v-pos[i]);
+      const depth = Math.hypot(...ray);
+      const rock = at && depth <= 7 && world.trace(pos,...ray,1);
+      if (at && depth <= 7 && (!rock || [rock.x,rock.y,rock.z].every((v,i) => v === Math.floor(hazard.point[i])))) {
+        const size = f*0.42/Math.max(0.5,depth);
+        ctx.fillStyle = hazard.kind === 'lava' ? '#da5927' : '#dfaa59';
+        ctx.beginPath();
+        ctx.ellipse(at[0],at[1],size,size*(hazard.kind === 'lava' ? 0.4 : 0.85),0.3,0,Math.PI*2);
+        ctx.fill();
+      }
+    }
     for (const part of world.fragments()) {
       const screen = project(part.point);
       if (!screen) continue;

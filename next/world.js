@@ -1,3 +1,4 @@
+import { arrivalHazard, senseHazard } from './hazards.js';
 import { simulate, hitHull, contactDamage } from './debris.js';
 import { terrainKinds, makeChunk, naturalSolid, identify } from './chunk-terrain.js';
 // One cell is half a metre. Coordinates name a voxel by its lower corner.
@@ -34,6 +35,8 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
     if (!cached && create) {
       const kind = starting ? 'rock' : terrainKinds[Math.floor(terrainRandom() * terrainKinds.length)];
       cached = makeChunk(cx, cy, cz, kind, kind === 'rock' ? 0 : Math.floor(terrainRandom() * 0x100000000));
+      if (!tutorial && hasMouth && cx===0 && cy===0 && cz===0 && !saved)
+        cached.hazard = arrivalHazard(terrainRandom);
       chunks.set(key, cached);
     }
     return cached;
@@ -190,11 +193,12 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
 
   let cargoTime = saved?.cargoTime ?? 0;
   function hullContacts(dt,pos,speed,anchored) {
-    let damage = 0;
+    let damage = 0, impactPoint = null, largest = 0;
     const blocked = point => blockers(point).length > 0;
     function contact(body,relativeTo,field,time) {
       const loss = contactDamage(body,pos,relativeTo,field,time,blocked);
       damage += loss;
+      if (loss > largest) { largest = loss; impactPoint = body.point.slice(); }
       return loss;
     }
     const push = debrisStep(dt,pos,speed,anchored,contact);
@@ -222,7 +226,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
         for (let i=0; i<3; i++) push[i] += hit[i];
       }
     }
-    return {push,damage};
+    return {push,damage,impactPoint};
   }
   function blockers(p) {
     const found = [];
@@ -278,6 +282,8 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
     return null;
   }
   return {
+    get hazard() { return chunks.get('0,0,0')?.hazard; },
+    sense(pos,dt,shock) { return senseHazard(this.hazard,pos,dt,trace,shock); },
     advance(dt) { elapsed += dt; },
     hullContacts, debrisStep, fragments, snapshot, portals, gravity, warehouseItems, takeNearby,
     hasChunk(x, y, z) { return chunks.has([x, y, z].join(',')); },
