@@ -154,7 +154,7 @@ try {
   assert.equal(shared.rocks, 0);
   assert.deepEqual(shared.drills, ['drill-1']);
   await other.close();
-  const warehouse = createWorld(false, () => 0.86);
+  const warehouse = createWorld(false, () => 0.98);
   const item = warehouse.warehouseItems()[0].item;
   const session = {pos:item.point,velocity:[0,0,0],yaw:0,pitch:0,sensor:true,entered:-1,world:warehouse.snapshot()};
   await page.evaluate(([k,v]) => localStorage.setItem(k,JSON.stringify(v)),
@@ -178,7 +178,7 @@ try {
   assert.equal(rebooted.drillCondition,40);
   await page.reload();
   assert.equal((await read()).drillCondition,40);
-  const hazards = createWorld(false, () => 0.6).snapshot();
+  const hazards = createWorld(false, () => 0.93).snapshot();
   const room = hazards.chunks.find(c => c.x===0 && c.y===0 && c.z===0);
   room.hazard = {point:[0.5,0.5,2.3],kind:null,seed:0.1,fuse:null,spent:false};
   const danger = {...session,pos:[0.5,0.5,0.5],world:hazards};

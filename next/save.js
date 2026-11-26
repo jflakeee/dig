@@ -39,6 +39,7 @@ function validSession(s) {
         Number.isFinite(c.debris.time) && c.debris.time >= 0 && c.debris.time < 0.05 &&
         Array.isArray(c.debris.parts) && c.debris.parts.every(p => p && vector(p.point) && vector(p.speed) &&
         Number.isFinite(p.mass) && p.mass > 0))) &&
+      (c.starterRocks === undefined || typeof c.starterRocks === 'boolean') &&
       (c.kind === undefined || (['rock','cave','empty','warehouse'].includes(c.kind) &&
         Number.isSafeInteger(c.seed) && c.seed >= 0 && c.seed <= 0xffffffff)) &&
       (c.kind !== 'warehouse' || (Array.isArray(c.items) && c.items.length <= 9 && c.items.every(item =>

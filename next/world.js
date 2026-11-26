@@ -1,6 +1,6 @@
 import { arrivalHazard, senseHazard } from './hazards.js';
 import { simulate, hitHull, contactDamage } from './debris.js';
-import { terrainKinds, makeChunk, naturalSolid, identify } from './chunk-terrain.js';
+import { terrainKind, makeChunk, naturalSolid, identify } from './chunk-terrain.js';
 // One cell is half a metre. Coordinates name a voxel by its lower corner.
 export const radius = 0.92;
 export const exitMouth = [0.5, 0.5, -0.98];
@@ -33,7 +33,6 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
   let cached,
     center = [0, 0, 0],
     hasMouth = true;
-  let starting = tutorial && !saved;
   function chunkAt(x, y, z, create) {
     const cx = chunkOf(x),
       cy = chunkOf(y),
@@ -43,7 +42,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
     const key = [cx, cy, cz].join(',');
     cached = chunks.get(key);
     if (!cached && create) {
-      const kind = starting ? 'rock' : terrainKinds[Math.floor(terrainRandom() * terrainKinds.length)];
+      const kind = terrainKind(terrainRandom());
       cached = makeChunk(cx, cy, cz, kind, kind === 'rock' ? 0 : Math.floor(terrainRandom() * 0x100000000));
       if (!tutorial && hasMouth && cx===0 && cy===0 && cz===0 && !saved)
         cached.hazard = arrivalHazard(terrainRandom);
@@ -184,10 +183,10 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
   } else {
     for (let x = -1; x <= 1; x++)
       for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) dig(x, y, z);
+    const origin = chunkAt(0,0,0,true);
+    if (tutorial && origin.kind !== 'rock') origin.starterRocks = true;
+    enter(origin);
   }
-
-  starting = false;
-  if (!saved) enter(chunkAt(0,0,0,true));
 
   function warehouseItems() {
     const entries = [];

@@ -143,7 +143,7 @@ test('starter attraction is weak and ordinary portal strength is sampled once', 
 });
 
 test('visual rays follow fractured silhouettes, while mining occupies full cells', () => {
-  const world = createWorld(true);
+  const world = createWorld(true, () => 0);
   const depths = new Set();
   for (let x = 0; x < 12; x++) {
     const pos = [x + 0.92, 3.94, 2.5];
@@ -204,8 +204,40 @@ test('save round trip preserves excavation, portal countdown and chunk resets', 
   assert.deepEqual(reset.portals(), []);
 });
 
+test('start, neighbours and portal arrivals use the same terrain weights', () => {
+  for (let percent = 0; percent < 100; percent++) {
+    const roll = () => percent / 100;
+    const expected = percent < 80 ? 'rock' : percent < 90 ? 'cave' : percent < 97 ? 'empty' : 'warehouse';
+    for (const tutorial of [true, false]) {
+      const w = createWorld(tutorial, roll);
+      w.stream([32,0,0]);
+      assert.deepEqual(w.snapshot().chunks.map(c => c.kind), [expected, expected]);
+    }
+  }
+});
+
+test('each starting terrain supplies three laser rocks and preserves excavation on reload', () => {
+  for (const roll of [0, 0.80, 0.90, 0.97]) {
+    let w = createWorld(true, () => roll);
+    const kind = w.snapshot().chunks[0].kind;
+    for (let z = 2; z <= 4; z++) {
+      const hit = w.trace([0.5,0.5,0.5], 0,0,1,32,intersectStone);
+      assert.deepEqual([hit.x,hit.y,hit.z], [0,0,z]);
+      assert.ok(w.dig(0,0,z));
+      const saved = JSON.parse(JSON.stringify(w.snapshot()));
+      w = createWorld(true, () => { throw Error('unexpected reroll'); }, undefined, undefined, saved);
+      assert.equal(w.snapshot().chunks[0].kind, kind);
+      assert.equal(w.solid(0,0,z), false);
+    }
+    assert.equal(w.portals()[0].strength, 0.6);
+    if (kind !== 'rock') assert.equal(createWorld(false, () => roll).solid(0,0,2), false);
+  }
+});
+
 test('empty faces start waiting on entry and never spawn neighbours on their own', () => {
-  const w = createWorld(true, () => 0.6);
+  let roll = 0;
+  const w = createWorld(true, () => roll);
+  roll = 0.93;
   assert.equal(w.solid(32,8,2),false);
   w.advance(500);
   assert.equal(w.portals().length,1);
@@ -216,7 +248,7 @@ test('empty faces start waiting on entry and never spawn neighbours on their own
 });
 
 test('cave has connected passages, solid walls and accurate face counts', () => {
-  const w = createWorld(false, () => 0.3);
+  const w = createWorld(false, () => 0.85);
   for (let z = -15; z <= 16; z++) assert.equal(w.solid(0,0,z),false);
   assert.equal(w.solid(12,12,12),true);
   let count=0;
@@ -228,7 +260,7 @@ test('cave has connected passages, solid walls and accurate face counts', () => 
 });
 
 test('warehouse pickups stay removed after reload', () => {
-  const w = createWorld(false, () => 0.86);
+  const w = createWorld(false, () => 0.98);
   const first = w.warehouseItems()[0].item;
   assert.equal(first.type,null);
   assert.equal(w.solid(...first.point.map(Math.floor)),false);
@@ -271,7 +303,7 @@ test('pressure accumulates only while a body pins the hull against solid rock', 
 });
 
 test('fast floating cargo damages the hull and remains in the world after impact', () => {
-  const world = createWorld(false,() => 0.86);
+  const world = createWorld(false,() => 0.98);
   const item = world.warehouseItems()[0].item;
   const pos = item.point.map((v,i) => v+(i===0 ? 1 : 0));
   item.speed = [6,0,0];
@@ -279,7 +311,7 @@ test('fast floating cargo damages the hull and remains in the world after impact
   const result = world.hullContacts(0.05,pos,[0,0,0],false);
   assert.ok(result.damage>0 && result.push[0]>0);
   assert.equal(world.takeNearby(pos),null);
-  const restored = createWorld(false,() => 0.86,undefined,undefined,JSON.parse(JSON.stringify(world.snapshot())));
+  const restored = createWorld(false,() => 0.98,undefined,undefined,JSON.parse(JSON.stringify(world.snapshot())));
   assert.deepEqual(restored.warehouseItems()[0].item,item);
 });
 
