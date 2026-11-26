@@ -1,3 +1,4 @@
+import { hitHull } from '../next/debris.js';
 import { intersectStone } from '../next/rock-shapes.js';
 import assert from 'node:assert/strict';
 import { createWorld } from '../next/world.js';
@@ -211,4 +212,28 @@ test('warehouse pickups stay removed after reload', () => {
   const restored = createWorld(false, Math.random, undefined, undefined, JSON.parse(JSON.stringify(w.snapshot())));
   assert.equal(restored.warehouseItems().length,8);
   assert.ok(restored.warehouseItems().every(({item}) => item.id !== first.id));
+});
+
+test('exit detaches solid cells, preserves fragments on reload, and resets with its chunk', () => {
+  const exit = createWorld(false, () => 0, 2, 4);
+  const start = createWorld(true);
+  for (const world of [exit,start])
+    for (let n=0; n<200; n++) world.debrisStep(0.05,[0.5,0.5,0.5],[0,0,0],false);
+  assert.equal(start.fragments().length,0);
+  assert.ok(exit.fragments().length>0);
+  const saved = JSON.parse(JSON.stringify(exit.snapshot()));
+  const excavated = saved.chunks.find(c => c.x===0 && c.y===0 && c.z===0).air;
+  assert.equal(excavated.length,27+exit.fragments().length);
+  const restored = createWorld(false, () => 0, 2, 4, saved);
+  assert.deepEqual(restored.fragments(),exit.fragments());
+  restored.stream([64,0,0]);
+  assert.equal(restored.fragments().length,0);
+});
+
+test('fragment push depends on mass, closing speed and chain anchoring', () => {
+  const push = (mass,speed,anchored) => hitHull({point:[1,0,0],speed:[-2,0,0],mass},
+    [0,0,0],[speed,0,0],anchored)[0];
+  assert.equal(push(4,-2,false),0);
+  assert.ok(push(4,0,false) < push(1,0,false));
+  assert.ok(push(1,0,false) < push(1,0,true));
 });

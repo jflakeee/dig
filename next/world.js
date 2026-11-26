@@ -1,3 +1,4 @@
+import { simulate } from './debris.js';
 import { terrainKinds, makeChunk, naturalSolid, identify } from './chunk-terrain.js';
 // One cell is half a metre. Coordinates name a voxel by its lower corner.
 export const radius = 0.92;
@@ -58,11 +59,12 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
     for (let axis=0; axis<3; axis++)
       for (const sign of [-1,1]) scheduleFace(chunk, owner, axis, sign);
   }
-  function dig(x, y, z) {
+  function dig(x, y, z, mined = true) {
     const chunk = chunkAt(x, y, z, true);
     const index = localIndex(x, y, z);
     if (!naturalSolid(chunk,x,y,z) || chunk.air.has(index)) return;
     chunk.air.add(index);
+    const priorFaces = chunk.faces.length;
     const coords = [x, y, z];
     const owner = [chunk.x, chunk.y, chunk.z];
     for (let axis = 0; axis < 3; axis++) {
@@ -73,7 +75,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
       if (--chunk.remaining[face] !== 0) continue;
       scheduleFace(chunk, owner, axis, sign);
     }
-    if (chunk.faces.length === 6 && !chunk.linked &&
+    if (mined && priorFaces < 6 && chunk.faces.length === 6 && !chunk.linked &&
         elapsed - chunk.faces[0].cleared <= 300) {
       chunk.linked = true;
       for (const face of chunk.faces) {
@@ -81,6 +83,18 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
         chunkAt(...adjacent.map(n => n * side), true);
       }
     }
+    return true;
+  }
+  function fragments() {
+    return chunks.get('0,0,0')?.debris?.parts ?? [];
+  }
+  function debrisStep(dt, pos, speed, anchored) {
+    if (tutorial || !hasMouth) return [0,0,0];
+    const chunk = chunks.get('0,0,0');
+    const state = chunk.debris ??= {tick:0,time:0,parts:[]};
+    state.parts = state.parts.filter(part => part.point.every((v,i) => Math.abs(chunkOf(Math.floor(v))-center[i]) <= 1));
+    const active = portals();
+    return simulate(state,dt,pos,speed,anchored,solid,(x,y,z) => dig(x,y,z,false),p => gravity(p,active));
   }
   function portals() {
     const result = hasMouth ? [initial] : [];
@@ -225,7 +239,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
   }
   return {
     advance(dt) { elapsed += dt; },
-    snapshot, portals, gravity, warehouseItems, takeNearby,
+    debrisStep, fragments, snapshot, portals, gravity, warehouseItems, takeNearby,
     hasChunk(x, y, z) { return chunks.has([x, y, z].join(',')); },
     tutorial,
     solid,

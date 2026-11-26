@@ -14,6 +14,7 @@ let world,
   yaw,
   pitch,
   velocity,
+  drift,
   sensor,
   anchors,
   timer,
@@ -33,6 +34,7 @@ function loadWorld() {
   world = createWorld(!save?.transited, Math.random, save?.arrivalRadius, save?.arrivalStrength, session?.world);
   pos = session?.pos ?? [0.5, 0.5, 0.5];
   velocity = session?.velocity ?? [0, 0, 0];
+  drift = session?.drift ?? [0,0,0];
   yaw = session?.yaw ?? 0;
   pitch = session?.pitch ?? 0;
   sensor = session?.sensor ?? false;
@@ -104,11 +106,11 @@ async function write(op, after) {
   hud();
   try {
     let session = save.front && (op === 'collect' || op === 'checkpoint' || op?.type === 'pickup')
-      ? {pos, velocity, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
+      ? {pos, velocity, drift, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
       : null;
     if (op?.type === 'transit') {
       const destination = createWorld(false, Math.random, op.radius, op.strength);
-      session = {pos:[0.5,0.5,0.5],velocity:[0,0,0],yaw:0,pitch:0,sensor:false,entered:-1,world:destination.snapshot()};
+      session = {pos:[0.5,0.5,0.5],velocity:[0,0,0],drift,yaw:0,pitch:0,sensor:false,entered:-1,world:destination.snapshot()};
     }
     save = await commit(save.revision, op, session);
     checkpointAge = 0;
@@ -220,8 +222,8 @@ function holdChains() {
     if (hit) anchors.push(offset(pos, dir, hit.t));
   }
 }
-function move(dt) {
-  const next = offset(pos, velocity, dt);
+function move(dt, speed = velocity) {
+  const next = offset(pos, speed, dt);
   if (world.blockers(next).length) {
     velocity = [0, 0, 0];
     return false;
@@ -263,6 +265,12 @@ function tick(dt) {
     return;
   }
   if (busy) return;
+  const push = world.debrisStep(dt,pos,velocity.map((v,i) => v+drift[i]),anchors.length > 0);
+  drift = drift.map((v,i) => (v+push[i])*Math.exp(-1.2*dt));
+  if (Math.hypot(...drift) > 0.001) {
+    if (!move(dt,drift)) drift = [0,0,0];
+    if (busy) return;
+  }
   checkpointAge += dt;
   if (checkpointAge >= 1) {
     write('checkpoint');

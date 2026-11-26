@@ -150,6 +150,27 @@ export function createView(canvas) {
       if (depth < 0.01) return null;
       return [w / 2 + (f * dot(right)) / depth, h / 2 - (f * dot(up)) / depth];
     }
+    for (const part of world.fragments()) {
+      const screen = project(part.point);
+      if (!screen) continue;
+      const ray = part.point.map((v,i) => v-pos[i]);
+      const distance = Math.hypot(...ray);
+      if (distance > 32 || world.trace(pos,...ray,0.98)) continue;
+      const size = f*0.38/Math.max(0.5,distance);
+      ctx.save();
+      ctx.translate(...screen);
+      ctx.rotate(part.mass);
+      ctx.globalAlpha = light[0]/(1+distance*0.035);
+      ctx.fillStyle = '#89775c';
+      ctx.beginPath();
+      ctx.moveTo(-size,-size*0.3);
+      ctx.lineTo(-size*0.45,-size);
+      ctx.lineTo(size*0.8,-size*0.65);
+      ctx.lineTo(size,size*0.5);
+      ctx.lineTo(-size*0.2,size);
+      ctx.fill();
+      ctx.restore();
+    }
     for (const {chunk,item} of world.warehouseItems()) {
       const screen = project(item.point);
       if (!screen || screen[0]<0 || screen[0]>=w || screen[1]<0 || screen[1]>=h) continue;

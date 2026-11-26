@@ -16,11 +16,15 @@ const unreadable = '저장 기록을 읽을 수 없습니다. 원본을 보존�
 const vector = (v, valid = Number.isFinite) => Array.isArray(v) && v.length === 3 && v.every(n => valid(n));
 function validSession(s) {
   const w = s?.world;
-  return vector(s?.pos) && vector(s.velocity) && Number.isFinite(s.yaw) && Number.isFinite(s.pitch) &&
+  return vector(s?.pos) && vector(s.velocity) && (s.drift === undefined || vector(s.drift)) && Number.isFinite(s.yaw) && Number.isFinite(s.pitch) &&
     typeof s.sensor === 'boolean' && Number.isInteger(s.entered) && s.entered >= -1 &&
     Number.isFinite(w?.elapsed) && w.elapsed >= 0 && vector(w.center, Number.isSafeInteger) &&
     typeof w.hasMouth === 'boolean' && Array.isArray(w.chunks) && w.chunks.every(c =>
       c && vector([c.x,c.y,c.z], Number.isSafeInteger) &&
+      (c.debris === undefined || (c.debris && Number.isSafeInteger(c.debris.tick) && c.debris.tick >= 0 &&
+        Number.isFinite(c.debris.time) && c.debris.time >= 0 && c.debris.time < 0.05 &&
+        Array.isArray(c.debris.parts) && c.debris.parts.every(p => p && vector(p.point) && vector(p.speed) &&
+        Number.isFinite(p.mass) && p.mass > 0))) &&
       (c.kind === undefined || (['rock','cave','empty','warehouse'].includes(c.kind) &&
         Number.isSafeInteger(c.seed) && c.seed >= 0 && c.seed <= 0xffffffff)) &&
       (c.kind !== 'warehouse' || (Array.isArray(c.items) && c.items.length <= 9 && c.items.every(item =>
