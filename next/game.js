@@ -37,6 +37,14 @@ let hull = 100;
 let hazardVisible = false;
 let discoveryNoticeUntil = 0;
 let laserJob = null;
+// `?seed=N` fixes the seed of every newly created world (N plus the number of
+// completed trips), so automated checks see the same terrain on each run.
+// Without it each new world draws a random seed. Saved worlds keep their own.
+const seedParam = new URLSearchParams(location.search).get('seed');
+const fixedSeed = /^\d{1,10}$/.test(seedParam ?? '') ? Number(seedParam) >>> 0 : undefined;
+function newSeed(trips) {
+  return fixedSeed === undefined ? undefined : (fixedSeed + trips) >>> 0;
+}
 function loadWorld() {
   const session = save?.session;
   contact = fracture = null;
@@ -47,7 +55,7 @@ function loadWorld() {
   discoveryNoticeUntil = 0;
   laserJob = null;
   hull = session?.hull ?? 100;
-  world = createWorld(!save?.transited, undefined, save?.arrivalRadius, save?.arrivalStrength, session?.world);
+  world = createWorld(!save?.transited, undefined, save?.arrivalRadius, save?.arrivalStrength, session?.world, undefined, newSeed(save?.trips ?? 0));
   pos = session?.pos ?? [0.5, 0.5, 0.5];
   velocity = session?.velocity ?? [0, 0, 0];
   drift = session?.drift ?? [0,0,0];
@@ -181,7 +189,7 @@ async function write(op, after) {
       ? {hull, pos, velocity, drift, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
       : null;
     if (op?.type === 'transit') {
-      const destination = createWorld(false, undefined, op.radius, op.strength);
+      const destination = createWorld(false, undefined, op.radius, op.strength, undefined, undefined, newSeed((save.trips ?? 0) + 1));
       session = {hull,pos:[0.5,0.5,0.5],velocity:[0,0,0],drift,yaw:0,pitch:0,sensor:false,entered:-1,world:destination.snapshot()};
     }
     const before = save;

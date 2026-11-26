@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 
 const base = process.env.DIG_BASE || 'http://127.0.0.1:4173/dig/';
+// Seed 1854 starts in rock and lands, on seed 1855, in a hazard-free origin whose
+// 26 neighbouring chunks are rock, so the timed drilling stretch never depends
+// on random caves, empty chambers or arrival hazards.
+const trial = base + 'next/?seed=1854';
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_BIN,
   headless: true,
@@ -26,7 +30,7 @@ const key = 'dig-unified-v1';
 const read = () =>
   page.evaluate((k) => JSON.parse(localStorage.getItem(k)), key);
 try {
-  await page.goto(base + 'next/');
+  await page.goto(trial);
   assert.equal(await page.locator('button:visible').count(), 0);
   const classic = JSON.stringify({ version: 1, removed: [0, 1, 2] });
   await page.evaluate((classic) => {
@@ -144,9 +148,9 @@ try {
     ([k, v]) => localStorage.setItem(k, JSON.stringify(v)),
     [key, ready],
   );
-  await page.goto(base + 'next/');
+  await page.goto(trial);
   const other = await context.newPage();
-  await other.goto(base + 'next/');
+  await other.goto(trial);
   // Both tabs resume the same legacy three-rock fabrication automatically.
   await page.waitForFunction(
     (k) => JSON.parse(localStorage.getItem(k)).front,
