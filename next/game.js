@@ -1,7 +1,7 @@
 import { intersectStone } from './rock-shapes.js';
 import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
-import { createWorld, forward, offset, radius } from './world.js';
+import { createWorld, forward, offset, portalRayDistance, radius } from './world.js';
 import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair } from './save.js';
 import { createView, portalMarker } from './view.js';
 const el = (id) => document.getElementById(id);
@@ -30,6 +30,7 @@ let age = 0,
   osc,
   gain;
 let contact = null, fracture = null, installedUntil = 0;
+let lastRockGain = -Infinity;
 let checkpointAge = 0;
 let hull = 100;
 let hazardVisible = false;
@@ -37,6 +38,7 @@ let laserJob = null;
 function loadWorld() {
   const session = save?.session;
   contact = fracture = null;
+  lastRockGain = -Infinity;
   installedUntil = 0;
   checkpointAge = 0;
   hazardVisible = false;
@@ -147,6 +149,7 @@ async function write(op, after) {
       session = {hull,pos:[0.5,0.5,0.5],velocity:[0,0,0],drift,yaw:0,pitch:0,sensor:false,entered:-1,world:destination.snapshot()};
     }
     save = await commit(save.revision, op, session);
+    if (op === 'collect' || op === 'laser' || op === 'drill') lastRockGain = age;
     if (op === 'craft') installedUntil = Date.now()+1600;
     checkpointAge = 0;
     after?.();
@@ -303,7 +306,9 @@ function move(dt, speed = velocity) {
   return true;
 }
 function laserHit(direction = forward(yaw, pitch)) {
-  return world.trace(pos, ...direction, 32, intersectStone);
+  const hit = world.trace(pos, ...direction, 32, intersectStone);
+  if (hit && world.portals().some(portal => Number.isFinite(portalRayDistance(portal, pos, direction, hit.t)))) return null;
+  return hit;
 }
 function heatStone(hit, direction, elapsed, operation) {
   const point = offset(pos, direction, hit.t);
@@ -450,7 +455,7 @@ function frame(time) {
       },
       time / 1000,
     );
-    el('rock-gain').hidden = !fracture || age - fracture.at >= 0.7;
+    el('rock-gain').hidden = age - lastRockGain >= 0.7;
     const now = Date.now();
     const notice = save?.craftReadyAt ? (now < save.craftReadyAt-fabricationMs+950 ?
       '기본 드릴 제작 시작' : '기본 드릴 제작중') : now < installedUntil ? '기본 드릴 장착함' : '';

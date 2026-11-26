@@ -1,6 +1,6 @@
 import { identify } from './chunk-terrain.js';
 import { intersectStone } from './rock-shapes.js';
-import { forward } from './world.js';
+import { forward, portalRayDistance } from './world.js';
 
 import { createDust } from './dust.js';
 function noise(x, y, z) {
@@ -125,27 +125,24 @@ export function createView(canvas) {
         for (const portal of portals) {
           const axis = portal.axis, u = (axis + 1) % 3, v = (axis + 2) % 3;
           const ray = [dx, dy, dz];
-          if (ray[axis] * portal.sign <= 0.001) continue;
-          const t = (portal.point[axis] - pos[axis]) / ray[axis];
-          if (t <= 0 || t > nearest + 0.00001) continue;
+          const t = portalRayDistance(portal, pos, ray, nearest);
+          if (!Number.isFinite(t)) continue;
           const scale = 1.64 / portal.radius;
           const ex = (pos[u] + ray[u] * t - portal.point[u]) * scale;
           const ey = (pos[v] + ray[v] * t - portal.point[v]) * scale;
           const dist = Math.max(Math.abs(ex), Math.abs(ey)) ** 2;
-          if (dist <= 1.64 ** 2) {
-            nearest = t;
-            const era = Math.floor(now / 3) % 3,
-              ridge =
-                Math.sin(ex * (4 + era) + era) * 0.25 + 0.1 * Math.sin(ex * 9);
-            const rim = Math.exp(-8 * Math.abs(dist - 2.48)) * 85;
-            const value =
-              (ey > ridge
-                ? 30 + ey * 13
-                : 15 + 10 * Math.sin(ey * 15 + ex * 3)) + rim;
-            r = value * [0.75, 1.42, 0.81][era];
-            g = value * [1.29, 1.03, 1.1][era];
-            b = value * [1.36, 0.73, 1.53][era];
-          }
+          nearest = t;
+          const era = Math.floor(now / 3) % 3,
+            ridge =
+              Math.sin(ex * (4 + era) + era) * 0.25 + 0.1 * Math.sin(ex * 9);
+          const rim = Math.exp(-8 * Math.abs(dist - 2.48)) * 85;
+          const value =
+            (ey > ridge
+              ? 30 + ey * 13
+              : 15 + 10 * Math.sin(ey * 15 + ex * 3)) + rim;
+          r = value * [0.75, 1.42, 0.81][era];
+          g = value * [1.29, 1.03, 1.1][era];
+          b = value * [1.36, 0.73, 1.53][era];
         }
         const k = 4 * (i + j * w);
         source[k] = r;

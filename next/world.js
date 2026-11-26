@@ -10,6 +10,16 @@ export const forward = (yaw, pitch) => [
   Math.cos(yaw) * Math.cos(pitch),
 ];
 export const offset = (p, d, t) => p.map((v, i) => v + d[i] * t);
+// Use the same one-sided square opening for visible surfaces and laser targeting.
+export function portalRayDistance(portal, pos, ray, limit) {
+  const {axis, sign, point, radius} = portal;
+  if (ray[axis] * sign <= 0.001) return Infinity;
+  const t = (point[axis] - pos[axis]) / ray[axis];
+  if (t <= 0 || t > limit + 0.00001) return Infinity;
+  for (let i = 0; i < 3; i++)
+    if (i !== axis && Math.abs(pos[i] + ray[i] * t - point[i]) > radius) return Infinity;
+  return t;
+}
 // Chunks are 16 m wide. Their voxel coordinates share one world frame.
 const side = 32;
 const chunkOf = (cell) => Math.floor((cell + 15) / side);
