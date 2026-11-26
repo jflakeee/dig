@@ -153,7 +153,9 @@ try {
     key,
   );
   const shared = await read();
-  assert.equal(shared.rocks, 0);
+  // The drill starts mining as soon as it is installed, so rocks may already
+  // be back. Every rock left must come from a block mined after the craft.
+  assert.ok(shared.rocks <= shared.blocksMined, JSON.stringify([shared.rocks, shared.blocksMined]));
   assert.deepEqual(shared.drills, ['drill-1']);
   await other.close();
   const warehouse = createWorld(false, () => 0.98);
