@@ -1,9 +1,16 @@
-export const terrainKinds = ['rock', 'cave', 'empty', 'warehouse'];
+export function terrainKind(roll) {
+  if (roll < 0.80) return 'rock';
+  if (roll < 0.90) return 'cave';
+  if (roll < 0.97) return 'empty';
+  return 'warehouse';
+}
 export const cargoNames = ['측량 렌즈', '금속 용기', '미확인 결정'];
 const side = 32;
 
 export function naturalSolid(c, x, y, z) {
   if (!c.kind || c.kind === 'rock') return true;
+  // The opening laser needs three mineable cells even in an open starter room.
+  if (c.starterRocks && x === 0 && y === 0 && z >= 2 && z <= 4) return true;
   if (c.kind !== 'cave') return false;
   const a = ((x + 15) & 31) - 15, b = ((y + 15) & 31) - 15, d = ((z + 15) & 31) - 15;
   const r = 3 + c.seed % 4;
