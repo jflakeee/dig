@@ -62,25 +62,25 @@ function clearFace(world, axis, sign, skipCorner = false) {
 }
 
 test('only the last solid cell schedules a face and gravity begins on opening', () => {
-  const w = createWorld(true, () => 0);
+  const w = createWorld(false, () => 0);
   clearFace(w, 2, 1, true);
   w.dig(0, 0, 16);
   w.advance(500);
-  assert.equal(w.portals().length, 0);
+  assert.equal(w.portals().filter(p => !p.exit).length, 0);
   w.dig(16, 16, 16);
   w.advance(300);
-  assert.deepEqual(w.gravity([0,0,0]), [0,0,0]);
+  assert.deepEqual(w.gravity([0,0,0], w.portals().filter(p => !p.exit)), [0,0,0]);
   w.advance(1);
-  const [gate] = w.portals();
-  assert.equal(gate.radius, 1);
+  const gate = w.portals().find(p => !p.exit);
+  assert.equal(gate.radius, 0.5);
   assert.equal(gate.point[2], 17);
-  assert.ok(w.gravity([-14,-14,-14])[2] > 0);
+  assert.ok(w.gravity([-14,-14,-14], [gate])[2] > 0);
   assert.deepEqual(w.gravity([0,0,18]), [0,0,0]);
 });
 
 test('six faces connect six neighbours within the inclusive deadline', () => {
   for (const seconds of [299.999, 300, 300.001]) {
-    const w = createWorld(true, () => 0.999999);
+    const w = createWorld(false, () => 0.999999);
     w.dig(0,0,18);
     clearFace(w, 0, -1);
     w.advance(seconds);
@@ -90,7 +90,28 @@ test('six faces connect six neighbours within the inclusive deadline', () => {
     assert.equal(w.hasChunk(-1,0,0), seconds <= 300);
     assert.equal(w.solid(0,0,18), false);
     w.advance(361);
-    assert.equal(w.portals().length, 6);
-    assert.ok(w.portals().every(p => p.radius === 16));
+    assert.equal(w.portals().filter(p => !p.exit).length, 6);
+    assert.ok(w.portals().filter(p => !p.exit).every(p => p.radius === 16));
+  }
+});
+
+test('starter attraction is weak and ordinary portal strength is sampled once', () => {
+  const starter = createWorld(true);
+  assert.equal(starter.portals().length, 1);
+  const first = starter.portals()[0];
+  assert.equal(first.exit, false);
+  assert.equal(first.strength, 0.6);
+  assert.ok(starter.gravity([0.5,0.5,6])[2] > 0);
+  for (const roll of [0, 0.9]) {
+    let sample = roll;
+    const world = createWorld(false, () => sample);
+    clearFace(world, 2, 1);
+    world.advance(361);
+    sample = 0.5;
+    const gate = world.portals().find(p => !p.exit);
+    assert.equal(gate.strength, 0.8 + roll * 4);
+    const exit = createWorld(false, () => 0, gate.radius, gate.strength);
+    assert.equal(exit.portals()[0].strength, gate.strength);
+    assert.ok(exit.gravity([0.5,0.5,0])[2] > 0);
   }
 });

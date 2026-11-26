@@ -51,7 +51,7 @@ try {
   assert.equal(save.rocks, 0);
   assert.deepEqual(save.drills, ['drill-1']);
   await page.reload();
-  assert.equal(await page.locator('#sensor').isVisible(), false);
+  await page.locator('#sensor').waitFor();
   await page.mouse.move(15, 400);
   await page.mouse.down();
   await page.mouse.move(375, 400, { steps: 4 });
@@ -69,8 +69,9 @@ try {
   assert.equal(await page.getByText(/청크 경계/).count(), 0);
   await page.reload();
   await page.locator('#menu').waitFor();
-  assert.equal(await page.locator('#sensor').isVisible(), false);
-  assert.equal((await read()).transited, false);
+  await page.waitForFunction(k => JSON.parse(localStorage.getItem(k))?.transited, key, {timeout: 60000});
+  assert.equal((await read()).arrivalStrength, 0.6);
+  await page.locator('#sensor.offscreen').waitFor();
   await page.locator('#menu').click();
   await page.locator('#reset').click();
   const beforeConfirm = (await read()).rocks;

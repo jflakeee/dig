@@ -26,7 +26,7 @@ let age = 0,
   osc,
   gain;
 function loadWorld() {
-  world = createWorld(!save?.transited, Math.random, save?.arrivalRadius);
+  world = createWorld(!save?.transited, Math.random, save?.arrivalRadius, save?.arrivalStrength);
   pos = [0.5, 0.5, 0.5];
   velocity = [0, 0, 0];
   yaw = 0;
@@ -231,7 +231,7 @@ function move(dt) {
   if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) < 0) entered = false;
   if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) >= radius && !busy) {
     velocity = [0, 0, 0];
-    write({type: 'transit', radius: entered.radius}, () => {
+    write({type: 'transit', radius: entered.radius, strength: entered.strength}, () => {
       loadWorld();
       message('포탈 통과 완료');
     });

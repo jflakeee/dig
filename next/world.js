@@ -10,16 +10,16 @@ export const offset = (p, d, t) => p.map((v, i) => v + d[i] * t);
 // Chunks are 16 m wide. Their voxel coordinates share one world frame.
 const side = 32;
 const chunkOf = (cell) => Math.floor((cell + 15) / side);
-export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64) {
+export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64, arrivalStrength = 2.8) {
   const chunks = new Map();
   let elapsed = 0;
   const initial = {
-    point: exitMouth, axis: 2, sign: -1,
-    radius: arrivalRadius, exit: true, chunk: [0, 0, 0],
+    point: tutorial ? [0.5, 0.5, 7] : exitMouth, axis: 2, sign: tutorial ? 1 : -1,
+    radius: tutorial ? 1.64 : arrivalRadius, strength: tutorial ? 0.6 : arrivalStrength, exit: !tutorial, chunk: [0, 0, 0],
   };
   let cached,
     center = [0, 0, 0],
-    hasMouth = !tutorial;
+    hasMouth = true;
   function chunkAt(x, y, z, create) {
     const cx = chunkOf(x),
       cy = chunkOf(y),
@@ -52,13 +52,11 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
       if (--chunk.remaining[face] !== 0) continue;
       const point = owner.map(n => n * side + 1);
       point[axis] += sign * side / 2;
-      const first = tutorial && owner.every(n => n === 0) && !chunk.faces.length;
-      const min = first ? Math.ceil(2 * radius) : 1;
-      const width = min + Math.floor(random() * (side - min + 1));
+      const width = 1 + Math.floor(random() * side);
       for (let i = 0; i < 3; i++)
         if (i !== axis) point[i] += Math.floor(random() * (side - width + 1)) - (side - width) / 2;
       chunk.faces.push({point, axis, sign, chunk: owner, exit: false,
-        radius: width / 2,
+        radius: width / 2, strength: 0.8 + random() * 4,
         ready: elapsed + 301 + random() * 59, cleared: elapsed});
     }
     if (chunk.faces.length === 6 && !chunk.linked &&
@@ -84,7 +82,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
       if (!portal.chunk.every((n, i) => chunkOf(Math.floor(p[i])) === n)) continue;
       const gap = portal.point.map((v, i) => v - p[i]);
       const distance = Math.hypot(...gap);
-      const strength = (portal.exit ? -2.8 : 2.8) / ((1 + distance * distance / 16) * Math.max(0.1, distance));
+      const strength = (portal.exit ? -portal.strength : portal.strength) / ((1 + distance * distance / 16) * Math.max(0.1, distance));
       for (let i = 0; i < 3; i++) pull[i] += gap[i] * strength;
     }
     return pull;
@@ -172,7 +170,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
     blockers,
     trace,
     get mouth() {
-      return hasMouth ? exitMouth : null;
+      return hasMouth ? initial.point : null;
     },
   };
 }
