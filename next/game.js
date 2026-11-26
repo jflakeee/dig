@@ -6,6 +6,7 @@ import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRe
 import { massText } from './composition.js';
 import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate } from './trade.js';
 import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
+import { studies, fragments } from './research.js';
 import { mineralIds, mineralName, variantName } from './minerals.js';
 import { elementSymbols } from './elements.js';
 import { specimenById, specimenLabel } from './specimens.js';
@@ -184,7 +185,8 @@ function sellChoices() {
 function auctionChoices() {
   const out = [];
   for (const p of save.specimens) if (p.kind === 'capsule') out.push(['s|capsule|' + p.element + '|' + p.id, pieceName(p), auctionEstimate(p)]);
-  for (const p of save.finds) if (findById(p.kind).category === 'unknown') out.push(['f|' + p.kind + '|' + p.variant + '|' + p.id, pieceName(p), auctionEstimate(p)]);
+  for (const p of save.finds) if (findById(p.kind).category === 'unknown' && save.research.includes(p.kind))
+    out.push(['f|' + p.kind + '|' + p.variant + '|' + p.id, pieceName(p), auctionEstimate(p)]);
   return out;
 }
 function fillSelect(select, options) {
@@ -197,6 +199,7 @@ function fillSelect(select, options) {
 // Log entries are "sold:<id>:<price>:<fee>" or "unsold:<id>"; ids may contain colons.
 function tradeLogText(entry) {
   const parts = entry.split(':');
+  if (parts[0] === 'research') return '분석 완료 · ' + (findById(parts[1])?.name ?? parts[1]);
   if (parts[0] === 'unsold') return '유찰 · ' + (tradeNames.get(parts.slice(1).join(':')) ?? '경매품') + ' 반환';
   const fee = Number(parts.pop()), price = Number(parts.pop());
   return '낙찰 · ' + (tradeNames.get(parts.slice(1).join(':')) ?? '경매품') + ' · ' + credit(price) + ' (수수료 ' + credit(fee) + ')';
@@ -255,6 +258,42 @@ function showTrade() {
     el('trade-log').dataset.lines = JSON.stringify(log);
   }
 }
+// Built-in analysis of unknown materials and reading of memory films.
+let memoryUntil = 0;
+function showResearch() {
+  const box = el('research');
+  const owned = [...new Set(save?.finds?.filter(p => studies[p.kind]).map(p => p.kind) ?? [])];
+  box.hidden = !save?.front || (!owned.length && !save.research.length && !save.researchJob);
+  if (!panel || box.hidden) return;
+  const job = save.researchJob;
+  el('research-status').textContent = job ? '· 분석 중' : save.research.length ? '· ' + save.research.length + '종 완료' : '';
+  const open = owned.filter(k => !save.research.includes(k));
+  fillSelect(el('research-source'), open.map(k => [k, findById(k).name]));
+  const study = studies[el('research-source').value];
+  const short = study && Object.entries(study.cost).filter(([e, g]) => (save.elements[e] ?? 0) < g);
+  el('research-preview').textContent = job
+    ? '분석 중 · ' + findById(job.kind).name + ' · 남은 ' + Math.max(0, Math.ceil(job.endsAt - save.marketTime)) + '초'
+    : study ? '필요 원소 ' + Object.entries(study.cost).map(([e, g]) => e + ' ' + g + ' g (보유 ' + massText(save.elements[e] ?? 0, e) + ')').join(' · ') +
+      '\n소요 ' + study.seconds + '초 · 완료하면 관측 특성과 안전 상태를 기록하고 경매 등록이 열립니다'
+    : '분석할 미지 물질이 없습니다.';
+  el('research-start').disabled = busy || !!job || !study || short.length > 0;
+  el('research-start').textContent = short?.length ? '원소 부족 · ' + short.map(([e]) => e).join(', ') : '분석 시작';
+  const films = save.finds.filter(p => p.kind === 'memory_film').length;
+  el('read-film').hidden = !save.research.includes('memory_film') || !films || save.memoryLog.length >= fragments.length;
+  el('read-film').textContent = '기억막 판독 · ' + films + '장';
+  el('read-film').disabled = busy;
+  const rows = save.research.map(k => findById(k).name + ' · ' + studies[k].safety + ' · ' + studies[k].traits);
+  if (el('research-list').dataset.rows !== JSON.stringify(rows)) {
+    el('research-list').replaceChildren(...rows.map(text => Object.assign(document.createElement('li'), {textContent: text})));
+    el('research-list').dataset.rows = JSON.stringify(rows);
+  }
+  el('memory-book').hidden = !save.memoryLog.length;
+  const lines = save.memoryLog.map(i => fragments[i]);
+  if (el('memory-list').dataset.rows !== JSON.stringify(lines)) {
+    el('memory-list').replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
+    el('memory-list').dataset.rows = JSON.stringify(lines);
+  }
+}
 // Finds kept whole: equipment with durability, unknown materials and items.
 function showStored() {
   const box = el('stored');
@@ -279,7 +318,7 @@ function showStored() {
   }
   const rows = pieces.map(p => [p.id, findLabel(p) + (p.durability !== undefined ? ' · 내구도 ' + p.durability + '%' : '') +
     (p.kind === 'desk_clock' ? ' · 멈춘 시각 ' + clockText(p.stoppedAt) : '') +
-    (findById(p.kind).category === 'unknown' ? ' · 미분석' : ''), slotOf(p.kind)]);
+    (findById(p.kind).category === 'unknown' ? (save.research.includes(p.kind) ? ' · 분석 완료' : ' · 미분석') : ''), slotOf(p.kind)]);
   const list = el('stored-list');
   if (list.dataset.rows !== JSON.stringify(rows)) {
     list.replaceChildren(...rows.map(([id, text, slot]) => {
@@ -322,6 +361,7 @@ function hud() {
   showDecomposer();
   showStored();
   showTrade();
+  showResearch();
   if (!panel) {
     el('reset-prompt').hidden = true;
     el('reset').hidden = false;
@@ -524,6 +564,16 @@ el('stabilize').onclick = () => {
 };
 el('decompose-source').onchange = () => hud();
 el('sell-source').onchange = () => hud();
+el('research-source').onchange = () => hud();
+el('research-start').onclick = () => {
+  const kind = el('research-source').value;
+  if (kind) write({type: 'research', kind}, () => message('분석 시작 · ' + findById(kind).name));
+};
+el('read-film').onclick = () => write({type: 'read-film'}, () => {
+  // The fragment appears apart from ordinary messages and fades after a while.
+  el('memory-line').textContent = fragments[save.memoryLog.at(-1)];
+  memoryUntil = age + 8;
+});
 el('sell').onclick = () => {
   const value = el('sell-source').value;
   const price = value && sellPrice(save, tradeOperation(value));
@@ -796,6 +846,7 @@ function frame(time) {
   if (time - lastDraw >= 33) {
     lastDraw = time;
     el('discovery-notice').hidden = age >= discoveryNoticeUntil;
+    el('memory-line').hidden = age >= memoryUntil;
     const light = [0, 0.5, 1].map((delay) =>
       Math.max(0, Math.min(1, (age - delay) * 1.7)),
     );

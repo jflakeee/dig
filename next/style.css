@@ -186,6 +186,40 @@ section {
   color: #b9c4c2;
   font-size: 0.9em;
 }
+#research label {
+  display: block;
+  margin: 4px 0;
+  font-size: 0.9em;
+  color: #b9c4c2;
+}
+#research-source {
+  width: 100%;
+  min-height: 44px;
+  background: #192022;
+  color: #e9efed;
+  border: 1px solid #697574;
+  border-radius: 5px;
+  font: inherit;
+}
+#research-preview {
+  display: block;
+  margin: 8px 0 4px;
+  white-space: pre-line;
+}
+#research-list, #memory-list {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+/* Memory fragments are the machine's own recollection, set apart from work records. */
+#memory-list, #memory-line {
+  font-style: italic;
+  color: #c9b8e8;
+}
+#memory-line {
+  display: block;
+  margin-top: 6px;
+  text-shadow: 0 1px 3px #000;
+}
 #decomposer label {
   display: block;
   margin: 4px 0;

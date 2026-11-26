@@ -6,11 +6,12 @@ import { findById, findPiece } from './finds.js';
 import { decompose, decompositionFee } from './composition.js';
 import { marketCycle, sellQuote, marketStock, auctionEstimate, auctionOutcome, auctionSeconds } from './trade.js';
 import { slotOf, captureBonus } from './equipment.js';
+import { studies, fragments } from './research.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 10;
+export const saveVersion = 11;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -38,7 +39,17 @@ export const migrations = {
   8: s => ({...s, ...tradeStart()}),
   // Fitted equipment by slot.
   9: s => ({...s, equipment: {}}),
+  // Analysed unknown kinds, the analysis in progress and read memory fragments.
+  10: s => ({...s, research: [], researchJob: null, memoryLog: []}),
 };
+// An analysis finishes once the market clock passes its end; its kind is then known.
+function finishResearch(s) {
+  const job = s.researchJob;
+  if (!job || s.marketTime < job.endsAt) return;
+  if (!s.research.includes(job.kind)) s.research.push(job.kind);
+  s.researchJob = null;
+  logTrade(s, 'research:' + job.kind);
+}
 const tradeStart = () => ({credits: 0, marketSeed: Math.floor(Math.random() * 4294967296), marketTime: 0,
   marketClock: null, auctions: [], tradeLog: [], purchaseCount: 0});
 // The market clock follows world time while playing; a new world or a jump
@@ -198,6 +209,9 @@ const fresh = () => ({
   decomposeCount: 0,
   ...tradeStart(),
   equipment: {},
+  research: [],
+  researchJob: null,
+  memoryLog: [],
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
@@ -236,6 +250,10 @@ function validMinerals(s) {
     Number.isSafeInteger(s.purchaseCount) && s.purchaseCount >= 0 &&
     s.equipment && typeof s.equipment === 'object' && !Array.isArray(s.equipment) &&
     Object.entries(s.equipment).every(([slot, p]) => validFind(p) && slotOf(p.kind) === slot) &&
+    Array.isArray(s.research) && s.research.every(k => studies[k]) && new Set(s.research).size === s.research.length &&
+    (s.researchJob === null || (studies[s.researchJob?.kind] && !s.research.includes(s.researchJob.kind) &&
+      Number.isFinite(s.researchJob.endsAt))) &&
+    Array.isArray(s.memoryLog) && s.memoryLog.every((n, i) => n === i) && s.memoryLog.length <= fragments.length &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
     new Set(s.elementLog).size === s.elementLog.length &&
     Array.isArray(s.specimens) && s.specimens.every(validPiece) &&
@@ -515,6 +533,8 @@ export async function commit(revision, operation, session) {
       }
       case 'auction': {
         const t = s.front && tradeTarget(s, operation);
+        // An unknown material can be listed only once its kind has been analysed.
+        if (t?.piece && studies[t.piece.kind] && !s.research.includes(t.piece.kind)) throw Error('분석을 마친 물질만 경매에 올릴 수 있습니다.');
         const estimate = t?.piece && auctionEstimate(t.piece);
         if (!estimate) throw Error('경매에 올릴 수 없습니다.');
         t.take();
@@ -526,6 +546,28 @@ export async function commit(revision, operation, session) {
         if (at < 0) throw Error('이미 끝난 경매입니다.');
         const [a] = s.auctions.splice(at, 1);
         (a.origin === 'specimens' ? s.specimens : s.finds).push(a.piece);
+        break;
+      }
+      case 'research': {
+        // The element cost is spent when the analysis starts; one analysis runs at a time.
+        const study = studies[operation?.kind];
+        if (!s.front || !study || s.research.includes(study.kind) || s.researchJob ||
+          !s.finds.some(p => p.kind === study.kind)) throw Error('분석할 수 없습니다.');
+        for (const [e, g] of Object.entries(study.cost)) if ((s.elements[e] ?? 0) < g) throw Error('분석에 필요한 원소가 부족합니다.');
+        for (const [e, g] of Object.entries(study.cost)) {
+          s.elements[e] -= g;
+          if (s.elements[e] <= 1e-12) delete s.elements[e];
+        }
+        s.researchJob = {kind: study.kind, endsAt: s.marketTime + study.seconds};
+        break;
+      }
+      case 'read-film': {
+        // Reading uses the film up and leaves the next fragment in the observation log.
+        const at = s.finds.findIndex(p => p.kind === 'memory_film');
+        if (!s.front || at < 0 || !s.research.includes('memory_film') || s.memoryLog.length >= fragments.length)
+          throw Error('판독할 기억막이 없습니다.');
+        s.finds.splice(at, 1);
+        s.memoryLog.push(s.memoryLog.length);
         break;
       }
       case 'reset':
@@ -559,6 +601,7 @@ export async function commit(revision, operation, session) {
     if (type !== 'reset') {
       advanceMarket(s, session?.world);
       settleAuctions(s);
+      finishResearch(s);
     }
     if (session) s.session = session;
     s.revision++;

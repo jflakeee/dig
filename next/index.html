@@ -22,6 +22,7 @@
         <output id="fabrication" role="status" hidden></output>
         <output id="discovery-notice" role="status" hidden></output>
         <output id="message" role="status"></output>
+        <output id="memory-line" hidden></output>
       </aside>
       <footer>
         <output id="hazard-alert" role="status" hidden></output>
@@ -40,6 +41,19 @@
           <select id="decompose-source"></select>
           <output id="decompose-preview" for="decompose-source"></output>
           <button id="decompose">원료 1개 분해</button>
+        </details>
+        <details id="research" hidden>
+          <summary>연구 <span id="research-status"></span></summary>
+          <label for="research-source">분석 대상</label>
+          <select id="research-source"></select>
+          <output id="research-preview" for="research-source"></output>
+          <button id="research-start">분석 시작</button>
+          <button id="read-film" hidden>기억막 판독</button>
+          <ul id="research-list"></ul>
+          <details id="memory-book" hidden>
+            <summary>관측 기록</summary>
+            <ul id="memory-list"></ul>
+          </details>
         </details>
         <details id="element-book" hidden>
           <summary>원소 도감 <span id="element-count"></span></summary>

@@ -105,6 +105,8 @@ test('an auction holds its piece in escrow and settles once when the market cloc
   const glass = {id: 'g1', kind: 'tilt_glass', variant: 'standard'};
   data.set(saveKey, JSON.stringify(drilling({specimens: [capsule], specimenLog: ['capsule'], finds: [glass], findLog: ['tilt_glass']})));
   let s = await commit(0, 'checkpoint', at(0));
+  await assert.rejects(commit(s.revision, {type: 'auction', source: 'f', kind: 'tilt_glass', variant: 'standard', id: 'g1'}, at(0)), /분석을 마친/);
+  data.set(saveKey, JSON.stringify({...s, research: ['tilt_glass']}));
   s = await commit(s.revision, {type: 'auction', source: 's', kind: 'capsule', variant: 'Og', id: 'c1'}, at(0));
   assert.deepEqual([s.specimens, s.auctions.map(a => [a.id, a.estimate, a.endsAt])], [[], [['c1', 150, auctionSeconds]]]);
   s = await commit(s.revision, {type: 'auction', source: 'f', kind: 'tilt_glass', variant: 'standard', id: 'g1'}, at(0));
