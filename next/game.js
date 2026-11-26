@@ -46,7 +46,7 @@ function loadWorld() {
   discoveryNoticeUntil = 0;
   laserJob = null;
   hull = session?.hull ?? 100;
-  world = createWorld(!save?.transited, Math.random, save?.arrivalRadius, save?.arrivalStrength, session?.world);
+  world = createWorld(!save?.transited, undefined, save?.arrivalRadius, save?.arrivalStrength, session?.world);
   pos = session?.pos ?? [0.5, 0.5, 0.5];
   velocity = session?.velocity ?? [0, 0, 0];
   drift = session?.drift ?? [0,0,0];
@@ -175,7 +175,7 @@ async function write(op, after) {
       ? {hull, pos, velocity, drift, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
       : null;
     if (op?.type === 'transit') {
-      const destination = createWorld(false, Math.random, op.radius, op.strength);
+      const destination = createWorld(false, undefined, op.radius, op.strength);
       session = {hull,pos:[0.5,0.5,0.5],velocity:[0,0,0],drift,yaw:0,pitch:0,sensor:false,entered:-1,world:destination.snapshot()};
     }
     save = await commit(save.revision, op, session);
