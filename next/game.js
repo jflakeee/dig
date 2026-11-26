@@ -2,8 +2,8 @@ import { intersectStone } from './rock-shapes.js';
 import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, portalRayDistance, radius } from './world.js';
-import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair } from './save.js';
-import { mineralIds, mineralName } from './minerals.js';
+import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts } from './save.js';
+import { mineralIds, mineralName, variantName } from './minerals.js';
 import { createView, portalMarker } from './view.js';
 const el = (id) => document.getElementById(id);
 const canvas = el('scene'),
@@ -123,8 +123,14 @@ function hud() {
   el('repair').disabled = busy;
   el('emergency').hidden = !save?.front || condition !== 0 || ceramic >= ceramicPerRepair || save.rocks >= rocksPerCeramic;
   el('emergency').disabled = busy || !!laserJob || (!el('emergency').hidden && !laserHit());
-  if (panel) el('minerals').textContent = mineralIds.filter(id => save?.minerals?.[id])
-    .map(id => mineralName(id) + ' × ' + save.minerals[id]).join(' · ');
+  if (panel) el('minerals').textContent = mineralIds.filter(id => id === 'rock' ? save?.rocks : save?.minerals?.[id])
+    .map(id => {
+      const parts = Object.entries(variantCounts(save, id)).filter(([, n]) => n > 0);
+      const total = id === 'rock' ? save.rocks : save.minerals[id];
+      const detail = parts.length > 1 || (parts[0] && variantName(id, parts[0][0]) !== mineralName(id))
+        ? ' (' + parts.map(([v, n]) => variantName(id, v) + ' ' + n).join(' · ') + ')' : '';
+      return mineralName(id) + ' × ' + total + detail;
+    }).join(' · ');
   if (panel && save?.front) {
     el('materials').textContent = '세라믹 ' + ceramic + (condition < 100 && !ceramic ?
       ' · 수리용 세라믹 1개 필요 (암석 ' + save.rocks + '/' + rocksPerCeramic + ')' : '');

@@ -208,7 +208,7 @@ try {
   await page.reload();
   assert.deepEqual((await read()).cargo,[1,1,2]);
   await page.evaluate(([k,v]) => localStorage.setItem(k,JSON.stringify(v)),
-    [key,{...shared,session:null,transited:false,rocks:2,ceramic:0,drillCondition:0}]);
+    [key,{...shared,session:null,transited:false,rocks:2,variants:{},ceramic:0,drillCondition:0}]);
   await page.reload();
   // The emergency laser recovers whatever the block holds; repeat until a rock comes.
   while ((await read()).rocks < 3) {
