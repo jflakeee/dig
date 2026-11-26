@@ -1,7 +1,7 @@
 import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, radius } from './world.js';
-import { readSave, commit, saveKey } from './save.js';
+import { readSave, commit, saveKey, rocksPerCeramic, ceramicPerRepair } from './save.js';
 import { createView, portalMarker } from './view.js';
 const el = (id) => document.getElementById(id);
 const canvas = el('scene'),
@@ -31,10 +31,12 @@ let age = 0,
 let checkpointAge = 0;
 let hull = 100;
 let hazardVisible = false;
+let laserJob = null;
 function loadWorld() {
   const session = save?.session;
   checkpointAge = 0;
   hazardVisible = false;
+  laserJob = null;
   hull = session?.hull ?? 100;
   world = createWorld(!save?.transited, Math.random, save?.arrivalRadius, save?.arrivalStrength, session?.world);
   pos = session?.pos ?? [0.5, 0.5, 0.5];
@@ -67,6 +69,18 @@ function hud() {
   if (panel && save.front) {
     const cargo = el('cargo');
     cargo.textContent = [cargo.textContent, '기체 ' + Math.ceil(hull) + '% · 드릴 ' + (save.drillCondition ?? 100) + '%'].filter(Boolean).join(' | ');
+  }
+  const condition = save?.drillCondition ?? 100;
+  const ceramic = save?.ceramic ?? 0;
+  el('fire-ceramic').hidden = !save?.front || save.rocks < rocksPerCeramic;
+  el('fire-ceramic').disabled = busy;
+  el('repair').hidden = !save?.front || condition === 100 || ceramic < ceramicPerRepair;
+  el('repair').disabled = busy;
+  el('emergency').hidden = !save?.front || condition !== 0 || ceramic >= ceramicPerRepair || save.rocks >= rocksPerCeramic;
+  el('emergency').disabled = busy || !!laserJob || (!el('emergency').hidden && !world.trace(pos,...forward(yaw,pitch)));
+  if (panel && save?.front) {
+    el('materials').textContent = '세라믹 ' + ceramic + (condition < 100 && !ceramic ?
+      ' · 수리용 세라믹 1개 필요 (암석 ' + save.rocks + '/' + rocksPerCeramic + ')' : '');
   }
   const hazard = world.hazard;
   const alerted = hazardVisible && hazard && !hazard.spent;
@@ -121,7 +135,7 @@ async function write(op, after) {
   busy = true;
   hud();
   try {
-    let session = save.front && (op === 'collect' || op === 'checkpoint' || op?.type === 'blast' || op?.type === 'pickup')
+    let session = save.front && (['collect','drill','laser','repair','fire-ceramic','checkpoint'].includes(op) || op?.type === 'blast' || op?.type === 'pickup')
       ? {hull, pos, velocity, drift, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
       : null;
     if (op?.type === 'transit') {
@@ -180,6 +194,21 @@ el('stabilize').onclick = () => {
       Math.hypot(...h.point.map((v,i) => v-pos[i])) > 2.5) return;
   h.spent = true;
   write({type:'pickup',item:2}, () => message('밀봉 회수 · 미확인 결정'));
+};
+el('fire-ceramic').onclick = () => write('fire-ceramic', () => message('암석 가열 완료 · 세라믹 1개'));
+el('repair').onclick = () => write('repair', () => {
+  laserJob = null;
+  timer = 0;
+  message('드릴 수리 완료');
+});
+el('emergency').onclick = () => {
+  if (busy || laserJob || save?.drillCondition !== 0) return;
+  const hit = world.trace(pos,...forward(yaw,pitch));
+  if (hit) {
+    laserJob = {cell:[hit.x,hit.y,hit.z], elapsed:0};
+    message('긴급 레이저 채굴 중');
+    hud();
+  }
 };
 el('craft').onclick = () => {
   write('craft', () => {
@@ -320,11 +349,27 @@ function tick(dt) {
     write('checkpoint');
     return;
   }
+  if (laserJob) {
+    const hit = world.trace(pos,...d);
+    if (!hit || ![hit.x,hit.y,hit.z].every((v,i) => v === laserJob.cell[i])) {
+      laserJob = null;
+      message('조준이 변경되었습니다.');
+    } else {
+      laserJob.elapsed += dt;
+      if (laserJob.elapsed >= 1.35) {
+        const {cell} = laserJob;
+        laserJob = null;
+        if (world.dig(...cell)) write('laser', () => message('긴급 채굴 완료 · 일반 암석 1개'));
+      }
+      return;
+    }
+  }
   const pull = entered ? [0, 0, 0] : world.gravity(pos);
   // The probe extends beyond one integration step so the entire body fits.
   const blocks = world.blockers(offset(pos, d, 0.7));
   if (blocks.length) {
     velocity = [0, 0, 0];
+    if (save.drillCondition === 0) { anchors = []; return; }
     holdChains();
     const target = blocks[0],
       tag = target.join(',');
@@ -333,11 +378,12 @@ function tick(dt) {
       targetTag = tag;
     }
     timer += dt;
-    if (timer >= (save.drillCondition === 0 ? 1.35 : 0.16)) {
+    if (timer >= 0.16) {
       timer = 0;
-      world.dig(...target);
-      write('collect', () => {
+      if (!world.dig(...target)) return;
+      write('drill', () => {
         anchors = [];
+        if (save.drillCondition === 0) message('드릴 파손 · 긴급 레이저 또는 메뉴에서 수리');
       });
     }
     return;
@@ -371,7 +417,7 @@ function frame(time) {
     const light = [0, 0.5, 1].map((delay) =>
       Math.max(0, Math.min(1, (age - delay) * 1.7)),
     );
-    const working = !fatal && (!save?.front || anchors.length > 0);
+    const working = !fatal && (!save?.front || !!laserJob || anchors.length > 0);
     render(
       {
         world,
@@ -391,7 +437,7 @@ function frame(time) {
         audio.currentTime,
         0.14,
       );
-    if (sensor || hazardVisible || !el('hazard-alert').hidden) hud();
+    if (save?.drillCondition === 0 || sensor || hazardVisible || !el('hazard-alert').hidden) hud();
   }
   requestAnimationFrame(frame);
 }

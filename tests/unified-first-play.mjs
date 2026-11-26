@@ -189,6 +189,25 @@ try {
   assert.deepEqual((await read()).cargo,[1,1,2]);
   await page.reload();
   assert.deepEqual((await read()).cargo,[1,1,2]);
+  await page.evaluate(([k,v]) => localStorage.setItem(k,JSON.stringify(v)),
+    [key,{...shared,session:null,transited:false,rocks:2,ceramic:0,drillCondition:0}]);
+  await page.reload();
+  await page.locator('#emergency').click();
+  await page.waitForFunction(k => JSON.parse(localStorage.getItem(k)).rocks===3,key);
+  assert.equal(await page.locator('#emergency').isVisible(),false);
+  await page.locator('#menu').click();
+  assert.equal(await page.locator('#repair').isVisible(),false);
+  await page.locator('#fire-ceramic').click();
+  await page.locator('#repair').waitFor();
+  const fired = await read();
+  assert.equal(fired.rocks,0);
+  assert.equal(fired.ceramic,1);
+  await page.reload();
+  await page.locator('#menu').click();
+  await page.locator('#repair').click();
+  await page.waitForFunction(k => JSON.parse(localStorage.getItem(k)).drillCondition===100,key);
+  assert.equal((await read()).ceramic,0);
+  await page.waitForFunction(k => JSON.parse(localStorage.getItem(k)).rocks>0,key);
   await page.evaluate((k) => localStorage.setItem(k, 'broken-save'), key);
   await page.reload();
   await page.locator('#message').filter({ hasText: '원본을 보존' }).waitFor();

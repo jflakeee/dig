@@ -263,13 +263,7 @@ test('fast floating cargo damages the hull and remains in the world after impact
 });
 
 test('fatal collision reboots once, retaining cargo and damaging the mounted drill', async t => {
-  const data = new Map();
-  const original = ['navigator','localStorage'].map(k => Object.getOwnPropertyDescriptor(globalThis,k));
-  t.after(() => ['navigator','localStorage'].forEach((k,i) => {
-    if (original[i]) Object.defineProperty(globalThis,k,original[i]); else delete globalThis[k];
-  }));
-  Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:k=>data.get(k)??null,setItem:(k,v)=>data.set(k,v)}});
-  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{locks:{request:async(k,f)=>f()}}});
+  const data = mockStorage(t);
   const previous = {...readSave(), front:'drill-1',drills:['drill-1'],cargo:[2,1,3],transited:true};
   data.set(saveKey,JSON.stringify(previous));
   const next = await commit(previous.revision,'reboot');
@@ -300,4 +294,36 @@ test('heat stops outside contact and fatal exposure reaches only susceptible out
   assert.deepEqual(cargoLoss('lava',[0,0,-1],[0,0,0],0,0),[1,1,0]);
   assert.deepEqual(cargoLoss('blast',[0,0,-1],[0,0,0],0,0),[1,0,0]);
   assert.deepEqual(cargoLoss('impact',[0,0,1],[0,0,0],0,0),[0,0,0]);
+});
+
+function mockStorage(t) {
+  const data = new Map();
+  const original = ['navigator','localStorage'].map(k => Object.getOwnPropertyDescriptor(globalThis,k));
+  t.after(() => ['navigator','localStorage'].forEach((k,i) => {
+    if (original[i]) Object.defineProperty(globalThis,k,original[i]); else delete globalThis[k];
+  }));
+  Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:k=>data.get(k)??null,setItem:(k,v)=>data.set(k,v)}});
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{locks:{request:async(k,f)=>f()}}});
+  return data;
+}
+
+test('a completed drill stroke wears once, laser recovery consumes the displayed materials', async t => {
+  const data = mockStorage(t);
+  const initial = {...readSave(),front:'drill-1',drills:['drill-1'],rocks:1,drillCondition:2};
+  delete initial.ceramic;
+  data.set(saveKey,JSON.stringify(initial));
+  const session = {pos:[0.5,0.5,0.5],velocity:[0,0,0],yaw:0,pitch:0,sensor:false,entered:-1,world:createWorld(true).snapshot()};
+  t.mock.method(Math,'random',()=>0);
+  const broken = await commit(initial.revision,'drill',session);
+  assert.equal(broken.drillCondition,0);
+  assert.equal(broken.rocks,2);
+  await assert.rejects(commit(initial.revision,'drill',session));
+  await assert.rejects(commit(broken.revision,'repair'));
+  const recovered = await commit(broken.revision,'laser',session);
+  const ceramic = await commit(recovered.revision,'fire-ceramic');
+  const fixed = await commit(ceramic.revision,'repair');
+  assert.equal(fixed.rocks,0);
+  assert.equal(fixed.ceramic,0);
+  assert.equal(fixed.drillCondition,100);
+  await assert.rejects(commit(ceramic.revision,'repair'));
 });

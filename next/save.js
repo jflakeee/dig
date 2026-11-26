@@ -1,3 +1,5 @@
+export const rocksPerCeramic = 3;
+export const ceramicPerRepair = 1;
 export const saveKey = 'dig-unified-v1';
 const fresh = () => ({
   version: 1,
@@ -7,6 +9,7 @@ const fresh = () => ({
   front: null,
   transited: false,
   trips: 0,
+  ceramic: 0,
   drillCondition: 100,
   cargo: [0,0,0],
   session: null,
@@ -63,6 +66,7 @@ export function readSave() {
     s.rocks < 0 ||
     (s.cargo !== undefined && !vector(s.cargo, n => Number.isSafeInteger(n) && n >= 0)) ||
     (s.drillCondition !== undefined && !(Number.isInteger(s.drillCondition) && s.drillCondition >= 0 && s.drillCondition <= 100)) ||
+    (s.ceramic !== undefined && !(Number.isSafeInteger(s.ceramic) && s.ceramic >= 0)) ||
     (s.session != null && !validSession(s.session)) ||
     !Array.isArray(s.drills) ||
     !(
@@ -98,6 +102,26 @@ export async function commit(revision, operation, session) {
         if (!s.front || !session || ![0,1,2].includes(operation.item)) throw Error('회수할 수 없습니다.');
         s.cargo ??= [0,0,0];
         s.cargo[operation.item]++;
+        break;
+      case 'fire-ceramic':
+        if (!s.front || s.rocks < rocksPerCeramic) throw Error('가열할 암석이 부족합니다.');
+        s.rocks -= rocksPerCeramic;
+        s.ceramic = (s.ceramic ?? 0) + 1;
+        break;
+      case 'repair':
+        if (!s.front || (s.drillCondition ?? 100) >= 100 || (s.ceramic ?? 0) < ceramicPerRepair)
+          throw Error('수리 조건을 다시 확인해 주세요.');
+        s.ceramic -= ceramicPerRepair;
+        s.drillCondition = 100;
+        break;
+      case 'drill':
+        if (!s.front || s.drillCondition === 0 || !session) throw Error('드릴을 사용할 수 없습니다.');
+        if (Math.random() < 0.05) s.drillCondition = Math.max(0,(s.drillCondition ?? 100)-2);
+        s.rocks++;
+        break;
+      case 'laser':
+        if (!s.front || s.drillCondition !== 0 || !session || (s.ceramic ?? 0) >= ceramicPerRepair || s.rocks >= rocksPerCeramic) throw Error('긴급 채굴 조건이 바뀌었습니다.');
+        s.rocks++;
         break;
       case 'collect':
         s.rocks++;
