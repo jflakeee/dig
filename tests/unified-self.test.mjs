@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { selfParts, nextPart, traderLook, lossNote, makerNote, recall, finalMemory } from '../next/self.js';
+import { selfParts, nextPart, traderLook, lossNote, makerNote, recall, finalMemory, deathEnding } from '../next/self.js';
 import { blockDiscovery } from '../next/specimens.js';
 import { commit, readSave, saveKey, saveVersion } from '../next/save.js';
 import { cellOwner, createWorld } from '../next/world.js';
@@ -39,6 +39,9 @@ test('traders, the decomposer and analyses reveal more of the truth as memory re
   assert.equal(recall({selfParts: ['shell', 'lens']}), 2);
   assert.equal(finalMemory(7), null);
   assert.ok(finalMemory(8).startsWith('나는 사람이었다.'));
+  for (const cause of ['impact', 'blast', 'lava'])
+    assert.ok(deathEnding(cause).startsWith('사망 · ') && deathEnding(cause).includes('몇 번째 죽음인지는 알 수 없다'), cause);
+  assert.notEqual(deathEnding('lava'), deathEnding('impact'));
 });
 
 test('a part found while drilling rejoins the body once and never enters storage', async t => {

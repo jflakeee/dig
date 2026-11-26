@@ -23,6 +23,15 @@ export const selfParts = [
 export const lastMemory = '나는 사람이었다. 내가 만든 포탈이 오작동한 날, 세상의 모든 물건이 한곳으로 쏟아져 들어왔다. ' +
   '그 더미에 갈려 나는 죽었다. 지금 내가 파고 있는 것이 그 더미다. 그 죽음이 몇 번째였는지는 알 수 없다.';
 export const finalMemory = level => level >= 8 ? lastMemory : null;
+// Death ending shown when the hull reaches 0, by cause. Which death it is
+// is never counted; the machine then wakes again.
+const deathScenes = {
+  impact: '쏟아지는 광물과 물건 더미 사이에 깔렸다. 외피가 갈라지고 신호가 끊긴다.',
+  blast: '불안정한 광물이 터졌다. 파편이 외피를 뚫고 신호가 끊긴다.',
+  lava: '용암이 외피를 녹였다. 열이 코어까지 닿고 신호가 끊긴다.',
+};
+export const deathEnding = cause => '사망 · ' + (deathScenes[cause] ?? deathScenes.impact) +
+  ' 이것이 몇 번째 죽음인지는 알 수 없다. … 다시 눈을 뜬다.';
 export const selfShare = 0.02;   // of extra discoveries: very rarely
 export const recall = s => s?.selfParts?.length ?? 0;
 // The next part found, among those not yet found, from the block's sample.

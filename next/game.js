@@ -7,7 +7,7 @@ import { massText } from './composition.js';
 import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate } from './trade.js';
 import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
 import { studies, fragments } from './research.js';
-import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory } from './self.js';
+import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
 import { mineralIds, mineralName, variantName } from './minerals.js';
 import { elementSymbols } from './elements.js';
 import { specimenById, specimenLabel } from './specimens.js';
@@ -790,6 +790,9 @@ function tick(dt) {
         age = 0;
         loadWorld();
         message('기체 파손 · 재기동');
+        // The death ending, told in text only; play goes on after it.
+        el('memory-line').textContent = deathEnding(cause);
+        memoryUntil = age + 12;
       });
       return;
     }
