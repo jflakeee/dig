@@ -2,8 +2,12 @@ export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
+export const saveVersion = 1;
+// migrations[n] turns a version-n save into version n + 1. Add one entry per
+// schema change and bump saveVersion; readSave applies them in order.
+export const migrations = {};
 const fresh = () => ({
-  version: 1,
+  version: saveVersion,
   revision: 0,
   rocks: 0,
   drills: [],
@@ -48,6 +52,7 @@ function validSession(s) {
       Array.isArray(c.faces) && c.faces.length <= 6 && c.faces.every(f =>
         f && vector(f.chunk, Number.isSafeInteger) && vector(f.point) && [0,1,2].includes(f.axis) &&
         [-1,1].includes(f.sign) && f.exit === false && Number.isFinite(f.ready) && Number.isFinite(f.cleared) &&
+        (f.cause === undefined || ['initial','mined','debris'].includes(f.cause)) &&
         Number.isFinite(f.radius) && f.radius > 0 && Number.isFinite(f.strength) && f.strength > 0));
 }
 export function readSave() {
@@ -59,9 +64,15 @@ export function readSave() {
   } catch {
     throw Error(unreadable);
   }
+  if (Number.isSafeInteger(s?.version) && s.version > saveVersion)
+    throw Error('더 새로운 버전에서 만든 저장입니다. 원본을 보존했습니다.');
+  while (Number.isSafeInteger(s?.version) && s.version >= 1 && s.version < saveVersion) {
+    if (!migrations[s.version]) throw Error(unreadable);
+    s = {...migrations[s.version](s), version: s.version + 1};
+  }
   if (
     !s ||
-    s.version !== 1 ||
+    s.version !== saveVersion ||
     !Number.isSafeInteger(s.revision) ||
     s.revision < 0 ||
     !Number.isSafeInteger(s.rocks) ||
