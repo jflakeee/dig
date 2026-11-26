@@ -9,11 +9,12 @@ import { slotOf, captureBonus } from './equipment.js';
 import { studies, fragments } from './research.js';
 import { selfParts, nextPart } from './self.js';
 import { chooseEnding, endingCounters, counterFor, endingById } from './endings.js';
+import { trainLength, capacity, load, canCouple, wagonsBeyondSafe, wagonCost, wagonCapacity, safeLength, wagonClearance } from './train.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 13;
+export const saveVersion = 14;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -48,7 +49,28 @@ export const migrations = {
   // How often the player researched, fitted equipment and repaired, and the
   // ending fixed from those counts once the last memory returns.
   12: s => ({...s, actions: {research: 0, equip: 0, repair: 0}, ending: null}),
+  // Cargo wagons, the next wagon id and mineral pieces left behind for want of room.
+  13: s => ({...s, wagons: [], wagonCount: 0, leftBehind: 0}),
 };
+// Losing wagons loses the cargo that no longer fits: rocks go first, then
+// minerals in catalog order, each from its default sub-species first.
+function dropWagons(s, lost) {
+  if (!lost.length) return 0;
+  s.wagons = s.wagons.filter(w => !lost.includes(w));
+  let excess = Math.max(0, load(s) - capacity(s));
+  const gone = excess;
+  const rocks = Math.min(excess, s.rocks);
+  if (rocks) spendRocks(s, rocks);
+  excess -= rocks;
+  for (const id of mineralIds.filter(id => id !== 'rock')) {
+    while (excess > 0 && (s.minerals[id] ?? 0) > 0) {
+      const v = variants[id].map(e => e[0]).find(v => variantCounts(s, id)[v] > 0);
+      spendVariant(s, id, v);
+      excess--;
+    }
+  }
+  return gone;
+}
 // An analysis finishes once the market clock passes its end; its kind is then known.
 function finishResearch(s) {
   const job = s.researchJob;
@@ -222,6 +244,9 @@ const fresh = () => ({
   selfParts: [],
   actions: {research: 0, equip: 0, repair: 0},
   ending: null,
+  wagons: [],
+  wagonCount: 0,
+  leftBehind: 0,
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
@@ -268,6 +293,10 @@ function validMinerals(s) {
     s.actions && endingCounters.every(k => Number.isSafeInteger(s.actions[k]) && s.actions[k] >= 0) &&
     Object.keys(s.actions).length === endingCounters.length &&
     (s.ending === null || (endingById(s.ending) && s.selfParts.length === selfParts.length)) &&
+    Array.isArray(s.wagons) && s.wagons.every(w => typeof w === 'string' && /^wagon-\d+$/.test(w)) &&
+    new Set(s.wagons).size === s.wagons.length &&
+    Number.isSafeInteger(s.wagonCount) && s.wagonCount >= s.wagons.length &&
+    Number.isSafeInteger(s.leftBehind) && s.leftBehind >= 0 &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
     new Set(s.elementLog).size === s.elementLog.length &&
     Array.isArray(s.specimens) && s.specimens.every(validPiece) &&
@@ -460,6 +489,8 @@ export async function commit(revision, operation, session) {
         break;
       case 'transit':
         if (!s.front) throw Error('이동 기록이 바뀌었습니다.');
+        // Wagons do not fit through a small portal and stay in the departing chunk.
+        if (!(operation.radius >= wagonClearance)) dropWagons(s, [...s.wagons]);
         s.arrivalStrength = operation.strength;
         s.arrivalRadius = operation.radius;
         s.trips = (s.trips ?? Number(s.transited)) + 1;
@@ -488,6 +519,7 @@ export async function commit(revision, operation, session) {
       case 'unequip': {
         const piece = s.equipment[operation?.slot];
         if (!piece) throw Error('장착된 장비가 없습니다.');
+        if (operation.slot === 'coupler' && s.wagons.length) throw Error('화물칸을 먼저 분리해 주세요.');
         delete s.equipment[operation.slot];
         s.finds.push(piece);
         break;
@@ -586,6 +618,30 @@ export async function commit(revision, operation, session) {
         s.memoryLog.push(s.memoryLog.length);
         break;
       }
+      case 'add-wagon': {
+        // A wagon is built from iron ore and rock and needs a working coupler.
+        // Going past 16 m must be confirmed: the tail can be lost with a collapsing chunk.
+        if (!s.front || !canCouple(s)) throw Error('화물 연결기를 장착해야 화물칸을 연결할 수 있습니다.');
+        if ((s.minerals.iron ?? 0) < wagonCost.iron || s.rocks < wagonCost.rock) throw Error('화물칸 재료가 부족합니다.');
+        if (trainLength({wagons: [...s.wagons, '']}) > safeLength && !operation.confirm) throw Error('열차가 16m를 넘습니다. 확인 후 다시 연결해 주세요.');
+        for (let i = 0; i < wagonCost.iron; i++) {
+          const v = variants.iron.map(e => e[0]).find(v => variantCounts(s, 'iron')[v] > 0);
+          spendVariant(s, 'iron', v);
+        }
+        spendRocks(s, wagonCost.rock);
+        s.wagons.push('wagon-' + ++s.wagonCount);
+        break;
+      }
+      case 'remove-wagon': {
+        if (!s.wagons.length) throw Error('분리할 화물칸이 없습니다.');
+        if (load(s) > capacity(s) - wagonCapacity) throw Error('마지막 화물칸에 실린 광물을 먼저 비워 주세요.');
+        s.wagons.pop();
+        break;
+      }
+      case 'cross-chunk':
+        // Wagons 16 m or more behind are taken to be in the chunk that just collapsed.
+        if (trainLength(s) > safeLength) dropWagons(s, wagonsBeyondSafe(s));
+        break;
       case 'reset':
         Object.assign(s, fresh(), { revision });
         break;
@@ -596,6 +652,8 @@ export async function commit(revision, operation, session) {
     if (found) s.blocksMined++;
     for (const [id, variant] of found ? [[found.base, found.baseVariant], [found.companion, found.companionVariant]] : []) {
       if (!id) continue;
+      // With the machine and wagons full, the piece stays where it was mined.
+      if (load(s) >= capacity(s)) { s.leftBehind++; continue; }
       grant(s, id, variant);
       if (!s.mineralLog.includes(id)) s.mineralLog.push(id);
     }

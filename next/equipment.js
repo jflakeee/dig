@@ -6,7 +6,7 @@ export const slots = {
   focus_lamp: {slot: 'lamp', label: '조명', effect: '작업등이 좁고 깊게 비춤'},
   chain_winder: {slot: 'chain', label: '체인', effect: '고정 중 충돌로 밀리는 정도 감소'},
   gravity_array: {slot: 'sensor', label: '센서', effect: '포탈 표식 감지 거리 2배'},
-  cargo_coupler: {slot: 'coupler', label: '후방 연결부', effect: '화물 열차 편성 준비 중 (효과 없음)'},
+  cargo_coupler: {slot: 'coupler', label: '후방 연결부', effect: '화물칸을 연결할 수 있음'},
   buffer_gripper: {slot: 'gripper', label: '드론 팔', effect: '충격 민감 물체 회수 +2초'},
   seal_cartridge: {slot: 'cartridge', label: '드론 수집부', effect: '기체·수은·열 민감 시료 포집 +2초'},
 };

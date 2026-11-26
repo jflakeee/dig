@@ -9,6 +9,7 @@ import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange,
 import { studies, fragments } from './research.js';
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
 import { endingById } from './endings.js';
+import { trainLength, capacity, load, canCouple, wagonCost, safeLength, wagonsBeyondSafe } from './train.js';
 import { mineralIds, mineralName, variantName } from './minerals.js';
 import { elementSymbols } from './elements.js';
 import { specimenById, specimenLabel } from './specimens.js';
@@ -46,6 +47,8 @@ let hull = 100;
 let hazardVisible = false;
 let discoveryNoticeUntil = 0;
 let laserJob = null;
+// Chunk the machine was last in, and whether a long-train crossing awaits saving.
+let lastChunk = '', crossPending = false;
 // `?seed=N` fixes the seed of every newly created world (N plus the number of
 // completed trips), so automated checks see the same terrain on each run.
 // Without it each new world draws a random seed. Saved worlds keep their own.
@@ -55,6 +58,9 @@ function newSeed(trips) {
   return fixedSeed === undefined ? undefined : (fixedSeed + trips) >>> 0;
 }
 function loadWorld() {
+  // A new or reloaded world starts a fresh chunk reference; arriving is not a crossing.
+  lastChunk = '';
+  crossPending = false;
   const session = save?.session;
   contact = fracture = null;
   lastRockGain = -Infinity;
@@ -367,6 +373,27 @@ function closeEnding() {
   if (endingRun) endingRun.stop = true;
   el('ending').hidden = true;
 }
+// Cargo train: length against the 16 m chunk side, cargo room and wagons.
+let confirmLong = false;
+function showTrain() {
+  const box = el('train');
+  box.hidden = !save?.front;
+  if (!panel || box.hidden) return;
+  const length = trainLength(save), next = length + 3;
+  el('train-summary').textContent = '· ' + length + ' m · ' + load(save) + ' / ' + capacity(save);
+  const risk = length > safeLength;
+  el('train-status').classList.toggle('risk', risk);
+  el('train-status').textContent = '화물칸 ' + save.wagons.length + '량 · 열차 ' + length + ' m / 안전 ' + safeLength + ' m · 광물 ' +
+    load(save) + ' / ' + capacity(save) + (save.leftBehind ? ' · 남겨 둔 광물 ' + save.leftBehind + '개' : '') +
+    (risk ? '\n16 m를 넘었습니다. 청크 경계를 지날 때 뒤쪽 화물칸 ' + wagonsBeyondSafe(save).length + '량과 그 화물을 잃을 수 있습니다.' : '') +
+    (canCouple(save) ? '' : '\n화물칸을 연결하려면 화물 연결기를 장착해야 합니다.');
+  const short = (save.minerals.iron ?? 0) < wagonCost.iron || save.rocks < wagonCost.rock;
+  el('add-wagon').disabled = busy || !canCouple(save) || short;
+  el('add-wagon').textContent = confirmLong ? '위험 확인 · ' + next + ' m로 연결' :
+    '화물칸 연결 · 철광 ' + wagonCost.iron + ' · 일반 암석 ' + wagonCost.rock + (next > safeLength ? ' · ' + next + ' m 경고' : '');
+  el('remove-wagon').hidden = !save.wagons.length;
+  el('remove-wagon').disabled = busy;
+}
 // The machine's own recovered memory, one recollection per body part found.
 function showSelf() {
   const found = save?.selfParts ?? [];
@@ -451,6 +478,7 @@ function hud() {
   showTrade();
   showResearch();
   showSelf();
+  showTrain();
   if (!panel) {
     el('reset-prompt').hidden = true;
     el('reset').hidden = false;
@@ -582,6 +610,16 @@ async function write(op, after) {
       // With the last memory back, the ending chosen from the player's habits follows it.
       if (save.ending && !before.ending) setTimeout(() => playEnding(save.ending), 8000);
     }
+    // Wagons gone without being uncoupled stayed behind in a collapsed chunk or a small portal.
+    if ((save.wagons?.length ?? 0) < (before.wagons?.length ?? 0) && type !== 'remove-wagon') {
+      const text = '화물칸 ' + (before.wagons.length - save.wagons.length) + '량 소실 · 광물 ' + (load(before) - load(save)) + '개와 함께 남겨짐';
+      message(text);
+      // Mining messages follow quickly, so the loss also stays at the top for a while.
+      discoveryNoticeUntil = age + 4;
+      el('discovery-notice').textContent = text;
+    }
+    if ((save.leftBehind ?? 0) > (before.leftBehind ?? 0) && !(before.leftBehind > 0 && load(before) >= capacity(before)))
+      message('화물칸 가득 · 채굴한 광물을 그 자리에 남깁니다');
     const had = new Set([...(before.specimens ?? []), ...(before.finds ?? [])].map(p => p.id));
     const freshFinds = (save.finds ?? []).filter(p => !had.has(p.id));
     if (freshFinds.length && type !== 'capture') {
@@ -665,6 +703,14 @@ el('stabilize').onclick = () => {
   recoverCargo(2, '밀봉 회수 · 미확인 결정');
 };
 el('decompose-source').onchange = () => hud();
+el('add-wagon').onclick = () => {
+  // Past 16 m the first press only warns; the second confirms.
+  if (trainLength(save) + 3 > safeLength && !confirmLong) { confirmLong = true; hud(); return; }
+  const confirm = confirmLong;
+  confirmLong = false;
+  write({type: 'add-wagon', confirm}, () => message('화물칸 연결 · 열차 ' + trainLength(save) + ' m'));
+};
+el('remove-wagon').onclick = () => write({type: 'remove-wagon'}, () => message('화물칸 분리 · 열차 ' + trainLength(save) + ' m'));
 el('ending-skip').onclick = closeEnding;
 el('ending-replay').onclick = () => playEnding(save.ending);
 el('sell-source').onchange = () => hud();
@@ -805,7 +851,14 @@ function move(dt, speed = velocity) {
     if (Math.max(...lateral.map(Math.abs)) + radius <= portal.radius) entered = portal;
   }
   pos = next;
+  // Crossing into another chunk lets the far one collapse; a train over 16 m
+  // loses the wagons left in it.
+  const chunkKey = pos.map(v => Math.floor((Math.floor(v) + 15) / 32)).join();
   world.stream(pos);
+  if (chunkKey !== lastChunk) {
+    if (lastChunk && save?.wagons?.length && trainLength(save) > safeLength) crossPending = true;
+    lastChunk = chunkKey;
+  }
   if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) < 0) entered = false;
   if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) >= radius && !busy) {
     velocity = [0, 0, 0];
@@ -883,6 +936,11 @@ function tick(dt) {
   if (Math.hypot(...drift) > 0.001) {
     if (!move(dt,drift)) drift = [0,0,0];
     if (busy) return;
+  }
+  if (crossPending) {
+    crossPending = false;
+    write({type: 'cross-chunk'});
+    return;
   }
   checkpointAge += dt;
   // Save as soon as a capture deadline passes so the loss is settled once.
