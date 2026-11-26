@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { selfParts, nextPart, traderLook, lossNote, makerNote, recall } from '../next/self.js';
+import { selfParts, nextPart, traderLook, lossNote, makerNote, recall, finalMemory } from '../next/self.js';
 import { blockDiscovery } from '../next/specimens.js';
 import { commit, readSave, saveKey, saveVersion } from '../next/save.js';
 import { cellOwner, createWorld } from '../next/world.js';
@@ -36,6 +36,8 @@ test('traders, the decomposer and analyses reveal more of the truth as memory re
   assert.equal(makerNote(6), null);
   assert.ok(makerNote(7).includes('미래의 내가'));
   assert.equal(recall({selfParts: ['shell', 'lens']}), 2);
+  assert.equal(finalMemory(7), null);
+  assert.ok(finalMemory(8).startsWith('나는 사람이었다.'));
 });
 
 test('a part found while drilling rejoins the body once and never enters storage', async t => {

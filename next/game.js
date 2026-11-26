@@ -7,7 +7,7 @@ import { massText } from './composition.js';
 import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate } from './trade.js';
 import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
 import { studies, fragments } from './research.js';
-import { selfParts, recall, traderLook, lossNote, makerNote } from './self.js';
+import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory } from './self.js';
 import { mineralIds, mineralName, variantName } from './minerals.js';
 import { elementSymbols } from './elements.js';
 import { specimenById, specimenLabel } from './specimens.js';
@@ -304,6 +304,7 @@ function showSelf() {
   if (!panel || !found.length) return;
   el('self-count').textContent = found.length + ' / ' + selfParts.length;
   const lines = found.map(id => selfParts.find(p => p.id === id)).map(p => p.name + ' · ' + p.recollection);
+  if (finalMemory(found.length)) lines.push('마지막 기억 · ' + finalMemory(found.length));
   if (el('self-list').dataset.rows !== JSON.stringify(lines)) {
     el('self-list').replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
     el('self-list').dataset.rows = JSON.stringify(lines);
@@ -501,8 +502,9 @@ async function write(op, after) {
     if (regained.length) {
       const part = selfParts.find(p => p.id === regained.at(-1));
       message('몸체 조각 회수 · ' + part.name);
-      el('memory-line').textContent = part.recollection;
-      memoryUntil = age + 10;
+      // With the last part, the death underneath every other memory comes back too.
+      el('memory-line').textContent = part.recollection + (finalMemory(save.selfParts.length) ? ' … ' + finalMemory(save.selfParts.length) : '');
+      memoryUntil = age + (finalMemory(save.selfParts.length) ? 20 : 10);
       discoveryNoticeUntil = age + 3;
       el('discovery-notice').textContent = '기억 일부 복구 · ' + save.selfParts.length + ' / ' + selfParts.length;
     }

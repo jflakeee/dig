@@ -14,6 +14,11 @@ export const selfParts = [
   ['thruster_fin', '추진 날개', '외계 물질이라 불렀던 것들과 포탈의 제작 공정이 떠오른다. 그것을 만든 손은 이 날개를 단 기계였다.', '추진 날개의 흠집'],
   ['name_plate', '이름표 판', '판에 적힌 이름을 읽었다. 거래 상대들이 서로를 부르던 이름과 같다. 그들은 모두 다른 시간의 나다.', '이름표'],
 ].map(([id, name, recollection, likeness]) => ({id, name, recollection, likeness}));
+// Once every part is back, the memory underneath all the others returns:
+// the machine was a person, and this mine is the pile that killed them.
+export const lastMemory = '나는 사람이었다. 내가 만든 포탈이 오작동한 날, 세상의 모든 물건이 한곳으로 쏟아져 들어왔다. ' +
+  '그 더미에 갈려 나는 죽었다. 지금 내가 파고 있는 것이 그 더미다.';
+export const finalMemory = level => level >= 8 ? lastMemory : null;
 export const selfShare = 0.02;   // of extra discoveries: very rarely
 export const recall = s => s?.selfParts?.length ?? 0;
 // The next part found, among those not yet found, from the block's sample.
