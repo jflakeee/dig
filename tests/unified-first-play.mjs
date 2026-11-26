@@ -35,6 +35,7 @@ try {
   }, classic);
   for (const n of [1,2]) {
     await page.waitForFunction(n => Number(document.querySelector('#rock b').textContent) === n, n);
+    await page.locator('#rock-gain').waitFor();
     const progress = await read();
     const origin = progress.session.world.chunks.find(c => !c.x && !c.y && !c.z);
     assert.equal(origin.air.length,27+n);
@@ -50,6 +51,7 @@ try {
   await page.getByText('기본 드릴 제작중',{exact:true}).waitFor();
   await page.reload();
   assert.equal((await read()).craftReadyAt,building.craftReadyAt);
+  assert.equal(await page.locator('#rock-gain').isVisible(),false);
   await page.getByText('기본 드릴 장착함',{exact:true}).waitFor();
   assert.equal(
     await page
@@ -59,7 +61,9 @@ try {
   );
   await page.locator('#menu').waitFor();
   let save = await read();
-  assert.equal(save.rocks, 0);
+  // Automatic drilling may already have removed more cells after installation.
+  const startRoom = save.session.world.chunks.find(c => !c.x && !c.y && !c.z);
+  assert.equal(save.rocks, startRoom.air.length - 30);
   assert.deepEqual(save.drills, ['drill-1']);
   await page.reload();
   await page.locator('#sensor').waitFor();

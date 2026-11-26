@@ -79,7 +79,7 @@ function hud() {
   el('repair').hidden = !save?.front || condition === 100 || ceramic < ceramicPerRepair;
   el('repair').disabled = busy;
   el('emergency').hidden = !save?.front || condition !== 0 || ceramic >= ceramicPerRepair || save.rocks >= rocksPerCeramic;
-  el('emergency').disabled = busy || !!laserJob || (!el('emergency').hidden && !world.trace(pos,...forward(yaw,pitch)));
+  el('emergency').disabled = busy || !!laserJob || (!el('emergency').hidden && !laserHit());
   if (panel && save?.front) {
     el('materials').textContent = '세라믹 ' + ceramic + (condition < 100 && !ceramic ?
       ' · 수리용 세라믹 1개 필요 (암석 ' + save.rocks + '/' + rocksPerCeramic + ')' : '');
@@ -203,12 +203,13 @@ el('stabilize').onclick = () => {
 el('fire-ceramic').onclick = () => write('fire-ceramic', () => message('암석 가열 완료 · 세라믹 1개'));
 el('repair').onclick = () => write('repair', () => {
   laserJob = null;
+  contact = null;
   timer = 0;
   message('드릴 수리 완료');
 });
 el('emergency').onclick = () => {
   if (busy || laserJob || save?.drillCondition !== 0) return;
-  const hit = world.trace(pos,...forward(yaw,pitch));
+  const hit = laserHit();
   if (hit) {
     laserJob = {cell:[hit.x,hit.y,hit.z], elapsed:0};
     message('긴급 레이저 채굴 중');
@@ -301,6 +302,20 @@ function move(dt, speed = velocity) {
   }
   return true;
 }
+function laserHit(direction = forward(yaw, pitch)) {
+  return world.trace(pos, ...direction, 32, intersectStone);
+}
+function heatStone(hit, direction, elapsed, operation) {
+  const point = offset(pos, direction, hit.t);
+  contact = {point, x:hit.x, y:hit.y, z:hit.z, heat:Math.min(1, elapsed / 1.35)};
+  if (elapsed < 1.35 || !world.dig(hit.x, hit.y, hit.z)) return false;
+  contact = null;
+  write(operation, () => {
+    fracture = {point, at:age};
+    if (operation === 'laser') message('긴급 채굴 완료 · 일반 암석 1개');
+  });
+  return true;
+}
 function tick(dt) {
   if (fatal || document.hidden) return;
   age += dt;
@@ -314,18 +329,12 @@ function tick(dt) {
       else if (Date.now() >= save.craftReadyAt) write('craft');
       return;
     }
-    const hit = world.trace(pos,...d,32,intersectStone);
+    const hit = laserHit(d);
     if (!hit) { contact = null; timer = 0; return; }
-    const cell = [hit.x,hit.y,hit.z], tag = cell.join(',');
+    const tag = [hit.x,hit.y,hit.z].join(',');
     if (targetTag !== tag) { targetTag = tag; timer = 0; }
     timer += dt;
-    contact = {point:offset(pos,d,hit.t), heat:Math.min(1,timer/1.35)};
-    if (timer >= 1.35 && world.dig(...cell)) {
-      fracture = {point:contact.point, at:age};
-      contact = null;
-      timer = 0;
-      write('collect');
-    }
+    if (heatStone(hit, d, timer, 'collect')) timer = 0;
     return;
   }
   if (busy) return;
@@ -362,17 +371,14 @@ function tick(dt) {
     return;
   }
   if (laserJob) {
-    const hit = world.trace(pos,...d);
+    const hit = laserHit(d);
     if (!hit || ![hit.x,hit.y,hit.z].every((v,i) => v === laserJob.cell[i])) {
       laserJob = null;
+      contact = null;
       message('조준이 변경되었습니다.');
     } else {
       laserJob.elapsed += dt;
-      if (laserJob.elapsed >= 1.35) {
-        const {cell} = laserJob;
-        laserJob = null;
-        if (world.dig(...cell)) write('laser', () => message('긴급 채굴 완료 · 일반 암석 1개'));
-      }
+      if (heatStone(hit, d, laserJob.elapsed, 'laser')) laserJob = null;
       return;
     }
   }
@@ -444,6 +450,7 @@ function frame(time) {
       },
       time / 1000,
     );
+    el('rock-gain').hidden = !fracture || age - fracture.at >= 0.7;
     const now = Date.now();
     const notice = save?.craftReadyAt ? (now < save.craftReadyAt-fabricationMs+950 ?
       '기본 드릴 제작 시작' : '기본 드릴 제작중') : now < installedUntil ? '기본 드릴 장착함' : '';
