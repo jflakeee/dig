@@ -365,14 +365,15 @@ test('a completed drill stroke wears once, laser recovery consumes the displayed
   const initial = {...readSave(),front:'drill-1',drills:['drill-1'],rocks:1,drillCondition:2};
   delete initial.ceramic;
   data.set(saveKey,JSON.stringify(initial));
-  const session = {pos:[0.5,0.5,0.5],velocity:[0,0,0],yaw:0,pitch:0,sensor:false,entered:-1,world:createWorld(true).snapshot()};
+  const world = createWorld(true, () => 0);
+  const mined = cell => (assert.ok(world.dig(...cell)), {pos:[0.5,0.5,0.5],velocity:[0,0,0],yaw:0,pitch:0,sensor:false,entered:-1,world:world.snapshot()});
   t.mock.method(Math,'random',()=>0);
-  const broken = await commit(initial.revision,'drill',session);
+  const broken = await commit(initial.revision,{type:'drill',cell:[0,0,3]},mined([0,0,3]));
   assert.equal(broken.drillCondition,0);
   assert.equal(broken.rocks,2);
-  await assert.rejects(commit(initial.revision,'drill',session));
+  await assert.rejects(commit(initial.revision,{type:'drill',cell:[0,0,4]},mined([0,0,4])));
   await assert.rejects(commit(broken.revision,'repair'));
-  const recovered = await commit(broken.revision,'laser',session);
+  const recovered = await commit(broken.revision,{type:'laser',cell:[0,0,5]},mined([0,0,5]));
   const ceramic = await commit(recovered.revision,'fire-ceramic');
   const fixed = await commit(ceramic.revision,'repair');
   assert.equal(fixed.rocks,0);
@@ -435,4 +436,23 @@ test('a reset coordinate rolls a new generation that survives a reload', () => {
     key => { assert.match(key, /^0,0,0:1:/); return 0; });
   restored.stream([0.5, 0.5, 0.5]);
   assert.equal(restored.snapshot().chunks.find(c => c.x === 0 && c.y === 0 && c.z === 0).epoch, 1);
+});
+
+test('a mining reward is keyed by chunk generation and cell and paid once', async t => {
+  const data = mockStorage(t);
+  data.set(saveKey, JSON.stringify({...readSave(), front:'drill-1', drills:['drill-1']}));
+  t.mock.method(Math,'random',()=>0.5);
+  const world = createWorld(true, () => 0);
+  const at = () => ({pos:[0.5,0.5,0.5],velocity:[0,0,0],yaw:0,pitch:0,sensor:false,entered:-1,world:world.snapshot()});
+  await assert.rejects(commit(0, {type:'drill', cell:[0,0,3]}, at()), /채굴 기록/);
+  await assert.rejects(commit(0, 'drill', at()), /채굴 기록/);
+  world.dig(0,0,3);
+  const paid = await commit(0, {type:'drill', cell:[0,0,3]}, at());
+  assert.equal(paid.rocks, 1);
+  const again = await commit(paid.revision, {type:'drill', cell:[0,0,3]}, at());
+  assert.deepEqual(again, paid);
+  assert.equal(JSON.parse(data.get(saveKey)).revision, paid.revision);
+  const regenerated = at();
+  regenerated.world.chunks.find(c => c.x === 0 && c.y === 0 && c.z === 0).epoch = 1;
+  assert.equal((await commit(paid.revision, {type:'drill', cell:[0,0,3]}, regenerated)).rocks, 2);
 });

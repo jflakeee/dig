@@ -23,6 +23,16 @@ export function portalRayDistance(portal, pos, ray, limit) {
 // Chunks are 16 m wide. Their voxel coordinates share one world frame.
 const side = 32;
 const chunkOf = (cell) => Math.floor((cell + 15) / side);
+// The chunk coordinate and bit index that own a voxel.
+export function cellOwner(x, y, z) {
+  return {chunk: [chunkOf(x), chunkOf(y), chunkOf(z)],
+    index: (((x + 15) & 31) * side + ((y + 15) & 31)) * side + ((z + 15) & 31)};
+}
+// Whether a saved chunk (`air` as an index array or base64 bit mask) has the cell excavated.
+export function savedAir(state, index) {
+  if (Array.isArray(state.air)) return state.air.includes(index);
+  return (atob(state.air).charCodeAt(index >> 3) & (1 << (index & 7))) !== 0;
+}
 // A roll is a pure function of the world seed and a key naming the chunk
 // coordinate, its generation and the purpose, so results do not depend on the
 // order in which chunks or faces are created. Injected `random` functions may
