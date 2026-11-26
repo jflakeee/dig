@@ -153,6 +153,12 @@ section {
   margin: 0 0 12px;
   padding-left: 20px;
 }
+#capture-alert {
+  display: block;
+  color: #ffd08a;
+  text-shadow: 0 1px 3px #000;
+  margin-bottom: 4px;
+}
 #decomposer label {
   display: block;
   margin: 4px 0;

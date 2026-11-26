@@ -334,6 +334,7 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
   }
   return {
     mineralAt,
+    get elapsed() { return elapsed; },
     get hazard() { return chunks.get('0,0,0')?.hazard; },
     sense(pos,dt,shock) { return senseHazard(this.hazard,pos,dt,trace,shock); },
     advance(dt) { elapsed += dt; },
