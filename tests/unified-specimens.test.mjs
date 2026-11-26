@@ -58,7 +58,8 @@ test('the discovery roll and its kind split start and end at their rates', () =>
   assert.notEqual(blockDiscovery(0, 'k', forced(0, 0.5999)).kind, 'capsule');
   assert.equal(blockDiscovery(0, 'k', forced(0, 0.6)).kind, 'capsule');
   assert.equal(blockDiscovery(0, 'k', forced(0, 0.6499)).kind, 'capsule');
-  assert.equal(blockDiscovery(0, 'k', forced(0, 0.65)), null);
+  assert.equal(blockDiscovery(0, 'k', forced(0, 0.65)).find.kind, 'drill_head');
+  assert.ok(blockDiscovery(0, 'k', forced(0, 0.999999)).find);
 });
 
 test('capsules favour capsule-only and unregistered elements and guarantee a new one after ten repeats', () => {
