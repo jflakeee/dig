@@ -163,6 +163,8 @@ try {
   await page.reload();
   await page.locator('#menu').click();
   await page.locator('#cargo').filter({hasText:'× 1'}).waitFor();
+  await page.getByText('발견 도감', {exact:true}).click();
+  await page.locator('#discovery-list li').filter({hasText:'누적 회수 1개'}).waitFor();
   item.speed = [6,0,0];
   const collision = {...session,yaw:Math.PI/2,hull:0.5,pos:item.point.map((v,i) => v+Number(i===0)),world:warehouse.snapshot()};
   await page.evaluate(([k,v]) => localStorage.setItem(k,JSON.stringify(v)),

@@ -136,6 +136,18 @@ section {
   border: 1px solid #424d4d;
   border-radius: 5px;
 }
+#panel {
+  max-height: calc(100dvh - max(20px, env(safe-area-inset-top)) - 70px);
+  overflow-y: auto;
+}
+#discoveries summary {
+  padding: 12px 0;
+  cursor: pointer;
+}
+#discovery-list {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
 section button {
   display: block;
   width: 100%;
