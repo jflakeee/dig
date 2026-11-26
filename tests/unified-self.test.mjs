@@ -29,10 +29,10 @@ test('eight parts of the machine each restore one recollection', () => {
 test('traders, the decomposer and analyses reveal more of the truth as memory returns', () => {
   assert.equal(traderLook('collector', 0), '여섯 다리로 선 원통형 기계');
   assert.equal(traderLook('collector', 2), '여섯 다리로 선 원통형 기계 · 나와 같은 외피의 곡면, 작업등의 배치');
-  assert.ok(traderLook('smelter', 8).endsWith('다른 시간의 나'));
+  assert.ok(traderLook('smelter', 8).endsWith('다른 우주의 나'));
   assert.notEqual(traderLook('smelter', 0), traderLook('mechanic', 0));
   assert.deepEqual([0, 3, 4, 5, 6, 8].map(lossNote),
-    ['원인 기록 없음', '원인 기록 없음', '교환 상대: 시간이 다른 곳', '교환 상대: 시간이 다른 곳', '교환 상대: 다른 시간의 나', '교환 상대: 다른 시간의 나']);
+    ['원인 기록 없음', '원인 기록 없음', '교환 상대: 시간이 다른 곳', '교환 상대: 시간이 다른 곳', '교환 상대: 다른 우주의 나', '교환 상대: 다른 우주의 나']);
   assert.equal(makerNote(6), null);
   assert.ok(makerNote(7).includes('미래의 내가'));
   assert.equal(recall({selfParts: ['shell', 'lens']}), 2);
