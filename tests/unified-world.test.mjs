@@ -157,3 +157,24 @@ test('reset removes only the evicted chunk’s portals and pending openings', ()
     assert.deepEqual(world.gravity([0, 0, 0]), [0, 0, 0]);
   }
 });
+
+test('save round trip preserves excavation, portal countdown and chunk resets', () => {
+  const world = createWorld(true, () => 0);
+  clearFace(world, 2, 1);
+  world.advance(300);
+  const restore = w => createWorld(true, () => { throw Error('unexpected reroll'); },
+    undefined, undefined, JSON.parse(JSON.stringify(w.snapshot())));
+  const loaded = restore(world);
+  assert.equal(loaded.solid(0,0,16), false);
+  assert.equal(loaded.solid(0,0,15), true);
+  assert.equal(loaded.portals().length, 1);
+  loaded.advance(1);
+  world.advance(1);
+  assert.deepEqual(loaded.portals(), world.portals());
+  assert.deepEqual(restore(loaded).portals(), world.portals());
+  loaded.stream([64,0,0]);
+  const reset = restore(loaded);
+  reset.stream([0,0,0]);
+  assert.equal(reset.solid(0,0,16), true);
+  assert.deepEqual(reset.portals(), []);
+});

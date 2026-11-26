@@ -52,6 +52,9 @@ try {
   assert.deepEqual(save.drills, ['drill-1']);
   await page.reload();
   await page.locator('#sensor').waitFor();
+  await page.waitForFunction(k => JSON.parse(localStorage.getItem(k))?.transited, key, {timeout: 60000});
+  assert.equal((await read()).arrivalStrength, 0.6);
+  await page.locator('#sensor.offscreen').waitFor();
   await page.mouse.move(15, 400);
   await page.mouse.down();
   await page.mouse.move(375, 400, { steps: 4 });
@@ -67,11 +70,14 @@ try {
   );
   assert.equal(await page.locator('#panel').isVisible(), true);
   assert.equal(await page.getByText(/청크 경계/).count(), 0);
+  const checkpoint = await read();
   await page.reload();
   await page.locator('#menu').waitFor();
-  await page.waitForFunction(k => JSON.parse(localStorage.getItem(k))?.transited, key, {timeout: 60000});
-  assert.equal((await read()).arrivalStrength, 0.6);
-  await page.locator('#sensor.offscreen').waitFor();
+  await page.waitForFunction(([k,revision]) => JSON.parse(localStorage.getItem(k)).revision > revision, [key, checkpoint.revision]);
+  const restored = await read();
+  assert.ok(restored.session.world.elapsed >= checkpoint.session.world.elapsed);
+  assert.ok(Math.hypot(...restored.session.pos.map((n,i) => n - checkpoint.session.pos[i])) < 3);
+  assert.equal(restored.session.yaw, checkpoint.session.yaw);
   await page.locator('#menu').click();
   await page.locator('#reset').click();
   const beforeConfirm = (await read()).rocks;

@@ -7,10 +7,27 @@ const fresh = () => ({
   front: null,
   transited: false,
   trips: 0,
+  session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
 });
 const unreadable = '저장 기록을 읽을 수 없습니다. 원본을 보존했습니다.';
+const vector = (v, valid = Number.isFinite) => Array.isArray(v) && v.length === 3 && v.every(n => valid(n));
+function validSession(s) {
+  const w = s?.world;
+  return vector(s?.pos) && vector(s.velocity) && Number.isFinite(s.yaw) && Number.isFinite(s.pitch) &&
+    typeof s.sensor === 'boolean' && Number.isInteger(s.entered) && s.entered >= -1 &&
+    Number.isFinite(w?.elapsed) && w.elapsed >= 0 && vector(w.center, Number.isSafeInteger) &&
+    typeof w.hasMouth === 'boolean' && Array.isArray(w.chunks) && w.chunks.every(c =>
+      c && vector([c.x,c.y,c.z], Number.isSafeInteger) &&
+      (Array.isArray(c.air) ? c.air.every(n => Number.isInteger(n) && n >= 0 && n < 32768)
+        : typeof c.air === 'string' && /^[A-Za-z0-9+/]{5462}==$/.test(c.air)) &&
+      Array.isArray(c.remaining) && c.remaining.length === 6 && c.remaining.every(n => Number.isInteger(n) && n >= 0 && n <= 1024) &&
+      Array.isArray(c.faces) && c.faces.length <= 6 && c.faces.every(f =>
+        f && vector(f.chunk, Number.isSafeInteger) && vector(f.point) && [0,1,2].includes(f.axis) &&
+        [-1,1].includes(f.sign) && f.exit === false && Number.isFinite(f.ready) && Number.isFinite(f.cleared) &&
+        Number.isFinite(f.radius) && f.radius > 0 && Number.isFinite(f.strength) && f.strength > 0));
+}
 export function readSave() {
   const raw = localStorage.getItem(saveKey);
   if (raw === null) return fresh();
@@ -27,6 +44,7 @@ export function readSave() {
     s.revision < 0 ||
     !Number.isSafeInteger(s.rocks) ||
     s.rocks < 0 ||
+    (s.session != null && !validSession(s.session)) ||
     !Array.isArray(s.drills) ||
     !(
       (s.drills.length === 0 && s.front === null) ||
@@ -43,7 +61,7 @@ export function readSave() {
     throw Error(unreadable);
   return s;
 }
-export async function commit(revision, operation) {
+export async function commit(revision, operation, session) {
   if (!navigator.locks)
     throw Error('안전한 저장을 위해 HTTPS 브라우저에서 다시 열어 주세요.');
   return navigator.locks.request(saveKey, () => {
@@ -51,6 +69,8 @@ export async function commit(revision, operation) {
     if (s.revision !== revision)
       throw Error('다른 탭에서 진행이 바뀌었습니다. 다시 열어 주세요.');
     switch (operation?.type ?? operation) {
+      case 'checkpoint':
+        break;
       case 'collect':
         s.rocks++;
         break;
@@ -67,6 +87,7 @@ export async function commit(revision, operation) {
         s.arrivalRadius = operation.radius;
         s.trips = (s.trips ?? Number(s.transited)) + 1;
         s.transited = true;
+        s.session = null;
         break;
       case 'reset':
         Object.assign(s, fresh(), { revision });
@@ -74,6 +95,7 @@ export async function commit(revision, operation) {
       default:
         throw Error('알 수 없는 저장 요청입니다.');
     }
+    if (session) s.session = session;
     s.revision++;
     localStorage.setItem(saveKey, JSON.stringify(s));
     return s;

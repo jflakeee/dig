@@ -25,14 +25,17 @@ let age = 0,
   audio,
   osc,
   gain;
+let checkpointAge = 0;
 function loadWorld() {
-  world = createWorld(!save?.transited, Math.random, save?.arrivalRadius, save?.arrivalStrength);
-  pos = [0.5, 0.5, 0.5];
-  velocity = [0, 0, 0];
-  yaw = 0;
-  pitch = 0;
-  sensor = false;
-  entered = false;
+  const session = save?.session;
+  checkpointAge = 0;
+  world = createWorld(!save?.transited, Math.random, save?.arrivalRadius, save?.arrivalStrength, session?.world);
+  pos = session?.pos ?? [0.5, 0.5, 0.5];
+  velocity = session?.velocity ?? [0, 0, 0];
+  yaw = session?.yaw ?? 0;
+  pitch = session?.pitch ?? 0;
+  sensor = session?.sensor ?? false;
+  entered = session ? world.portals()[session.entered] : false;
   anchors = [];
   timer = 0;
   targetTag = '';
@@ -78,15 +81,12 @@ function hud() {
   }
 }
 
-function syncSave() {
+function syncSave(force = false) {
   const latest = readSave();
-  const newWorld =
-    latest.front !== save?.front || latest.transited !== save?.transited || latest.trips !== save?.trips;
+  if (!force && latest.revision === save?.revision) return;
   save = latest;
-  if (newWorld) {
-    loadWorld();
-    if (!save.front) panel = false;
-  }
+  loadWorld();
+  if (!save.front) panel = false;
 }
 try {
   save = readSave();
@@ -101,11 +101,15 @@ async function write(op, after) {
   busy = true;
   hud();
   try {
-    save = await commit(save.revision, op);
+    const session = save.front && (op === 'collect' || op === 'checkpoint')
+      ? {pos, velocity, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
+      : null;
+    save = await commit(save.revision, op, session);
+    checkpointAge = 0;
     after?.();
   } catch (e) {
     try {
-      syncSave();
+      syncSave(true);
     } catch {
       fatal = true;
     }
@@ -253,6 +257,11 @@ function tick(dt) {
     return;
   }
   if (busy) return;
+  checkpointAge += dt;
+  if (checkpointAge >= 1) {
+    write('checkpoint');
+    return;
+  }
   const pull = entered ? [0, 0, 0] : world.gravity(pos);
   // The probe extends beyond one integration step so the entire body fits.
   const blocks = world.blockers(offset(pos, d, 0.7));
@@ -268,8 +277,8 @@ function tick(dt) {
     timer += dt;
     if (timer >= 0.16) {
       timer = 0;
+      world.dig(...target);
       write('collect', () => {
-        world.dig(...target);
         anchors = [];
       });
     }

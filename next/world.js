@@ -10,7 +10,7 @@ export const offset = (p, d, t) => p.map((v, i) => v + d[i] * t);
 // Chunks are 16 m wide. Their voxel coordinates share one world frame.
 const side = 32;
 const chunkOf = (cell) => Math.floor((cell + 15) / side);
-export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64, arrivalStrength = 2.8) {
+export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64, arrivalStrength = 2.8, saved) {
   const chunks = new Map();
   let elapsed = 0;
   const initial = {
@@ -107,8 +107,36 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
       if (chunk.x === 0 && chunk.y === 0 && chunk.z === 0) hasMouth = false;
     }
   }
-  for (let x = -1; x <= 1; x++)
-    for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) dig(x, y, z);
+  function snapshot() {
+    return {elapsed, center, hasMouth, chunks: Array.from(chunks.values(), chunk => {
+      const {air, ...state} = chunk;
+      if (air.size < 1024) return {...state, air: Array.from(air)};
+      const bytes = new Uint8Array(side ** 3 / 8);
+      for (const index of air) bytes[index >> 3] |= 1 << (index & 7);
+      return {...state, air: btoa(String.fromCharCode(...bytes))};
+    })};
+  }
+  if (saved) {
+    elapsed = saved.elapsed;
+    center = saved.center;
+    hasMouth = saved.hasMouth;
+    for (const state of saved.chunks) {
+      const air = new Set();
+      if (Array.isArray(state.air)) {
+        for (const index of state.air) air.add(index);
+      } else {
+        const bytes = atob(state.air);
+        if (bytes.length !== side ** 3 / 8) throw Error('굴착 기록을 읽을 수 없습니다.');
+        for (let i = 0; i < bytes.length; i++)
+          for (let bit = 0; bit < 8; bit++)
+            if (bytes.charCodeAt(i) & (1 << bit)) air.add(i * 8 + bit);
+      }
+      chunks.set([state.x, state.y, state.z].join(','), {...state, air});
+    }
+  } else {
+    for (let x = -1; x <= 1; x++)
+      for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) dig(x, y, z);
+  }
 
   function blockers(p) {
     const found = [];
@@ -165,7 +193,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
   }
   return {
     advance(dt) { elapsed += dt; },
-    portals, gravity,
+    snapshot, portals, gravity,
     hasChunk(x, y, z) { return chunks.has([x, y, z].join(',')); },
     tutorial,
     solid,
