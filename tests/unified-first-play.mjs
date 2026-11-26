@@ -87,7 +87,8 @@ try {
   await page.waitForFunction(
     ([k, n]) => JSON.parse(localStorage.getItem(k)).blocksMined >= n + 170,
     [key, afterPortal],
-    { timeout: 150000 },
+    // About a minute on a typical runner; slower CI runners have needed over 150 s.
+    { timeout: 300000 },
   );
   assert.equal(await page.locator('#panel').isVisible(), true);
   assert.equal(await page.getByText(/청크 경계/).count(), 0);
