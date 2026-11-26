@@ -7,6 +7,7 @@ import { massText } from './composition.js';
 import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate } from './trade.js';
 import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
 import { studies, fragments } from './research.js';
+import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
 import { mineralIds, mineralName, variantName } from './minerals.js';
 import { elementSymbols } from './elements.js';
 import { specimenById, specimenLabel } from './specimens.js';
@@ -145,7 +146,7 @@ function showDecomposer() {
   const result = choice && decompositionPreview(save, decomposeOperation(choice[0]));
   // The loss is shown but never explained: the machine keeps no record of where it goes.
   el('decompose-preview').textContent = result ? choice[1].replace(/ · \d+개$/, '') + ' 1개 · ' + massText(result.grams) +
-    ' → 회수 ' + massText(result.kept) + ' · 손실 ' + massText(result.grams - result.kept) + ' (원인 기록 없음)\n' + yieldText(result.out)
+    ' → 회수 ' + massText(result.kept) + ' · 손실 ' + massText(result.grams - result.kept) + ' (' + lossNote(recall(save)) + ')\n' + yieldText(result.out)
     : '분해할 원료가 없습니다.';
   el('decompose').disabled = busy || !result;
   const book = el('element-book');
@@ -213,7 +214,8 @@ function showTrade() {
   const trader = traderOf(save.marketSeed, cycle);
   el('credits').textContent = credit(save.credits);
   const left = Math.ceil((cycle + 1) * cycleSeconds - save.marketTime);
-  el('trader').textContent = '신호 #' + trader.signal + ' · ' + trader.name + ' · 시세 갱신까지 ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+  el('trader').textContent = '신호 #' + trader.signal + ' · ' + trader.name + ' · 시세 갱신까지 ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') +
+    '\n' + traderLook(trader.id, recall(save));
   const sells = sellChoices();
   fillSelect(el('sell-source'), sells.map(([value, label, price]) => [value, label + ' → ' + credit(price)]));
   const sell = sells.find(([value]) => value === el('sell-source').value);
@@ -282,7 +284,8 @@ function showResearch() {
   el('read-film').hidden = !save.research.includes('memory_film') || !films || save.memoryLog.length >= fragments.length;
   el('read-film').textContent = '기억막 판독 · ' + films + '장';
   el('read-film').disabled = busy;
-  const rows = save.research.map(k => findById(k).name + ' · ' + studies[k].safety + ' · ' + studies[k].traits);
+  const maker = makerNote(recall(save));
+  const rows = save.research.map(k => findById(k).name + ' · ' + studies[k].safety + ' · ' + studies[k].traits + (maker ? ' ' + maker : ''));
   if (el('research-list').dataset.rows !== JSON.stringify(rows)) {
     el('research-list').replaceChildren(...rows.map(text => Object.assign(document.createElement('li'), {textContent: text})));
     el('research-list').dataset.rows = JSON.stringify(rows);
@@ -292,6 +295,19 @@ function showResearch() {
   if (el('memory-list').dataset.rows !== JSON.stringify(lines)) {
     el('memory-list').replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
     el('memory-list').dataset.rows = JSON.stringify(lines);
+  }
+}
+// The machine's own recovered memory, one recollection per body part found.
+function showSelf() {
+  const found = save?.selfParts ?? [];
+  el('self-book').hidden = !found.length;
+  if (!panel || !found.length) return;
+  el('self-count').textContent = found.length + ' / ' + selfParts.length;
+  const lines = found.map(id => selfParts.find(p => p.id === id)).map(p => p.name + ' · ' + p.recollection);
+  if (finalMemory(found.length)) lines.push('마지막 기억 · ' + finalMemory(found.length));
+  if (el('self-list').dataset.rows !== JSON.stringify(lines)) {
+    el('self-list').replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
+    el('self-list').dataset.rows = JSON.stringify(lines);
   }
 }
 // Finds kept whole: equipment with durability, unknown materials and items.
@@ -362,6 +378,7 @@ function hud() {
   showStored();
   showTrade();
   showResearch();
+  showSelf();
   if (!panel) {
     el('reset-prompt').hidden = true;
     el('reset').hidden = false;
@@ -479,6 +496,17 @@ async function write(op, after) {
         discoveryNoticeUntil = age + 2;
         el('discovery-notice').textContent = '발견 도감에 기록됨 · ' + mineralName(first);
       }
+    }
+    // A part of the machine's own body: the recollection shows apart from work messages.
+    const regained = (save.selfParts ?? []).filter(id => !(before.selfParts ?? []).includes(id));
+    if (regained.length) {
+      const part = selfParts.find(p => p.id === regained.at(-1));
+      message('몸체 조각 회수 · ' + part.name);
+      // With the last part, the death underneath every other memory comes back too.
+      el('memory-line').textContent = part.recollection + (finalMemory(save.selfParts.length) ? ' … ' + finalMemory(save.selfParts.length) : '');
+      memoryUntil = age + (finalMemory(save.selfParts.length) ? 20 : 10);
+      discoveryNoticeUntil = age + 3;
+      el('discovery-notice').textContent = '기억 일부 복구 · ' + save.selfParts.length + ' / ' + selfParts.length;
     }
     const had = new Set([...(before.specimens ?? []), ...(before.finds ?? [])].map(p => p.id));
     const freshFinds = (save.finds ?? []).filter(p => !had.has(p.id));
@@ -762,6 +790,9 @@ function tick(dt) {
         age = 0;
         loadWorld();
         message('기체 파손 · 재기동');
+        // The death ending, told in text only; play goes on after it.
+        el('memory-line').textContent = deathEnding(cause);
+        memoryUntil = age + 12;
       });
       return;
     }

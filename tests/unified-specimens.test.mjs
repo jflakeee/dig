@@ -58,7 +58,9 @@ test('the discovery roll and its kind split start and end at their rates', () =>
   assert.equal(blockDiscovery(0, 'k', forced(0, 0.4999)).kind, 'ice');
   assert.equal(blockDiscovery(0, 'k', forced(0, 0.5)).kind, 'capsule');
   assert.equal(blockDiscovery(0, 'k', forced(0, 0.5499)).kind, 'capsule');
-  assert.equal(blockDiscovery(0, 'k', forced(0, 0.55)).find.kind, 'drill_head');
+  assert.ok('self' in blockDiscovery(0, 'k', forced(0, 0.55)));
+  assert.ok('self' in blockDiscovery(0, 'k', forced(0, 0.5699)));
+  assert.equal(blockDiscovery(0, 'k', forced(0, 0.5701)).find.kind, 'drill_head');
   assert.ok(blockDiscovery(0, 'k', forced(0, 0.999999)).find);
 });
 

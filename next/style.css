@@ -177,6 +177,7 @@ section {
 #trader {
   margin: 4px 0;
   color: #9fd8d1;
+  white-space: pre-line;
 }
 #auction-list, #trade-log {
   margin: 6px 0;
@@ -211,7 +212,11 @@ section {
   padding-left: 20px;
 }
 /* Memory fragments are the machine's own recollection, set apart from work records. */
-#memory-list, #memory-line {
+#self-list {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+#memory-list, #memory-line, #self-list {
   font-style: italic;
   color: #c9b8e8;
 }

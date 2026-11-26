@@ -2,12 +2,14 @@ import { roll } from './roll.js';
 import { elementSymbols } from './elements.js';
 import { rollFind } from './finds.js';
 import { fractionsFromUnits } from './composition.js';
+import { selfShare } from './self.js';
 // Mineral specimens and future-element capsules from
 // docs/dig-element-coverage-plan.md sections 2-4. All rates are trial values.
 export const specimenVersion = 1;
 export const discoveryRate = 0.02;       // extra discovery per drilled block
 export const specimenShare = 0.5;        // of discoveries
-export const capsuleShare = 0.05;        // of discoveries; the rest are non-mineral finds and Earth objects
+export const capsuleShare = 0.05;        // of discoveries; then the machine's own parts (next/self.js),
+                                         // and the rest are non-mineral finds and Earth objects
 export const captureSeconds = 6;
 const tier = {common: 8, uncommon: 4, rare: 2, scarce: 1};
 // [id, name, tier, sensitive capture label or null, [[variant, name, share, units], ...]]
@@ -108,6 +110,7 @@ export function blockDiscovery(seed, key, random = k => roll(seed, k)) {
     return {kind: s.id, variant: weighted(s.variants.map(v => [v.variant, v.share]), random(key + 'variant'))};
   }
   if (kind < specimenShare + capsuleShare) return {kind: 'capsule', sample: random(key + 'capsule')};
+  if (kind < specimenShare + capsuleShare + selfShare) return {self: random(key + 'self')};
   return {find: rollFind(random, key + 'find-')};
 }
 // Capsule element: capsule-only symbols weigh 3, others 1, registered ones a
