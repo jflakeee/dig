@@ -1,6 +1,6 @@
 import { senseHazard, cargoLoss } from '../next/hazards.js';
 import { contactDamage } from '../next/debris.js';
-import { commit, readSave, saveKey } from '../next/save.js';
+import { commit, readSave, saveKey, saveVersion } from '../next/save.js';
 import { hitHull } from '../next/debris.js';
 import { intersectStone } from '../next/rock-shapes.js';
 import assert from 'node:assert/strict';
@@ -98,6 +98,18 @@ test('six faces connect six neighbours within the inclusive deadline', () => {
     assert.equal(w.portals().filter(p => !p.exit).length, 6);
     assert.ok(w.portals().filter(p => !p.exit).every(p => p.radius === 16));
   }
+});
+
+test('a face emptied by portal debris does not start the six-face window', () => {
+  const w = createWorld(false, () => 0.999999, undefined, undefined, undefined, () => 0);
+  for (let a = -15; a <= 16; a++)
+    for (let b = -15; b <= 16; b++) w.dig(-15, a, b, false);
+  w.advance(400);
+  for (let axis = 0; axis < 3; axis++)
+    for (const sign of [-1,1])
+      if (axis !== 0 || sign !== -1) clearFace(w, axis, sign);
+  assert.equal(w.snapshot().chunks.find(c => c.x === 0 && c.y === 0 && c.z === 0).faces[0].cause, 'debris');
+  assert.equal(w.hasChunk(-1,0,0), true);
 });
 
 test('starter attraction is weak and ordinary portal strength is sampled once', () => {
@@ -326,4 +338,13 @@ test('a completed drill stroke wears once, laser recovery consumes the displayed
   assert.equal(fixed.ceramic,0);
   assert.equal(fixed.drillCondition,100);
   await assert.rejects(commit(ceramic.revision,'repair'));
+});
+
+test('a save from a newer build is rejected without being overwritten', async t => {
+  const data = mockStorage(t);
+  const newer = JSON.stringify({...readSave(), version: saveVersion + 1});
+  data.set(saveKey, newer);
+  assert.throws(readSave, /더 새로운 버전/);
+  await assert.rejects(commit(0, 'checkpoint', null), /더 새로운 버전/);
+  assert.equal(data.get(saveKey), newer);
 });

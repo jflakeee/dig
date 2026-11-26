@@ -44,7 +44,9 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
   function localIndex(x, y, z) {
     return (((x + 15) & 31) * side + ((y + 15) & 31)) * side + ((z + 15) & 31);
   }
-  function scheduleFace(chunk, owner, axis, sign) {
+  // cause: 'initial' (empty from generation), 'mined' (player excavation) or
+  // 'debris' (portal detachment). Only mined faces open the six-face window.
+  function scheduleFace(chunk, owner, axis, sign, cause) {
       const point = owner.map(n => n * side + 1);
       point[axis] += sign * side / 2;
       const width = 1 + Math.floor(random() * side);
@@ -52,7 +54,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
         if (i !== axis) point[i] += Math.floor(random() * (side - width + 1)) - (side - width) / 2;
       chunk.faces.push({point, axis, sign, chunk: owner, exit: false,
         radius: width / 2, strength: 0.8 + random() * 4,
-        ready: elapsed + 301 + random() * 59, cleared: elapsed});
+        ready: elapsed + 301 + random() * 59, cleared: elapsed, cause});
   }
   function enter(chunk) {
     if (chunk.entered) return;
@@ -60,7 +62,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
     if (chunk.kind !== 'empty' && chunk.kind !== 'warehouse') return;
     const owner = [chunk.x,chunk.y,chunk.z];
     for (let axis=0; axis<3; axis++)
-      for (const sign of [-1,1]) scheduleFace(chunk, owner, axis, sign);
+      for (const sign of [-1,1]) scheduleFace(chunk, owner, axis, sign, 'initial');
   }
   function dig(x, y, z, mined = true) {
     const chunk = chunkAt(x, y, z, true);
@@ -76,10 +78,12 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
       const sign = local === 0 ? -1 : 1;
       const face = axis * 2 + Number(sign > 0);
       if (--chunk.remaining[face] !== 0) continue;
-      scheduleFace(chunk, owner, axis, sign);
+      scheduleFace(chunk, owner, axis, sign, mined ? 'mined' : 'debris');
     }
+    // Saves written before `cause` existed count every face as mined.
+    const firstMined = chunk.faces.find(f => (f.cause ?? 'mined') === 'mined');
     if (mined && priorFaces < 6 && chunk.faces.length === 6 && !chunk.linked &&
-        elapsed - chunk.faces[0].cleared <= 300) {
+        firstMined && elapsed - firstMined.cleared <= 300) {
       chunk.linked = true;
       for (const face of chunk.faces) {
         const adjacent = owner.map((n, i) => n + (i === face.axis ? face.sign : 0));
