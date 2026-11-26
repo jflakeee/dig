@@ -40,7 +40,7 @@ test('minerals, specimens and capsules give every one of the 118 elements a sour
       assert.ok(v.share > 0);
       for (const [e, n] of Object.entries(v.units)) {
         assert.ok(elementSymbols.includes(e), e);
-        assert.ok(Number.isInteger(n) && n > 0);
+        assert.ok(Number.isFinite(n) && n > 0);
         natural.add(e);
       }
     }
@@ -55,10 +55,10 @@ test('the discovery roll and its kind split start and end at their rates', () =>
   const forced = (rate, kind) => key => key.endsWith('rate') ? rate : key.endsWith('kind') ? kind : 0;
   assert.equal(blockDiscovery(0, 'k', forced(0.0199, 0)).kind, 'ice');
   assert.equal(blockDiscovery(0, 'k', forced(0.02, 0)), null);
-  assert.notEqual(blockDiscovery(0, 'k', forced(0, 0.5999)).kind, 'capsule');
-  assert.equal(blockDiscovery(0, 'k', forced(0, 0.6)).kind, 'capsule');
-  assert.equal(blockDiscovery(0, 'k', forced(0, 0.6499)).kind, 'capsule');
-  assert.equal(blockDiscovery(0, 'k', forced(0, 0.65)).find.kind, 'drill_head');
+  assert.equal(blockDiscovery(0, 'k', forced(0, 0.4999)).kind, 'ice');
+  assert.equal(blockDiscovery(0, 'k', forced(0, 0.5)).kind, 'capsule');
+  assert.equal(blockDiscovery(0, 'k', forced(0, 0.5499)).kind, 'capsule');
+  assert.equal(blockDiscovery(0, 'k', forced(0, 0.55)).find.kind, 'drill_head');
   assert.ok(blockDiscovery(0, 'k', forced(0, 0.999999)).find);
 });
 
@@ -89,7 +89,9 @@ test('a stable specimen is kept once as a piece and decomposes into its units', 
   assert.equal(again.specimens.length, 1);
   const split = await commit(paid.revision, {type: 'decompose', kind: 'fluorite', variant: 'fluorite'});
   assert.deepEqual(split.specimens, []);
-  assert.deepEqual(split.elements, {Ca: 1, F: 2});
+  assert.deepEqual(Object.keys(split.elements).sort(), ['Ca', 'F']);
+  assert.ok(Math.abs(split.elements.Ca / split.elements.F - 40.078 / (2 * 18.998)) < 1e-9);
+  assert.ok(split.elements.Ca + split.elements.F < 50);
   await assert.rejects(commit(split.revision, {type: 'decompose', kind: 'fluorite', variant: 'fluorite'}), /분해할 원료/);
 });
 
@@ -143,7 +145,7 @@ test('a capsule holds one element, counts repeats and decomposes without its she
   assert.equal(capsule.element, 'Og');
   assert.equal(s.capsuleMisses, 0);
   const split = await commit(s.revision, {type: 'decompose', kind: 'capsule', element: 'Og'});
-  assert.equal(split.elements.Og, 1);
+  assert.ok(split.elements.Og > 0 && split.elements.Og < 0.001);
   assert.equal(split.elementLog.at(-1), 'Og');
   assert.equal(split.elementLog.length, 118);
 });

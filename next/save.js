@@ -1,13 +1,14 @@
 import { cellOwner, savedAir } from './world.js';
-import { blockYield, mineralIds, variants, defaultVariant, rockVariantAt, elementUnits } from './minerals.js';
+import { blockYield, mineralIds, variants, defaultVariant, rockVariantAt, mineralPiece } from './minerals.js';
 import { elementSymbols } from './elements.js';
-import { blockDiscovery, capsuleElement, specimenById, specimenUnits, captureSeconds } from './specimens.js';
-import { findById, findUnits } from './finds.js';
+import { blockDiscovery, capsuleElement, specimenById, specimenUnits, specimenPiece, captureSeconds } from './specimens.js';
+import { findById, findPiece } from './finds.js';
+import { decompose, decompositionFee } from './composition.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 7;
+export const saveVersion = 8;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -28,7 +29,32 @@ export const migrations = {
   // Equipment, unknown materials and everyday items, and the kinds first found.
   // `clockLog` keeps the minute each recovered desk clock stopped at.
   6: s => ({...s, finds: [], findLog: [], clockLog: []}),
+  // Elements become grams (one former unit counts as one gram) and the
+  // decomposer counts its runs, which fix each run's loss.
+  7: s => ({...s, decomposeCount: 0}),
 };
+// What decomposing the piece named by `operation` would yield, without
+// changing the save: input grams, the share lost and element grams out.
+export function decompositionPreview(s, operation) {
+  let piece = null, key = null;
+  if (operation?.find) {
+    const p = s.finds.find(q => q.kind === operation.find && q.variant === operation.variant);
+    piece = p && findPiece(p.kind, p.variant);
+    key = 'find:' + operation.find + ':' + operation.variant;
+  } else if (operation?.kind) {
+    const p = s.specimens.find(q => q.kind === operation.kind &&
+      (q.kind === 'capsule' ? q.element === operation.element : q.variant === operation.variant));
+    piece = p && specimenPiece(p.kind, p.variant, p.element);
+    key = 'specimen:' + operation.kind + ':' + (operation.element ?? operation.variant);
+  } else if (variants[operation?.mineral] && (variantCounts(s, operation.mineral)[operation.variant] ?? 0) > 0) {
+    piece = mineralPiece(operation.mineral, operation.variant);
+    key = 'mineral:' + operation.mineral + ':' + operation.variant;
+  }
+  if (!piece) return null;
+  const fee = decompositionFee(s.decomposeCount, key);
+  const out = decompose(piece.grams, piece.fractions, fee);
+  return {grams: piece.grams, fee, out, kept: Object.values(out).reduce((n, m) => n + m, 0)};
+}
 // Capture rules for a sensitive specimen or find: seconds allowed and the
 // drill damage an expired find deals (a lost gas or mercury deals none).
 const captureRule = kind => findById(kind)?.sensitive ?? (specimenById(kind)?.sensitive ? {seconds: captureSeconds, damage: 0} : null);
@@ -118,6 +144,7 @@ const fresh = () => ({
   finds: [],
   findLog: [],
   clockLog: [],
+  decomposeCount: 0,
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
@@ -143,7 +170,8 @@ function validMinerals(s) {
     }) &&
     mineralIds.every(id => variantCounts(s, id)[defaultVariant(id)] >= 0) &&
     s.elements && typeof s.elements === 'object' && !Array.isArray(s.elements) &&
-    Object.entries(s.elements).every(([symbol, n]) => s.elementLog.includes(symbol) && Number.isSafeInteger(n) && n > 0) &&
+    Object.entries(s.elements).every(([symbol, n]) => s.elementLog.includes(symbol) && Number.isFinite(n) && n > 0) &&
+    Number.isSafeInteger(s.decomposeCount) && s.decomposeCount >= 0 &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
     new Set(s.elementLog).size === s.elementLog.length &&
     Array.isArray(s.specimens) && s.specimens.every(validPiece) &&
@@ -365,30 +393,18 @@ export async function commit(revision, operation, session) {
         break;
       }
       case 'decompose': {
-        // One piece leaves and its element units arrive in the same save.
-        let units;
-        if (operation?.find) {
-          // Only everyday items break down here; equipment and unknown materials keep their value whole.
-          const at = s.finds.findIndex(p => p.kind === operation.find && p.variant === operation.variant && findUnits(p.kind, p.variant));
-          if (!s.front || at < 0) throw Error('분해할 원료가 없습니다.');
-          const [piece] = s.finds.splice(at, 1);
-          units = findUnits(piece.kind, piece.variant);
-        } else if (operation?.kind) {
-          const at = s.specimens.findIndex(p => p.kind === operation.kind &&
-            (p.kind === 'capsule' ? p.element === operation.element : p.variant === operation.variant));
-          if (!s.front || at < 0) throw Error('분해할 원료가 없습니다.');
-          const [piece] = s.specimens.splice(at, 1);
-          units = specimenUnits(piece.kind, piece.variant, piece.element);
-        } else {
-          units = elementUnits(operation?.mineral, operation?.variant);
-          if (!s.front || !units) throw Error('분해할 원료를 다시 선택해 주세요.');
-          spendVariant(s, operation.mineral, operation.variant);
-        }
-        for (const [symbol, n] of Object.entries(units)) {
-          if ((s.elements[symbol] ?? 0) > Number.MAX_SAFE_INTEGER - n) throw Error('원소 보관 한도에 도달했습니다.');
-          s.elements[symbol] = (s.elements[symbol] ?? 0) + n;
+        // One piece leaves and its element grams, less the decomposer's loss, arrive in the same save.
+        const result = s.front && decompositionPreview(s, operation);
+        if (!result) throw Error('분해할 원료가 없습니다.');
+        if (operation.find) s.finds.splice(s.finds.findIndex(q => q.kind === operation.find && q.variant === operation.variant), 1);
+        else if (operation.kind) s.specimens.splice(s.specimens.findIndex(q => q.kind === operation.kind &&
+          (q.kind === 'capsule' ? q.element === operation.element : q.variant === operation.variant)), 1);
+        else spendVariant(s, operation.mineral, operation.variant);
+        for (const [symbol, grams] of Object.entries(result.out)) {
+          s.elements[symbol] = (s.elements[symbol] ?? 0) + grams;
           if (!s.elementLog.includes(symbol)) s.elementLog.push(symbol);
         }
+        s.decomposeCount++;
         break;
       }
       case 'reset':

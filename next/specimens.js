@@ -1,12 +1,13 @@
 import { roll } from './roll.js';
 import { elementSymbols } from './elements.js';
 import { rollFind } from './finds.js';
+import { fractionsFromUnits } from './composition.js';
 // Mineral specimens and future-element capsules from
 // docs/dig-element-coverage-plan.md sections 2-4. All rates are trial values.
 export const specimenVersion = 1;
 export const discoveryRate = 0.02;       // extra discovery per drilled block
-export const specimenShare = 0.6;        // of discoveries
-export const capsuleShare = 0.05;        // of discoveries; the rest are the 24 non-mineral finds
+export const specimenShare = 0.5;        // of discoveries
+export const capsuleShare = 0.05;        // of discoveries; the rest are non-mineral finds and Earth objects
 export const captureSeconds = 6;
 const tier = {common: 8, uncommon: 4, rare: 2, scarce: 1};
 // [id, name, tier, sensitive capture label or null, [[variant, name, share, units], ...]]
@@ -61,14 +62,21 @@ export const specimens = [
   ['osmiridium', '오스미리듐', 'scarce', null, one('osmiridium', {Ir: 1, Os: 1})],
   ['rheniite', '레늄광', 'scarce', null, one('rheniite', {Re: 1, S: 2})],
   ['thorite', '토라이트', 'rare', null, one('thorite', {Th: 1, Si: 1, O: 4})],
-  ['uraninite', '우라니나이트', 'rare', null, [['Ra', 30], ['Rn', 30], ['Po', 20], ['Pa', 10], ['Ac', 10]]
-    .map(([e, w]) => [e, e + ' 함유', w, {U: 1, O: 2, [e]: 1}])],
+  // Decay products in secular equilibrium: atoms per uranium atom.
+  ['uraninite', '우라니나이트', 'rare', null, [['Ra', 30, 3.58e-7], ['Rn', 30, 2.34e-12], ['Po', 20, 8.49e-11],
+    ['Pa', 10, 3.35e-7], ['Ac', 10, 2.23e-10]].map(([e, w, r]) => [e, e + ' 함유', w, {U: 1, O: 2, [e]: r}])],
 ].map(([id, name, t, sensitive, list]) => ({id, name, weight: tier[t], tier: t, sensitive,
   variants: list.map(([variant, label, share, units]) => ({variant, label: label ?? name, share, units}))}));
 // Elements no mineral can supply in play: Tc, Pm, At, Fr, Np, Pu and Am-Og.
 export const capsuleOnly = ['Tc', 'Pm', 'At', 'Fr', 'Np', 'Pu', ...elementSymbols.slice(94)];
 export const capsuleGuarantee = 10;
 export const specimenById = id => specimens.find(s => s.id === id);
+// Grams per piece: inclusions hold little gas, capsules a milligram sample.
+const specimenGrams = kind => ({hydrogen: 0.5, noble_gas: 0.5, mercury: 5, capsule: 0.001})[kind] ?? 50;
+export function specimenPiece(kind, variant, element) {
+  const units = specimenUnits(kind, variant, element);
+  return units && {grams: specimenGrams(kind), fractions: fractionsFromUnits(units)};
+}
 export function specimenUnits(kind, variant, element) {
   if (kind === 'capsule') return elementSymbols.includes(element) ? {[element]: 1} : null;
   return specimenById(kind)?.variants.find(v => v.variant === variant)?.units ?? null;

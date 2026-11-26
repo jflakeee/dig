@@ -1,4 +1,5 @@
 import { roll } from './roll.js';
+import { fractionsFromUnits } from './composition.js';
 // Mining catalog from docs/dig-mineral-catalog-expansion.md. Bump the version
 // whenever the table changes so already-rolled blocks keep their key space.
 export const catalogVersion = 1;
@@ -51,6 +52,12 @@ export const defaultVariant = id => variants[id][0][0];
 export const variantName = (id, variant) => variants[id]?.find(v => v[0] === variant)?.[1] ?? variant;
 // Element units released by decomposing one piece of a mineral sub-species.
 export const elementUnits = (id, variant) => variants[id]?.find(v => v[0] === variant)?.[3] ?? null;
+// One mined piece weighs 100 g in the decomposer (trial value).
+export const mineralGrams = 100;
+export function mineralPiece(id, variant) {
+  const units = elementUnits(id, variant);
+  return units && {grams: mineralGrams, fractions: fractionsFromUnits(units)};
+}
 // [base share, base id, [[companion id, conditional share], ...]] in parts
 // per 10,000 so band edges are exact. A rare row picks one entry as its yield.
 export const table = [
