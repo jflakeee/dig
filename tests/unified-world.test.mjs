@@ -366,7 +366,9 @@ test('a completed drill stroke wears once, laser recovery consumes the displayed
   delete initial.ceramic;
   data.set(saveKey,JSON.stringify(initial));
   const world = createWorld(true, () => 0);
-  const mined = cell => (assert.ok(world.dig(...cell)), {pos:[0.5,0.5,0.5],velocity:[0,0,0],yaw:0,pitch:0,sensor:false,entered:-1,world:world.snapshot()});
+  // Without a world seed a block yields plain rock, which keeps the counts below fixed.
+  const rockOnly = () => { const w = world.snapshot(); delete w.seed; return w; };
+  const mined = cell => (assert.ok(world.dig(...cell)), {pos:[0.5,0.5,0.5],velocity:[0,0,0],yaw:0,pitch:0,sensor:false,entered:-1,world:rockOnly()});
   t.mock.method(Math,'random',()=>0);
   const broken = await commit(initial.revision,{type:'drill',cell:[0,0,3]},mined([0,0,3]));
   assert.equal(broken.drillCondition,0);
@@ -443,7 +445,7 @@ test('a mining reward is keyed by chunk generation and cell and paid once', asyn
   data.set(saveKey, JSON.stringify({...readSave(), front:'drill-1', drills:['drill-1']}));
   t.mock.method(Math,'random',()=>0.5);
   const world = createWorld(true, () => 0);
-  const at = () => ({pos:[0.5,0.5,0.5],velocity:[0,0,0],yaw:0,pitch:0,sensor:false,entered:-1,world:world.snapshot()});
+  const at = () => { const w = world.snapshot(); delete w.seed; return {pos:[0.5,0.5,0.5],velocity:[0,0,0],yaw:0,pitch:0,sensor:false,entered:-1,world:w}; };
   await assert.rejects(commit(0, {type:'drill', cell:[0,0,3]}, at()), /채굴 기록/);
   await assert.rejects(commit(0, 'drill', at()), /채굴 기록/);
   world.dig(0,0,3);

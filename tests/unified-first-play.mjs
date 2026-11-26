@@ -62,8 +62,10 @@ try {
   await page.locator('#menu').waitFor();
   let save = await read();
   // Automatic drilling may already have removed more cells after installation.
+  // Those drill blocks may yield other minerals, so count mined blocks.
   const startRoom = save.session.world.chunks.find(c => !c.x && !c.y && !c.z);
-  assert.equal(save.rocks, startRoom.air.length - 30);
+  assert.equal(save.blocksMined, startRoom.air.length - 27);
+  assert.ok(save.rocks <= startRoom.air.length - 30);
   assert.deepEqual(save.drills, ['drill-1']);
   await page.reload();
   await page.locator('#sensor').waitFor();
@@ -74,12 +76,12 @@ try {
   await page.mouse.down();
   await page.mouse.move(375, 400, { steps: 4 });
   await page.mouse.up();
-  const afterPortal = (await read()).rocks;
+  const afterPortal = (await read()).blocksMined;
   // At most 15 forward layers of 9 voxels fit before the old boundary.
-  // Collecting 170 rocks on this straight course requires crossing it.
+  // Mining 170 blocks on this straight course requires crossing it.
   await page.locator('#menu').click();
   await page.waitForFunction(
-    ([k, n]) => JSON.parse(localStorage.getItem(k)).rocks >= n + 170,
+    ([k, n]) => JSON.parse(localStorage.getItem(k)).blocksMined >= n + 170,
     [key, afterPortal],
     { timeout: 150000 },
   );
@@ -95,9 +97,9 @@ try {
   assert.equal(restored.session.yaw, checkpoint.session.yaw);
   await page.locator('#menu').click();
   await page.locator('#reset').click();
-  const beforeConfirm = (await read()).rocks;
+  const beforeConfirm = (await read()).blocksMined;
   await page.waitForFunction(
-    ([k, n]) => JSON.parse(localStorage.getItem(k)).rocks > n,
+    ([k, n]) => JSON.parse(localStorage.getItem(k)).blocksMined > n,
     [key, beforeConfirm],
   );
   await page.locator('#confirm-reset').click();
@@ -202,8 +204,12 @@ try {
   await page.evaluate(([k,v]) => localStorage.setItem(k,JSON.stringify(v)),
     [key,{...shared,session:null,transited:false,rocks:2,ceramic:0,drillCondition:0}]);
   await page.reload();
-  await page.locator('#emergency').click();
-  await page.waitForFunction(k => JSON.parse(localStorage.getItem(k)).rocks===3,key);
+  // The emergency laser recovers whatever the block holds; repeat until a rock comes.
+  while ((await read()).rocks < 3) {
+    const mined = (await read()).blocksMined;
+    await page.locator('#emergency:enabled').click();
+    await page.waitForFunction(([k,n]) => JSON.parse(localStorage.getItem(k)).blocksMined > n, [key, mined]);
+  }
   assert.equal(await page.locator('#emergency').isVisible(),false);
   await page.locator('#menu').click();
   assert.equal(await page.locator('#repair').isVisible(),false);
@@ -217,7 +223,7 @@ try {
   await page.locator('#repair').click();
   await page.waitForFunction(k => JSON.parse(localStorage.getItem(k)).drillCondition===100,key);
   assert.equal((await read()).ceramic,0);
-  await page.waitForFunction(k => JSON.parse(localStorage.getItem(k)).rocks>0,key);
+  await page.waitForFunction(k => JSON.parse(localStorage.getItem(k)).blocksMined>0,key);
   await page.evaluate((k) => localStorage.setItem(k, 'broken-save'), key);
   await page.reload();
   await page.locator('#message').filter({ hasText: '원본을 보존' }).waitFor();

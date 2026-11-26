@@ -1,3 +1,5 @@
+import { roll } from './roll.js';
+import { blockYield } from './minerals.js';
 import { arrivalHazard, senseHazard } from './hazards.js';
 import { simulate, hitHull, contactDamage } from './debris.js';
 import { terrainKind, makeChunk, naturalSolid, identify } from './chunk-terrain.js';
@@ -33,17 +35,7 @@ export function savedAir(state, index) {
   if (Array.isArray(state.air)) return state.air.includes(index);
   return (atob(state.air).charCodeAt(index >> 3) & (1 << (index & 7))) !== 0;
 }
-// A roll is a pure function of the world seed and a key naming the chunk
-// coordinate, its generation and the purpose, so results do not depend on the
-// order in which chunks or faces are created. Injected `random` functions may
-// ignore the key; tests use that to force specific outcomes.
-export function roll(seed, key) {
-  let h = 2166136261 ^ seed;
-  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
-  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
-  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
+export { roll };
 export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStrength = 2.8, saved, terrainRandom, seed) {
   seed = (saved?.seed ?? seed ?? Math.random() * 4294967296) >>> 0;
   random ??= key => roll(seed, key);
@@ -326,7 +318,22 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
     }
     return null;
   }
+  // Minerals a block will yield, for drawing. Pure: it never changes state.
+  const yields = new Map();
+  function mineralAt(x, y, z) {
+    const chunk = chunkAt(x, y, z, false);
+    if (!chunk) return null;
+    const key = ((x + 1e5) * 2e5 + (y + 1e5)) * 2e5 + (z + 1e5);
+    let entry = yields.get(key);
+    if (!entry || entry.epoch !== (chunk.epoch ?? 0)) {
+      if (yields.size > 4096) yields.clear();
+      entry = {epoch: chunk.epoch ?? 0, value: blockYield(seed, [chunk.x, chunk.y, chunk.z], chunk.epoch ?? 0, localIndex(x, y, z))};
+      yields.set(key, entry);
+    }
+    return entry.value;
+  }
   return {
+    mineralAt,
     get hazard() { return chunks.get('0,0,0')?.hazard; },
     sense(pos,dt,shock) { return senseHazard(this.hazard,pos,dt,trace,shock); },
     advance(dt) { elapsed += dt; },

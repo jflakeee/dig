@@ -1,5 +1,6 @@
 import { identify } from './chunk-terrain.js';
 import { intersectStone } from './rock-shapes.js';
+import { mineralTint } from './minerals.js';
 import { forward, portalRayDistance } from './world.js';
 
 import { createDust } from './dust.js';
@@ -56,7 +57,7 @@ export function createView(canvas) {
   resize();
   new ResizeObserver(resize).observe(canvas);
   return function render(s, now) {
-    const { world, pos, yaw, pitch, light, working, anchors, contact } = s;
+    const { world, pos, yaw, pitch, light, working, anchors, contact, minerals } = s;
     const w = canvas.width,
       h = canvas.height,
       f = Math.min(w, h) * 0.82;
@@ -106,9 +107,13 @@ export function createView(canvas) {
             (((left * 0.65 + rightLight * 0.55 + core * 0.28) * grain * 185) /
               (1 + 0.12 * hit.t ** 1.45)) *
             hit.shade;
-          r += lum * 1.12;
-          g += lum * 1.01;
-          b += lum * 0.86;
+          // Once a drill is mounted, exposed faces show the block's minerals:
+          // the base tints the stone, a companion appears as grains.
+          const found = minerals ? world.mineralAt(hit.x, hit.y, hit.z) : null;
+          const tint = found ? mineralTint(found.companion && sample(23) > 0.74 ? found.companion : found.base) : [1, 1, 1];
+          r += lum * 1.12 * tint[0];
+          g += lum * 1.01 * tint[1];
+          b += lum * 0.86 * tint[2];
           if (contact && hit.x === contact.x && hit.y === contact.y && hit.z === contact.z) {
             const px = x - contact.point[0], py = y - contact.point[1], pz = z - contact.point[2];
             const radius = 0.07 + 0.27 * contact.heat;

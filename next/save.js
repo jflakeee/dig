@@ -1,9 +1,10 @@
 import { cellOwner, savedAir } from './world.js';
+import { blockYield, mineralIds } from './minerals.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 2;
+export const saveVersion = 3;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -12,6 +13,8 @@ export const migrations = {
     // Legacy saves only establish the quantities still on board.
     discoveries: Array.isArray(s.cargo) ? s.cargo.flatMap((count, item) => count > 0 ? [{item, count}] : []) : [],
   }),
+  // Rocks stay in `rocks`; the other 15 catalog minerals start at zero.
+  2: s => ({...s, minerals: {}, mineralLog: s.rocks > 0 || s.front ? ['rock'] : [], blocksMined: 0}),
 };
 const fresh = () => ({
   version: saveVersion,
@@ -26,6 +29,9 @@ const fresh = () => ({
   drillCondition: 100,
   cargo: [0,0,0],
   discoveries: [],
+  minerals: {},
+  mineralLog: [],
+  blocksMined: 0,
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
@@ -37,6 +43,13 @@ function validDiscoveries(entries) {
     entries.every(entry => entry && [0,1,2].includes(entry.item) &&
       Number.isSafeInteger(entry.count) && entry.count > 0) &&
     new Set(entries.map(entry => entry.item)).size === entries.length;
+}
+function validMinerals(s) {
+  return s.minerals && typeof s.minerals === 'object' && !Array.isArray(s.minerals) &&
+    Object.entries(s.minerals).every(([id, n]) => id !== 'rock' && mineralIds.includes(id) && Number.isSafeInteger(n) && n >= 0) &&
+    Array.isArray(s.mineralLog) && s.mineralLog.every(id => mineralIds.includes(id)) &&
+    new Set(s.mineralLog).size === s.mineralLog.length &&
+    Number.isSafeInteger(s.blocksMined) && s.blocksMined >= 0;
 }
 function validSession(s) {
   const w = s?.world;
@@ -97,6 +110,7 @@ export function readSave() {
     !Number.isSafeInteger(s.rocks) ||
     s.rocks < 0 ||
     !validDiscoveries(s.discoveries) ||
+    !validMinerals(s) ||
     (s.cargo !== undefined && !vector(s.cargo, n => Number.isSafeInteger(n) && n >= 0)) ||
     (s.drillCondition !== undefined && !(Number.isInteger(s.drillCondition) && s.drillCondition >= 0 && s.drillCondition <= 100)) ||
     (s.craftReadyAt != null && (!Number.isSafeInteger(s.craftReadyAt) || s.craftReadyAt <= 0 || s.front || s.rocks < 3)) ||
@@ -126,6 +140,7 @@ export async function commit(revision, operation, session) {
     if (s.revision !== revision)
       throw Error('다른 탭에서 진행이 바뀌었습니다. 다시 열어 주세요.');
     const type = operation?.type ?? operation;
+    let found = null;
     if (['collect', 'drill', 'laser'].includes(type)) {
       // The work key is the cell's chunk, generation and index. A cell already
       // excavated in the committed world returns the committed result unpaid.
@@ -136,6 +151,9 @@ export async function commit(revision, operation, session) {
       if (!next || !savedAir(next, index)) throw Error('채굴 기록이 바뀌었습니다.');
       const prior = find(s.session?.world);
       if (prior && (prior.epoch ?? 0) === (next.epoch ?? 0) && savedAir(prior, index)) return s;
+      // Before the first drill the laser only gathers ordinary rock.
+      found = s.front && Number.isSafeInteger(session.world.seed)
+        ? blockYield(session.world.seed, chunk, next.epoch ?? 0, index) : {base: 'rock', companion: null};
     }
     switch (type) {
       case 'blast':
@@ -169,16 +187,12 @@ export async function commit(revision, operation, session) {
       case 'drill':
         if (!s.front || s.drillCondition === 0) throw Error('드릴을 사용할 수 없습니다.');
         if (Math.random() < 0.05) s.drillCondition = Math.max(0,(s.drillCondition ?? 100)-2);
-        s.rocks++;
         break;
       case 'laser':
         if (!s.front || s.drillCondition !== 0 || (s.ceramic ?? 0) >= ceramicPerRepair || s.rocks >= rocksPerCeramic) throw Error('긴급 채굴 조건이 바뀌었습니다.');
-        s.rocks++;
         break;
       case 'collect':
         if (s.front || s.rocks >= 3) throw Error('채굴 기록이 바뀌었습니다.');
-        s.rocks++;
-        if (s.rocks === 3) s.craftReadyAt = Date.now()+fabricationMs;
         break;
       case 'begin-craft':
         if (s.front || s.rocks < 3 || s.craftReadyAt) throw Error('제작 기록이 바뀌었습니다.');
@@ -215,6 +229,15 @@ export async function commit(revision, operation, session) {
       default:
         throw Error('알 수 없는 저장 요청입니다.');
     }
+    // One mining event pays its base and companion together, after validation.
+    if (found) s.blocksMined++;
+    for (const id of found ? [found.base, found.companion] : []) {
+      if (!id) continue;
+      if (id === 'rock') s.rocks++;
+      else s.minerals[id] = (s.minerals[id] ?? 0) + 1;
+      if (!s.mineralLog.includes(id)) s.mineralLog.push(id);
+    }
+    if (type === 'collect' && s.rocks === 3) s.craftReadyAt = Date.now()+fabricationMs;
     if (session) s.session = session;
     s.revision++;
     localStorage.setItem(saveKey, JSON.stringify(s));

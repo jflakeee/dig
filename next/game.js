@@ -3,6 +3,7 @@ import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, portalRayDistance, radius } from './world.js';
 import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair } from './save.js';
+import { mineralIds, mineralName } from './minerals.js';
 import { createView, portalMarker } from './view.js';
 const el = (id) => document.getElementById(id);
 const canvas = el('scene'),
@@ -64,13 +65,15 @@ function message(text) {
 function showDiscoveries() {
   const book = el('discoveries');
   const entries = save?.discoveries ?? [];
-  book.hidden = !entries.length;
+  const found = save?.mineralLog ?? [];
+  book.hidden = !entries.length && !found.length;
   if (!panel || book.hidden) {
     book.open = false;
     return;
   }
   const list = el('discovery-list');
-  const lines = entries.map(({item,count}) => cargoNames[item] + ' · 누적 회수 ' + count + '개');
+  const lines = [...found.map(id => '광물 · ' + mineralName(id)),
+    ...entries.map(({item,count}) => cargoNames[item] + ' · 누적 회수 ' + count + '개')];
   if (list.textContent === lines.join('')) return;
   list.replaceChildren(...lines.map(text => {
     const row = document.createElement('li');
@@ -112,6 +115,8 @@ function hud() {
   el('repair').disabled = busy;
   el('emergency').hidden = !save?.front || condition !== 0 || ceramic >= ceramicPerRepair || save.rocks >= rocksPerCeramic;
   el('emergency').disabled = busy || !!laserJob || (!el('emergency').hidden && !laserHit());
+  if (panel) el('minerals').textContent = mineralIds.filter(id => save?.minerals?.[id])
+    .map(id => mineralName(id) + ' × ' + save.minerals[id]).join(' · ');
   if (panel && save?.front) {
     el('materials').textContent = '세라믹 ' + ceramic + (condition < 100 && !ceramic ?
       ' · 수리용 세라믹 1개 필요 (암석 ' + save.rocks + '/' + rocksPerCeramic + ')' : '');
@@ -179,8 +184,18 @@ async function write(op, after) {
       const destination = createWorld(false, undefined, op.radius, op.strength);
       session = {hull,pos:[0.5,0.5,0.5],velocity:[0,0,0],drift,yaw:0,pitch:0,sensor:false,entered:-1,world:destination.snapshot()};
     }
+    const before = save;
     save = await commit(save.revision, op, session);
-    if (type === 'collect' || type === 'laser' || type === 'drill') lastRockGain = age;
+    if (save.rocks > before.rocks && ['collect','laser','drill'].includes(type)) lastRockGain = age;
+    const gained = mineralIds.filter(id => (save.minerals?.[id] ?? 0) > (before.minerals?.[id] ?? 0));
+    if (gained.length && ['laser','drill'].includes(type)) {
+      message(gained.map(id => mineralName(id) + ' +1').join(' · '));
+      const first = gained.find(id => !before.mineralLog?.includes(id));
+      if (first) {
+        discoveryNoticeUntil = age + 2;
+        el('discovery-notice').textContent = '발견 도감에 기록됨 · ' + mineralName(first);
+      }
+    }
     if (type === 'craft') installedUntil = Date.now()+1600;
     checkpointAge = 0;
     after?.();
@@ -348,7 +363,7 @@ function heatStone(hit, direction, elapsed, operation) {
   contact = null;
   write({type: operation, cell: [hit.x, hit.y, hit.z]}, () => {
     fracture = {point, at:age};
-    if (operation === 'laser') message('긴급 채굴 완료 · 일반 암석 1개');
+    if (operation === 'laser' && lastRockGain === age) message('긴급 채굴 완료 · 일반 암석 1개');
   });
   return true;
 }
@@ -483,6 +498,7 @@ function frame(time) {
         anchors,
         contact, fracture, age,
         mounted: !!save?.front && save.drillCondition !== 0,
+        minerals: !!save?.front,
         working,
       },
       time / 1000,
