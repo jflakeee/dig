@@ -2,10 +2,16 @@ export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 1;
+export const saveVersion = 2;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
-export const migrations = {};
+export const migrations = {
+  1: s => ({
+    ...s,
+    // Legacy saves only establish the quantities still on board.
+    discoveries: Array.isArray(s.cargo) ? s.cargo.flatMap((count, item) => count > 0 ? [{item, count}] : []) : [],
+  }),
+};
 const fresh = () => ({
   version: saveVersion,
   revision: 0,
@@ -18,12 +24,19 @@ const fresh = () => ({
   ceramic: 0,
   drillCondition: 100,
   cargo: [0,0,0],
+  discoveries: [],
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
 });
 const unreadable = '저장 기록을 읽을 수 없습니다. 원본을 보존했습니다.';
 const vector = (v, valid = Number.isFinite) => Array.isArray(v) && v.length === 3 && v.every(n => valid(n));
+function validDiscoveries(entries) {
+  return Array.isArray(entries) && entries.length <= 3 &&
+    entries.every(entry => entry && [0,1,2].includes(entry.item) &&
+      Number.isSafeInteger(entry.count) && entry.count > 0) &&
+    new Set(entries.map(entry => entry.item)).size === entries.length;
+}
 function validSession(s) {
   const w = s?.world;
   return (s?.hull === undefined || (Number.isFinite(s.hull) && s.hull > 0 && s.hull <= 100)) && vector(s?.pos) && vector(s.velocity) && (s.drift === undefined || vector(s.drift)) && Number.isFinite(s.yaw) && Number.isFinite(s.pitch) &&
@@ -78,6 +91,7 @@ export function readSave() {
     s.revision < 0 ||
     !Number.isSafeInteger(s.rocks) ||
     s.rocks < 0 ||
+    !validDiscoveries(s.discoveries) ||
     (s.cargo !== undefined && !vector(s.cargo, n => Number.isSafeInteger(n) && n >= 0)) ||
     (s.drillCondition !== undefined && !(Number.isInteger(s.drillCondition) && s.drillCondition >= 0 && s.drillCondition <= 100)) ||
     (s.craftReadyAt != null && (!Number.isSafeInteger(s.craftReadyAt) || s.craftReadyAt <= 0 || s.front || s.rocks < 3)) ||
@@ -113,11 +127,17 @@ export async function commit(revision, operation, session) {
         break;
       case 'checkpoint':
         break;
-      case 'pickup':
+      case 'pickup': {
         if (!s.front || !session || ![0,1,2].includes(operation.item)) throw Error('회수할 수 없습니다.');
         s.cargo ??= [0,0,0];
+        const entry = s.discoveries.find(entry => entry.item === operation.item);
+        if (entry?.count === Number.MAX_SAFE_INTEGER || s.cargo[operation.item] === Number.MAX_SAFE_INTEGER)
+          throw Error('회수 기록 한도에 도달했습니다.');
         s.cargo[operation.item]++;
+        if (entry) entry.count++;
+        else s.discoveries.push({item:operation.item, count:1});
         break;
+      }
       case 'fire-ceramic':
         if (!s.front || s.rocks < rocksPerCeramic) throw Error('가열할 암석이 부족합니다.');
         s.rocks -= rocksPerCeramic;

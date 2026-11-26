@@ -389,3 +389,22 @@ test('a save from a newer build is rejected without being overwritten', async t 
   await assert.rejects(commit(0, 'checkpoint', null), /더 새로운 버전/);
   assert.equal(data.get(saveKey), newer);
 });
+
+test('cargo discoveries migrate once, count successful recoveries and survive cargo loss', async t => {
+  const data = mockStorage(t);
+  const old = {...readSave(), version:1, cargo:[0,2,0], front:'drill-1', drills:['drill-1']};
+  delete old.discoveries;
+  data.set(saveKey, JSON.stringify(old));
+  assert.deepEqual(readSave().discoveries, [{item:1,count:2}]);
+  const session = {pos:[0.5,0.5,0.5],velocity:[0,0,0],yaw:0,pitch:0,sensor:false,entered:-1,world:createWorld(false,()=>0).snapshot()};
+  const pickup = {type:'pickup',item:2};
+  await commit(0, pickup, session);
+  await assert.rejects(commit(0, pickup, session));
+  await commit(1, pickup, session);
+  await commit(2, {type:'transit', radius:2, strength:1}, session);
+  await commit(3, {type:'reboot',loss:[0,1,1]});
+  const result = readSave();
+  assert.deepEqual(result.cargo, [0,1,1]);
+  assert.deepEqual(result.discoveries, [{item:1,count:2}, {item:2,count:2}]);
+  assert.deepEqual((await commit(4,'reset')).discoveries, []);
+});

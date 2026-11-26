@@ -20,6 +20,7 @@
       <span id="sensor" role="img" aria-label="중력 포탈 방향" hidden></span>
       <aside>
         <output id="fabrication" role="status" hidden></output>
+        <output id="discovery-notice" role="status" hidden></output>
         <output id="message" role="status"></output>
       </aside>
       <footer>
@@ -30,6 +31,10 @@
       <section id="panel" aria-label="메뉴" hidden>
         <output id="cargo"></output>
         <output id="materials"></output>
+        <details id="discoveries" hidden>
+          <summary>발견 도감</summary>
+          <ul id="discovery-list"></ul>
+        </details>
         <button id="fire-ceramic" hidden>세라믹 가열 <small>암석 3개</small></button>
         <button id="repair" hidden>드릴 수리 <small>세라믹 1개</small></button>
         <button id="reset">처음부터 다시 시작</button>

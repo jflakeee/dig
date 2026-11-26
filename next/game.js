@@ -34,6 +34,7 @@ let lastRockGain = -Infinity;
 let checkpointAge = 0;
 let hull = 100;
 let hazardVisible = false;
+let discoveryNoticeUntil = 0;
 let laserJob = null;
 function loadWorld() {
   const session = save?.session;
@@ -42,6 +43,7 @@ function loadWorld() {
   installedUntil = 0;
   checkpointAge = 0;
   hazardVisible = false;
+  discoveryNoticeUntil = 0;
   laserJob = null;
   hull = session?.hull ?? 100;
   world = createWorld(!save?.transited, Math.random, save?.arrivalRadius, save?.arrivalStrength, session?.world);
@@ -59,11 +61,39 @@ function loadWorld() {
 function message(text) {
   el('message').textContent = text;
 }
+function showDiscoveries() {
+  const book = el('discoveries');
+  const entries = save?.discoveries ?? [];
+  book.hidden = !entries.length;
+  if (!panel || book.hidden) {
+    book.open = false;
+    return;
+  }
+  const list = el('discovery-list');
+  const lines = entries.map(({item,count}) => cargoNames[item] + ' · 누적 회수 ' + count + '개');
+  if (list.textContent === lines.join('')) return;
+  list.replaceChildren(...lines.map(text => {
+    const row = document.createElement('li');
+    row.textContent = text;
+    return row;
+  }));
+}
+function recoverCargo(item, label) {
+  const isNew = !save.discoveries.some(entry => entry.item === item);
+  write({type:'pickup', item}, () => {
+    message(label);
+    if (isNew) {
+      discoveryNoticeUntil = age + 2;
+      el('discovery-notice').textContent = '발견 도감에 기록됨 · ' + cargoNames[item];
+    }
+  });
+}
 function hud() {
   el('rock').firstElementChild.textContent = save?.rocks ?? '—';
   el('menu').hidden = !save?.front;
   el('menu').setAttribute('aria-expanded', String(panel));
   el('panel').hidden = !panel;
+  showDiscoveries();
   if (!panel) {
     el('reset-prompt').hidden = true;
     el('reset').hidden = false;
@@ -201,7 +231,7 @@ el('stabilize').onclick = () => {
   if (busy || fatal || !h || h.spent || h.fuse === null || !world.sense(pos,0).visible ||
       Math.hypot(...h.point.map((v,i) => v-pos[i])) > 2.5) return;
   h.spent = true;
-  write({type:'pickup',item:2}, () => message('밀봉 회수 · 미확인 결정'));
+  recoverCargo(2, '밀봉 회수 · 미확인 결정');
 };
 el('fire-ceramic').onclick = () => write('fire-ceramic', () => message('암석 가열 완료 · 세라믹 1개'));
 el('repair').onclick = () => write('repair', () => {
@@ -424,7 +454,7 @@ function tick(dt) {
   const moved = move(dt);
   if (moved && !busy) {
     const type = world.takeNearby(pos,velocity.map((v,i) => v+drift[i]));
-    if (type !== null) write({type:'pickup', item:type}, () => message(cargoNames[type] + ' 회수'));
+    if (type !== null) recoverCargo(type, cargoNames[type] + ' 회수');
   }
   if (moved && !sensor) {
     sensor = true;
@@ -437,6 +467,7 @@ function frame(time) {
   tick(dt);
   if (time - lastDraw >= 33) {
     lastDraw = time;
+    el('discovery-notice').hidden = age >= discoveryNoticeUntil;
     const light = [0, 0.5, 1].map((delay) =>
       Math.max(0, Math.min(1, (age - delay) * 1.7)),
     );
