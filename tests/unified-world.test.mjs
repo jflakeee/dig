@@ -278,8 +278,11 @@ test('exit detaches solid cells, preserves fragments on reload, and resets with 
   assert.equal(start.fragments().length,0);
   assert.ok(exit.fragments().length>0);
   const saved = JSON.parse(JSON.stringify(exit.snapshot()));
-  const excavated = saved.chunks.find(c => c.x===0 && c.y===0 && c.z===0).air;
-  assert.equal(excavated.length,27+exit.fragments().length);
+  const origin = saved.chunks.find(c => c.x===0 && c.y===0 && c.z===0);
+  // Minerals that poured through after the machine are fragments without a cell of their own.
+  const poured = Math.round(3 + 7 * 4 / 4.8) - origin.debris.pour.left;
+  assert.equal(origin.debris.pour.left, 0);
+  assert.equal(origin.air.length,27+exit.fragments().length-poured);
   const restored = createWorld(false, () => 0, 2, 4, saved);
   assert.deepEqual(restored.fragments(),exit.fragments());
   restored.stream([64,0,0]);
@@ -457,4 +460,35 @@ test('a mining reward is keyed by chunk generation and cell and paid once', asyn
   const regenerated = at();
   regenerated.world.chunks.find(c => c.x === 0 && c.y === 0 && c.z === 0).epoch = 1;
   assert.equal((await commit(paid.revision, {type:'drill', cell:[0,0,3]}, regenerated)).rocks, 2);
+});
+
+test('minerals swept through after the machine pour out of the exit for a few seconds', () => {
+  const pourCount = strength => {
+    const w = createWorld(false, undefined, 1.64, strength, undefined, () => 0, 3);
+    return w.snapshot().chunks.find(c => !c.x && !c.y && !c.z).debris.pour.left;
+  };
+  assert.equal(pourCount(0.6), 4);
+  assert.equal(pourCount(4.8), 10);
+  assert.equal(createWorld(true, undefined, undefined, undefined, undefined, () => 0, 3).snapshot().chunks
+    .find(c => !c.x && !c.y && !c.z).debris, undefined);
+  const damage = (strength, seed) => {
+    const w = createWorld(false, undefined, 1.64, strength, undefined, () => 0, seed);
+    let total = 0;
+    for (let t = 0; t < 8; t += 1 / 60) total += w.hullContacts(1 / 60, [0.5, 0.5, 0.5], [0, 0, 0], false).damage;
+    return {total, left: w.snapshot().chunks.find(c => !c.x && !c.y && !c.z).debris.pour.left};
+  };
+  const weak = damage(0.6, 3), strong = damage(4.8, 3);
+  assert.equal(strong.left, 0);
+  assert.ok(weak.total < 1, String(weak.total));
+  assert.ok(strong.total > 10 && strong.total < 60, String(strong.total));
+  assert.deepEqual(damage(4.8, 3), strong);
+  // The pour schedule survives a reload part-way through.
+  const w = createWorld(false, undefined, 1.64, 4.8, undefined, () => 0, 3);
+  for (let t = 0; t < 1; t += 1 / 60) w.hullContacts(1 / 60, [0.5, 0.5, 0.5], [0, 0, 0], false);
+  const saved = JSON.parse(JSON.stringify(w.snapshot()));
+  const left = saved.chunks.find(c => !c.x && !c.y && !c.z).debris.pour.left;
+  assert.ok(left > 0 && left < 10);
+  const restored = createWorld(false, undefined, 1.64, 4.8, saved, () => 0);
+  for (let t = 0; t < 4; t += 1 / 60) restored.hullContacts(1 / 60, [0.5, 0.5, 0.5], [0, 0, 0], false);
+  assert.equal(restored.snapshot().chunks.find(c => !c.x && !c.y && !c.z).debris.pour.left, 0);
 });
