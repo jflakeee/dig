@@ -23,7 +23,23 @@ export function portalRayDistance(portal, pos, ray, limit) {
 // Chunks are 16 m wide. Their voxel coordinates share one world frame.
 const side = 32;
 const chunkOf = (cell) => Math.floor((cell + 15) / side);
-export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64, arrivalStrength = 2.8, saved, terrainRandom = random) {
+// A roll is a pure function of the world seed and a key naming the chunk
+// coordinate, its generation and the purpose, so results do not depend on the
+// order in which chunks or faces are created. Injected `random` functions may
+// ignore the key; tests use that to force specific outcomes.
+export function roll(seed, key) {
+  let h = 2166136261 ^ seed;
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStrength = 2.8, saved, terrainRandom, seed) {
+  seed = (saved?.seed ?? seed ?? Math.random() * 4294967296) >>> 0;
+  random ??= key => roll(seed, key);
+  terrainRandom ??= random;
+  // Times each coordinate has been reset; a new generation rolls new terrain.
+  const generations = new Map(saved?.generations ?? []);
   const chunks = new Map();
   let elapsed = 0;
   const initial = {
@@ -42,10 +58,14 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
     const key = [cx, cy, cz].join(',');
     cached = chunks.get(key);
     if (!cached && create) {
-      const kind = terrainKind(terrainRandom());
-      cached = makeChunk(cx, cy, cz, kind, kind === 'rock' ? 0 : Math.floor(terrainRandom() * 0x100000000));
+      const epoch = generations.get(key) ?? 0;
+      const id = key + ':' + epoch;
+      const kind = terrainKind(terrainRandom(id + ':kind'));
+      cached = makeChunk(cx, cy, cz, kind, kind === 'rock' ? 0 : Math.floor(terrainRandom(id + ':seed') * 0x100000000));
+      cached.epoch = epoch;
+      let draw = 0;
       if (!tutorial && hasMouth && cx===0 && cy===0 && cz===0 && !saved)
-        cached.hazard = arrivalHazard(terrainRandom);
+        cached.hazard = arrivalHazard(() => terrainRandom(id + ':hazard:' + draw++));
       chunks.set(key, cached);
     }
     return cached;
@@ -56,14 +76,15 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
   // cause: 'initial' (empty from generation), 'mined' (player excavation) or
   // 'debris' (portal detachment). Only mined faces open the six-face window.
   function scheduleFace(chunk, owner, axis, sign, cause) {
+      const id = owner.join(',') + ':' + (chunk.epoch ?? 0) + ':face' + (axis * 2 + Number(sign > 0)) + ':';
       const point = owner.map(n => n * side + 1);
       point[axis] += sign * side / 2;
-      const width = 1 + Math.floor(random() * side);
+      const width = 1 + Math.floor(random(id + 'width') * side);
       for (let i = 0; i < 3; i++)
-        if (i !== axis) point[i] += Math.floor(random() * (side - width + 1)) - (side - width) / 2;
+        if (i !== axis) point[i] += Math.floor(random(id + 'offset' + i) * (side - width + 1)) - (side - width) / 2;
       chunk.faces.push({point, axis, sign, chunk: owner, exit: false,
-        radius: width / 2, strength: 0.8 + random() * 4,
-        ready: elapsed + 301 + random() * 59, cleared: elapsed, cause});
+        radius: width / 2, strength: 0.8 + random(id + 'strength') * 4,
+        ready: elapsed + 301 + random(id + 'delay') * 59, cleared: elapsed, cause});
   }
   function enter(chunk) {
     if (chunk.entered) return;
@@ -150,12 +171,13 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
       )
         continue;
       chunks.delete(key);
+      generations.set(key, (chunk.epoch ?? 0) + 1);
       if (chunk === cached) cached = undefined;
       if (chunk.x === 0 && chunk.y === 0 && chunk.z === 0) hasMouth = false;
     }
   }
   function snapshot() {
-    return {elapsed, center, hasMouth, cargoTime, chunks: Array.from(chunks.values(), chunk => {
+    return {seed, generations: Array.from(generations), elapsed, center, hasMouth, cargoTime, chunks: Array.from(chunks.values(), chunk => {
       const {air, ...state} = chunk;
       if (air.size < 1024) return {...state, air: Array.from(air)};
       const bytes = new Uint8Array(side ** 3 / 8);

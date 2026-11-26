@@ -408,3 +408,31 @@ test('cargo discoveries migrate once, count successful recoveries and survive ca
   assert.deepEqual(result.discoveries, [{item:1,count:2}, {item:2,count:2}]);
   assert.deepEqual((await commit(4,'reset')).discoveries, []);
 });
+
+test('terrain and face rolls depend on coordinates, not on creation order', () => {
+  const seed = 12345;
+  const a = createWorld(false, undefined, undefined, undefined, undefined, undefined, seed);
+  const b = createWorld(false, undefined, undefined, undefined, undefined, undefined, seed);
+  for (const x of [40, 72, -40]) a.solid(x, 0, 0);
+  for (const x of [-40, 72, 40]) b.solid(x, 0, 0);
+  const summary = w => w.snapshot().chunks.map(c => [c.x, c.y, c.z, c.kind, c.seed].join()).sort();
+  assert.deepEqual(summary(a), summary(b));
+  for (const w of [a, b]) clearFace(w, 2, 1);
+  const face = w => w.snapshot().chunks.find(c => c.x === 0 && c.y === 0 && c.z === 0).faces.at(-1);
+  const {cleared: _a, ...fa} = face(a), {cleared: _b, ...fb} = face(b);
+  assert.deepEqual(fa, fb);
+});
+
+test('a reset coordinate rolls a new generation that survives a reload', () => {
+  const w = createWorld(false, undefined, undefined, undefined, undefined, undefined, 7);
+  const first = w.snapshot().chunks.find(c => c.x === 0 && c.y === 0 && c.z === 0);
+  assert.equal(first.epoch, 0);
+  w.stream([96.5, 0.5, 0.5]);
+  assert.equal(w.hasChunk(0, 0, 0), false);
+  const saved = JSON.parse(JSON.stringify(w.snapshot()));
+  assert.deepEqual(saved.generations.find(([k]) => k === '0,0,0'), ['0,0,0', 1]);
+  const restored = createWorld(false, () => { throw Error('unexpected reroll'); }, undefined, undefined, saved,
+    key => { assert.match(key, /^0,0,0:1:/); return 0; });
+  restored.stream([0.5, 0.5, 0.5]);
+  assert.equal(restored.snapshot().chunks.find(c => c.x === 0 && c.y === 0 && c.z === 0).epoch, 1);
+});

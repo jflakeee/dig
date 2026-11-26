@@ -43,8 +43,12 @@ function validSession(s) {
     typeof s.sensor === 'boolean' && Number.isInteger(s.entered) && s.entered >= -1 &&
     Number.isFinite(w?.elapsed) && w.elapsed >= 0 && vector(w.center, Number.isSafeInteger) &&
     (w.cargoTime === undefined || (Number.isFinite(w.cargoTime) && w.cargoTime >= 0 && w.cargoTime < 0.05)) &&
+    (w.seed === undefined || (Number.isSafeInteger(w.seed) && w.seed >= 0 && w.seed <= 0xffffffff)) &&
+    (w.generations === undefined || (Array.isArray(w.generations) && w.generations.every(g =>
+      Array.isArray(g) && g.length === 2 && /^-?\d+,-?\d+,-?\d+$/.test(g[0]) && Number.isSafeInteger(g[1]) && g[1] > 0))) &&
     typeof w.hasMouth === 'boolean' && Array.isArray(w.chunks) && w.chunks.every(c =>
       c && vector([c.x,c.y,c.z], Number.isSafeInteger) &&
+      (c.epoch === undefined || (Number.isSafeInteger(c.epoch) && c.epoch >= 0)) &&
       (c.hazard == null || (vector(c.hazard.point) && [null,'lava','volatile'].includes(c.hazard.kind) &&
         Number.isFinite(c.hazard.seed) && typeof c.hazard.spent === 'boolean' &&
         (c.hazard.fuse === null || (Number.isFinite(c.hazard.fuse) && c.hazard.fuse >= 0)))) &&
