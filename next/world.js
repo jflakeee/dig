@@ -25,6 +25,7 @@ export function portalRayDistance(portal, pos, ray, limit) {
 // Chunks are 16 m wide. Their voxel coordinates share one world frame.
 const side = 32;
 const chunkOf = (cell) => Math.floor((cell + 15) / side);
+const pourInterval = 0.25; // seconds between minerals pouring out after arrival
 // The chunk coordinate and bit index that own a voxel.
 export function cellOwner(x, y, z) {
   return {chunk: [chunkOf(x), chunkOf(y), chunkOf(z)],
@@ -132,6 +133,21 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
     const chunk = chunks.get('0,0,0');
     const state = chunk.debris ??= {tick:0,time:0,parts:[]};
     state.parts = state.parts.filter(part => part.point.every((v,i) => Math.abs(chunkOf(Math.floor(v))-center[i]) <= 1));
+    // Minerals swept through the portal behind the machine keep pouring out of
+    // the exit for a few seconds after arrival.
+    const pour = state.pour;
+    if (pour?.left > 0) {
+      pour.wait -= dt;
+      while (pour.left > 0 && pour.wait <= 0) {
+        const n = pour.left--, key = 'pour:' + n + ':';
+        pour.wait += pourInterval;
+        const spread = i => (roll(seed, key + i) - 0.5) * 0.9;
+        const point = initial.point.map((v, i) => i === initial.axis ? v - initial.sign * 0.1 : v + spread(i));
+        const speed = [0, 1, 2].map(i => i === initial.axis ? -initial.sign * pour.speed * (0.8 + 0.4 * roll(seed, key + 'v'))
+          : spread(i) * 1.2);
+        state.parts.push({point, speed, mass: 1 + 3 * roll(seed, key + 'm')});
+      }
+    }
     const active = portals();
     return simulate(state,dt,pos,speed,anchored,solid,(x,y,z) => dig(x,y,z,false),p => gravity(p,active),onContact);
   }
@@ -209,6 +225,11 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
       for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) dig(x, y, z);
     const origin = chunkAt(0,0,0,true);
     if (tutorial && origin.kind !== 'rock') origin.starterRocks = true;
+    // A stronger portal sweeps more minerals through after the machine, faster.
+    if (!tutorial) {
+      const force = Math.min(1, arrivalStrength / 4.8);
+      origin.debris = {tick: 0, time: 0, parts: [], pour: {left: Math.round(3 + 7 * force), wait: 0.3, speed: 2.2 + 1.6 * force}};
+    }
     enter(origin);
   }
 

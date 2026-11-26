@@ -310,6 +310,8 @@ function validSession(s) {
         (c.hazard.fuse === null || (Number.isFinite(c.hazard.fuse) && c.hazard.fuse >= 0)))) &&
       (c.debris === undefined || (c.debris && Number.isSafeInteger(c.debris.tick) && c.debris.tick >= 0 &&
         Number.isFinite(c.debris.time) && c.debris.time >= 0 && c.debris.time < 0.05 &&
+        (c.debris.pour === undefined || (Number.isSafeInteger(c.debris.pour?.left) && c.debris.pour.left >= 0 &&
+          Number.isFinite(c.debris.pour.wait) && Number.isFinite(c.debris.pour.speed) && c.debris.pour.speed > 0)) &&
         Array.isArray(c.debris.parts) && c.debris.parts.every(p => p && vector(p.point) && vector(p.speed) &&
         Number.isFinite(p.mass) && p.mass > 0))) &&
       (c.starterRocks === undefined || typeof c.starterRocks === 'boolean') &&
