@@ -71,3 +71,56 @@ export function auctionOutcome(seed, id, estimate) {
   const fee = Math.round(price * auctionFee);
   return {sold: true, price, fee, net: price - fee};
 }
+
+// Auctions listed by the answering machine (trade design section 6). Each
+// market cycle brings two lots that close when the cycle ends. Other bidders'
+// visible top bid climbs over the cycle toward a hidden ceiling; the player
+// wins by bidding at least that ceiling when the lot closes. Lots, estimates
+// and ceilings follow from the market seed and cycle, so reopening changes nothing.
+export const lotsPerCycle = 2;
+const lotPool = [
+  ...['Tc', 'Pm', 'At', 'Fr', 'Np', 'Pu', 'Am', 'Cm', 'Bk', 'Cf', 'Es', 'Fm', 'Md', 'No', 'Lr']
+    .map(e => ({kind: 'capsule', element: e})),
+  ...['aux_drill', 'focus_lamp', 'chain_winder', 'gravity_array', 'cargo_coupler', 'buffer_gripper', 'seal_cartridge', 'drill_head']
+    .map(kind => ({kind, variant: 'standard', equipment: true})),
+  ...['layered_foil', 'afterglow_fiber', 'sealing_ceramic', 'echo_crystal', 'tilt_glass', 'memory_film']
+    .map(kind => ({kind, variant: 'standard'})),
+  ...['beryl', 'hafnon', 'gallite', 'argyrodite', 'roquesite', 'rubicline', 'laurite', 'rheniite'].map(kind => ({kind, variant: kind})),
+];
+function lotEstimate(piece) {
+  if (piece.kind === 'capsule') return 150;
+  if (piece.equipment) return Math.round(valueOf(piece).base);
+  return auctionEstimate(piece) ?? valueOf(piece)?.base ?? 50;
+}
+export function lotsFor(seed, cycle) {
+  return Array.from({length: lotsPerCycle}, (_, n) => {
+    const id = 'c' + cycle + '-' + n, key = 'lot:' + id + ':';
+    const base = lotPool[Math.floor(roll(seed, key + 'item') * lotPool.length)];
+    const piece = {...base, id: 'lot:' + id};
+    if (piece.equipment) {
+      delete piece.equipment;
+      piece.durability = 40 + Math.floor(roll(seed, key + 'durability') * 56);
+    }
+    const estimate = lotEstimate({...base, durability: piece.durability});
+    // A fifth of lots draw no other bidder; the rest top out between 0.8 and 10 times the estimate.
+    const rival = roll(seed, key + 'rival') < 0.2 ? 0 : Math.round(estimate * (0.8 + 9.2 * roll(seed, key + 'ceiling') ** 3));
+    return {id, piece, estimate, rival, endsAt: (cycle + 1) * cycleSeconds};
+  });
+}
+// Other bidders' top bid as the cycle runs, climbing to their ceiling at the close.
+export function visibleRival(lot, time) {
+  if (!lot.rival) return 0;
+  const start = lot.endsAt - cycleSeconds;
+  const p = Math.max(0, Math.min(1, (time - start) / cycleSeconds));
+  return Math.round(Math.min(lot.rival, lot.estimate * 0.5 + (lot.rival - lot.estimate * 0.5) * p ** 2));
+}
+// The least the player can bid now: above the visible top, and at least 5%
+// of the estimate above their own bid.
+export function minimumBid(lot, time, own = 0) {
+  const step = Math.max(1, Math.round(lot.estimate * 0.05));
+  return Math.max(Math.round(lot.estimate * 0.5), visibleRival(lot, time) + 1, own ? own + step : 0);
+}
+export const lotById = (seed, id) => {
+  const cycle = Number(/^c(\d+)-\d+$/.exec(id)?.[1]);
+  return Number.isSafeInteger(cycle) ? lotsFor(seed, cycle).find(l => l.id === id) ?? null : null;
+};

@@ -4,7 +4,7 @@ import { elementSymbols } from './elements.js';
 import { blockDiscovery, capsuleElement, specimenById, specimenUnits, specimenPiece, captureSeconds, capsuleForms } from './specimens.js';
 import { findById, findPiece } from './finds.js';
 import { decompose, decompositionFee } from './composition.js';
-import { marketCycle, sellQuote, marketStock, auctionEstimate, auctionOutcome, auctionSeconds } from './trade.js';
+import { marketCycle, sellQuote, marketStock, auctionEstimate, auctionOutcome, auctionSeconds, lotById, minimumBid, cycleSeconds as cycleSecondsOf } from './trade.js';
 import { slotOf, captureBonus } from './equipment.js';
 import { studies, fragments } from './research.js';
 import { selfParts, nextPart } from './self.js';
@@ -14,7 +14,7 @@ export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 14;
+export const saveVersion = 15;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -51,7 +51,23 @@ export const migrations = {
   12: s => ({...s, actions: {research: 0, equip: 0, repair: 0}, ending: null}),
   // Cargo wagons, the next wagon id and mineral pieces left behind for want of room.
   13: s => ({...s, wagons: [], wagonCount: 0, leftBehind: 0}),
+  // Bids on lots other machines list; their credits stay reserved until the lot closes.
+  14: s => ({...s, bids: []}),
 };
+export const reservedCredits = s => (s.bids ?? []).reduce((n, b) => n + b.amount, 0);
+// A lot closes once the market clock passes the end of its cycle: a bid at or
+// above the other bidders' ceiling wins and pays, otherwise the reserve is released.
+function settleBids(s) {
+  for (const bid of s.bids.filter(b => s.marketTime >= (lotById(s.marketSeed, b.lot)?.endsAt ?? 0))) {
+    const lot = lotById(s.marketSeed, bid.lot);
+    if (lot && bid.amount >= lot.rival) {
+      s.credits -= bid.amount;
+      addSpecimen(s, lot.piece);
+      logTrade(s, 'won:' + bid.lot + ':' + bid.amount);
+    } else logTrade(s, 'outbid:' + bid.lot);
+  }
+  s.bids = s.bids.filter(b => s.marketTime < (lotById(s.marketSeed, b.lot)?.endsAt ?? 0));
+}
 // Losing wagons loses the cargo that no longer fits: rocks go first, then
 // minerals in catalog order, each from its default sub-species first.
 function dropWagons(s, lost) {
@@ -256,6 +272,7 @@ const fresh = () => ({
   wagons: [],
   wagonCount: 0,
   leftBehind: 0,
+  bids: [],
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
@@ -306,6 +323,8 @@ function validMinerals(s) {
     new Set(s.wagons).size === s.wagons.length &&
     Number.isSafeInteger(s.wagonCount) && s.wagonCount >= s.wagons.length &&
     Number.isSafeInteger(s.leftBehind) && s.leftBehind >= 0 &&
+    Array.isArray(s.bids) && s.bids.every(b => b && /^c\d+-\d+$/.test(b.lot) && Number.isSafeInteger(b.amount) && b.amount > 0) &&
+    new Set(s.bids.map(b => b.lot)).size === s.bids.length && reservedCredits(s) <= s.credits &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
     new Set(s.elementLog).size === s.elementLog.length &&
     Array.isArray(s.specimens) && s.specimens.every(validPiece) &&
@@ -582,7 +601,7 @@ export async function commit(revision, operation, session) {
         const offer = s.front && marketStock(s.marketSeed, marketCycle(s.marketTime)).find(o => o.item === operation?.item);
         if (!offer) throw Error('구매할 수 없습니다.');
         if (offer.price !== operation.price) throw Error('시세가 바뀌었습니다. 새 가격을 확인해 주세요.');
-        if (s.credits < offer.price) throw Error('크레딧이 부족합니다.');
+        if (s.credits - reservedCredits(s) < offer.price) throw Error('크레딧이 부족합니다.');
         s.credits -= offer.price;
         if (offer.item === 'ceramic') s.ceramic = (s.ceramic ?? 0) + 1;
         else s.finds.push({id: 'buy:' + s.purchaseCount, kind: 'drill_head', variant: 'standard', durability: offer.durability});
@@ -652,6 +671,19 @@ export async function commit(revision, operation, session) {
         // Wagons 16 m or more behind are taken to be in the chunk that just collapsed.
         if (trainLength(s) > safeLength) dropWagons(s, wagonsBeyondSafe(s));
         break;
+      case 'bid': {
+        // Only an open lot of the current cycle; the bid must top the visible
+        // bid and the player's own, and the difference must be free credit.
+        const lot = s.front && lotById(s.marketSeed, operation?.lot);
+        if (!lot || lot.endsAt - cycleSecondsOf > s.marketTime || s.marketTime >= lot.endsAt) throw Error('입찰할 수 없는 경매입니다.');
+        const own = s.bids.find(b => b.lot === lot.id);
+        const amount = operation.amount;
+        if (!Number.isSafeInteger(amount) || amount < minimumBid(lot, s.marketTime, own?.amount)) throw Error('더 높은 금액을 불러야 합니다.');
+        if (s.credits - reservedCredits(s) + (own?.amount ?? 0) < amount) throw Error('크레딧이 부족합니다.');
+        if (own) own.amount = amount;
+        else s.bids.push({lot: lot.id, amount});
+        break;
+      }
       case 'reset':
         Object.assign(s, fresh(), { revision });
         break;
@@ -696,6 +728,7 @@ export async function commit(revision, operation, session) {
     if (type !== 'reset') {
       advanceMarket(s, session?.world);
       settleAuctions(s);
+      settleBids(s);
       finishResearch(s);
     }
     if (session) s.session = session;
