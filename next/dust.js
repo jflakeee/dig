@@ -1,4 +1,4 @@
-import { entrance, exitMouth } from './world.js';
+import { exitMouth } from './world.js';
 
 // Dust occupies the same empty voxels as the machine. A blocked component
 // loses speed while the tangential components continue along the rock face.
@@ -11,6 +11,7 @@ export function createDust() {
       motes = [];
     }
     while (motes.length < 64) motes.push({ life: 0 });
+    const portals = world.portals();
     for (const mote of motes) {
       mote.life -= dt;
       if (mote.life <= 0) {
@@ -33,17 +34,15 @@ export function createDust() {
         );
         mote.life = 1 + Math.random() * 3;
       }
-      const gap = entrance.map((v, i) => v - mote.p[i]);
-      const distance = Math.hypot(...gap);
-      if (world.tutorial && distance < 0.28) {
+      if (portals.some(portal => !portal.exit &&
+          Math.hypot(...portal.point.map((v, i) => v - mote.p[i])) < 0.28)) {
         mote.life = 0;
         continue;
       }
-      const accel =
-        world.mouth && world.tutorial ? 12 / (1 + distance * distance) : 0;
+      const acceleration = world.gravity(mote.p, portals);
       for (let i = 0; i < 3; i++) {
         mote.v[i] +=
-          dt * ((accel * gap[i]) / Math.max(0.2, distance) - 0.12 * mote.v[i]);
+          dt * (acceleration[i] - 0.12 * mote.v[i]);
         const next = mote.p.slice();
         next[i] += dt * mote.v[i];
         if (world.solid(...next.map(Math.floor))) mote.v[i] = 0;

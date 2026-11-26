@@ -1,4 +1,4 @@
-import { createWorld, forward, offset, radius, entrance } from './world.js';
+import { createWorld, forward, offset, radius } from './world.js';
 import { readSave, commit, saveKey } from './save.js';
 import { createView, portalMarker } from './view.js';
 const el = (id) => document.getElementById(id);
@@ -26,7 +26,7 @@ let age = 0,
   osc,
   gain;
 function loadWorld() {
-  world = createWorld(!save?.transited);
+  world = createWorld(!save?.transited, Math.random, save?.arrivalRadius);
   pos = [0.5, 0.5, 0.5];
   velocity = [0, 0, 0];
   yaw = 0;
@@ -53,7 +53,11 @@ function hud() {
   }
   el('confirm-reset').disabled = busy;
   const marker = el('sensor');
-  const mouth = world.mouth;
+  const nearest = world.portals().reduce((best, portal) => {
+    const distance = Math.hypot(...portal.point.map((v, i) => v - pos[i]));
+    return !best || distance < best.distance ? {portal, distance} : best;
+  }, null);
+  const mouth = nearest?.portal.point;
   marker.hidden =
     !sensor || !mouth || Math.hypot(...mouth.map((v, i) => v - pos[i])) > 32;
   if (!marker.hidden) {
@@ -70,16 +74,14 @@ function hud() {
     marker.style.top = mark.y + 'px';
     marker.style.transform =
       'translate(-50%, -50%) rotate(' + mark.angle + 'rad)';
-    marker.classList.toggle('exposed', !world.tutorial || world.uncovered());
+    marker.classList.toggle('exposed', true);
   }
 }
-function distance() {
-  return Math.hypot(...pos.map((n, i) => entrance[i] - n));
-}
+
 function syncSave() {
   const latest = readSave();
   const newWorld =
-    latest.front !== save?.front || latest.transited !== save?.transited;
+    latest.front !== save?.front || latest.transited !== save?.transited || latest.trips !== save?.trips;
   save = latest;
   if (newWorld) {
     loadWorld();
@@ -214,19 +216,22 @@ function move(dt) {
     velocity = [0, 0, 0];
     return false;
   }
-  const crossed = pos[2] < entrance[2] && next[2] >= entrance[2];
+  for (const portal of world.portals()) {
+    if (portal.exit) continue;
+    const {axis, sign, point} = portal;
+    const before = sign * (pos[axis] - point[axis]);
+    const after = sign * (next[axis] - point[axis]);
+    if (before >= 0 || after < 0) continue;
+    const t = -before / (after - before);
+    const lateral = point.map((v, i) => i === axis ? 0 : pos[i] + (next[i] - pos[i]) * t - v);
+    if (Math.max(...lateral.map(Math.abs)) + radius <= portal.radius) entered = portal;
+  }
   pos = next;
   world.stream(pos);
-  if (
-    world.uncovered() &&
-    crossed &&
-    Math.hypot(pos[0] - 0.5, pos[1] - 0.5) < 1.64 - radius
-  )
-    entered = true;
-  if (pos[2] < entrance[2]) entered = false;
-  if (entered && pos[2] >= entrance[2] + radius && !busy) {
+  if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) < 0) entered = false;
+  if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) >= radius && !busy) {
     velocity = [0, 0, 0];
-    write('transit', () => {
+    write({type: 'transit', radius: entered.radius}, () => {
       loadWorld();
       message('포탈 통과 완료');
     });
@@ -236,6 +241,7 @@ function move(dt) {
 function tick(dt) {
   if (fatal || document.hidden) return;
   age += dt;
+  world.advance(dt);
   const d = forward(yaw, pitch);
   if (!save.front) {
     if (busy || !world.trace(pos, ...d)) return;
@@ -247,9 +253,7 @@ function tick(dt) {
     return;
   }
   if (busy) return;
-  const length = distance(),
-    field = world.uncovered() && length < 4;
-  const inward = pos.map((n, i) => (entrance[i] - n) / Math.max(0.01, length));
+  const pull = entered ? [0, 0, 0] : world.gravity(pos);
   // The probe extends beyond one integration step so the entire body fits.
   const blocks = world.blockers(offset(pos, d, 0.7));
   if (blocks.length) {
@@ -274,9 +278,8 @@ function tick(dt) {
   anchors = [];
   timer = 0;
   targetTag = '';
-  const force = field && !entered ? 2.8 * (1 - length / 4) : 0;
   velocity = velocity.map(
-    (n, i) => n + ((d[i] * 1.9 - n) * 3 + inward[i] * force) * dt,
+    (n, i) => n + ((d[i] * 1.9 - n) * 3 + pull[i]) * dt,
   );
   // Turning redirects propulsion. Inertia and portal pull may deflect the hull
   // sideways, but never translate it behind its current heading.

@@ -66,8 +66,7 @@ export function createView(canvas) {
       -Math.cos(yaw) * Math.sin(pitch),
     ];
     const source = pixels.data;
-    const open = world.uncovered();
-    const mouth = world.mouth;
+    const portals = world.portals();
     for (let j = 0; j < h; j++)
       for (let i = 0; i < w; i++) {
         const u = (i + 0.5 - w / 2) / f,
@@ -116,19 +115,19 @@ export function createView(canvas) {
           g += lum * 1.01;
           b += lum * 0.86;
         }
-        if (
-          mouth &&
-          ((open && dz > 0.001) || (!world.tutorial && dz < -0.001))
-        ) {
-          const t = (mouth[2] - pos[2]) / dz;
-          const ex = pos[0] + dx * t - mouth[0],
-            ey = pos[1] + dy * t - mouth[1],
-            dist = ex * ex + ey * ey;
-          if (
-            t > 0 &&
-            t < (hit?.t ?? 32) &&
-            dist < (world.tutorial ? 2.7 : 1.3)
-          ) {
+        let nearest = hit?.t ?? 32;
+        for (const portal of portals) {
+          const axis = portal.axis, u = (axis + 1) % 3, v = (axis + 2) % 3;
+          const ray = [dx, dy, dz];
+          if (ray[axis] * portal.sign <= 0.001) continue;
+          const t = (portal.point[axis] - pos[axis]) / ray[axis];
+          if (t <= 0 || t > nearest + 0.00001) continue;
+          const scale = 1.64 / portal.radius;
+          const ex = (pos[u] + ray[u] * t - portal.point[u]) * scale;
+          const ey = (pos[v] + ray[v] * t - portal.point[v]) * scale;
+          const dist = Math.max(Math.abs(ex), Math.abs(ey)) ** 2;
+          if (dist <= 1.64 ** 2) {
+            nearest = t;
             const era = Math.floor(now / 3) % 3,
               ridge =
                 Math.sin(ex * (4 + era) + era) * 0.25 + 0.1 * Math.sin(ex * 9);

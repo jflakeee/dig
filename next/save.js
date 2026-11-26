@@ -6,6 +6,8 @@ const fresh = () => ({
   drills: [],
   front: null,
   transited: false,
+  trips: 0,
+  arrivalRadius: 1.64,
 });
 const unreadable = '저장 기록을 읽을 수 없습니다. 원본을 보존했습니다.';
 export function readSave() {
@@ -31,6 +33,8 @@ export function readSave() {
         s.front === 'drill-1' &&
         s.drills[0] === s.front)
     ) ||
+    (s.arrivalRadius !== undefined && !(Number.isFinite(s.arrivalRadius) && s.arrivalRadius > 0 && s.arrivalRadius <= 16)) ||
+    (s.trips !== undefined && (!Number.isSafeInteger(s.trips) || s.trips < 0)) ||
     typeof s.transited !== 'boolean' ||
     (s.transited && !s.front)
   )
@@ -44,7 +48,7 @@ export async function commit(revision, operation) {
     const s = readSave();
     if (s.revision !== revision)
       throw Error('다른 탭에서 진행이 바뀌었습니다. 다시 열어 주세요.');
-    switch (operation) {
+    switch (operation?.type ?? operation) {
       case 'collect':
         s.rocks++;
         break;
@@ -56,7 +60,9 @@ export async function commit(revision, operation) {
         s.drills.push(s.front);
         break;
       case 'transit':
-        if (!s.front || s.transited) throw Error('이동 기록이 바뀌었습니다.');
+        if (!s.front) throw Error('이동 기록이 바뀌었습니다.');
+        s.arrivalRadius = operation.radius;
+        s.trips = (s.trips ?? Number(s.transited)) + 1;
         s.transited = true;
         break;
       case 'reset':

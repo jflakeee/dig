@@ -51,35 +51,11 @@ try {
   assert.equal(save.rocks, 0);
   assert.deepEqual(save.drills, ['drill-1']);
   await page.reload();
-  await page.locator('#sensor').waitFor();
-  await page.waitForFunction(
-    () => document.querySelector('#sensor').classList.contains('exposed'),
-    {},
-    { timeout: 60000 },
-  );
-  assert.equal(await page.locator('#sensor').textContent(), '');
+  assert.equal(await page.locator('#sensor').isVisible(), false);
   await page.mouse.move(15, 400);
   await page.mouse.down();
   await page.mouse.move(375, 400, { steps: 4 });
   await page.mouse.up();
-  await page.waitForFunction(() =>
-    document.querySelector('#sensor').classList.contains('offscreen'),
-  );
-  await page.waitForTimeout(1200);
-  assert.equal((await read()).transited, false);
-  await page.locator('#menu').click();
-  const beforeMenu = (await read()).rocks;
-  await page.waitForFunction(
-    ([k, n]) => JSON.parse(localStorage.getItem(k)).rocks > n,
-    [key, beforeMenu],
-  );
-  await page.locator('#close').click();
-  await page.reload();
-  await page.waitForFunction(
-    (k) => JSON.parse(localStorage.getItem(k))?.transited,
-    key,
-    { timeout: 60000 },
-  );
   const afterPortal = (await read()).rocks;
   // At most 15 forward layers of 9 voxels fit before the old boundary.
   // Collecting 170 rocks on this straight course requires crossing it.
@@ -93,7 +69,8 @@ try {
   assert.equal(await page.getByText(/청크 경계/).count(), 0);
   await page.reload();
   await page.locator('#menu').waitFor();
-  await page.locator('#sensor.offscreen').waitFor();
+  assert.equal(await page.locator('#sensor').isVisible(), false);
+  assert.equal((await read()).transited, false);
   await page.locator('#menu').click();
   await page.locator('#reset').click();
   const beforeConfirm = (await read()).rocks;
@@ -168,7 +145,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    'First craft, reload, automatic driving through menus, steering, transit, isolated reset and legacy bookmark passed.',
+    'First craft, reload, automatic driving through menus, steering, ordinary boundary crossing, isolated reset and legacy bookmark passed.',
   );
 } finally {
   await browser.close();

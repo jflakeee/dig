@@ -48,3 +48,49 @@ test('sensor projects ahead and points toward off-screen portals on both axes', 
     if (target[1]) assert.equal(Math.sign(mark.y - 422), -Math.sign(target[1]));
   }
 });
+
+function clearFace(world, axis, sign, skipCorner = false) {
+  for (let a = -15; a <= 16; a++)
+    for (let b = -15; b <= 16; b++) {
+      if (skipCorner && a === 16 && b === 16) continue;
+      const cell = [];
+      cell[axis] = sign > 0 ? 16 : -15;
+      cell[(axis + 1) % 3] = a;
+      cell[(axis + 2) % 3] = b;
+      world.dig(...cell);
+    }
+}
+
+test('only the last solid cell schedules a face and gravity begins on opening', () => {
+  const w = createWorld(true, () => 0);
+  clearFace(w, 2, 1, true);
+  w.dig(0, 0, 16);
+  w.advance(500);
+  assert.equal(w.portals().length, 0);
+  w.dig(16, 16, 16);
+  w.advance(300);
+  assert.deepEqual(w.gravity([0,0,0]), [0,0,0]);
+  w.advance(1);
+  const [gate] = w.portals();
+  assert.equal(gate.radius, 1);
+  assert.equal(gate.point[2], 17);
+  assert.ok(w.gravity([-14,-14,-14])[2] > 0);
+  assert.deepEqual(w.gravity([0,0,18]), [0,0,0]);
+});
+
+test('six faces connect six neighbours within the inclusive deadline', () => {
+  for (const seconds of [299.999, 300, 300.001]) {
+    const w = createWorld(true, () => 0.999999);
+    w.dig(0,0,18);
+    clearFace(w, 0, -1);
+    w.advance(seconds);
+    for (let axis = 0; axis < 3; axis++)
+      for (const sign of [-1,1])
+        if (axis !== 0 || sign !== -1) clearFace(w, axis, sign);
+    assert.equal(w.hasChunk(-1,0,0), seconds <= 300);
+    assert.equal(w.solid(0,0,18), false);
+    w.advance(361);
+    assert.equal(w.portals().length, 6);
+    assert.ok(w.portals().every(p => p.radius === 16));
+  }
+});
