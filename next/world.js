@@ -126,7 +126,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
   }
 
   // DDA traversal is shared by view rays, laser hits and chain attachments.
-  function trace(p, dx, dy, dz, limit = 32) {
+  function trace(p, dx, dy, dz, limit = 32, intersect) {
     let x = Math.floor(p[0]),
       y = Math.floor(p[1]),
       z = Math.floor(p[2]);
@@ -139,7 +139,11 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
     let t = 0,
       axis = 2;
     while (t < limit) {
-      if (solid(x, y, z)) return { x, y, z, t, axis };
+      if (solid(x, y, z)) {
+        if (!intersect) return { x, y, z, t, axis };
+        const hit = intersect(p, dx, dy, dz, x, y, z, t, Math.min(tx, ty, tz, limit), axis);
+        if (hit) return hit;
+      }
       if (tx <= ty && tx <= tz) {
         t = tx;
         tx += ax;

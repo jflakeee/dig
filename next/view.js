@@ -1,3 +1,4 @@
+import { intersectStone } from './rock-shapes.js';
 import { forward } from './world.js';
 
 import { createDust } from './dust.js';
@@ -74,7 +75,7 @@ export function createView(canvas) {
         const dx = d[0] + right[0] * u + up[0] * v,
           dy = d[1] + up[1] * v,
           dz = d[2] + right[2] * u + up[2] * v;
-        const hit = world.trace(pos, dx, dy, dz);
+        const hit = world.trace(pos, dx, dy, dz, 32, intersectStone);
         let r = 2,
           g = 3,
           b = 4;
@@ -95,12 +96,6 @@ export function createView(canvas) {
           );
           const grain =
             0.47 + 0.22 * sample(9) + 0.22 * sample(49) + 0.12 * strata;
-          const joint = Math.min(
-            a - Math.floor(a),
-            1 - a + Math.floor(a),
-            c - Math.floor(c),
-            1 - c + Math.floor(c),
-          );
           const left =
             light[0] * Math.exp(-5 * ((u + 0.22) ** 2 + (v - 0.06) ** 2));
           const rightLight =
@@ -109,8 +104,7 @@ export function createView(canvas) {
           const lum =
             (((left * 0.65 + rightLight * 0.55 + core * 0.28) * grain * 185) /
               (1 + 0.12 * hit.t ** 1.45)) *
-            (joint < 0.013 ? 0.67 : 1) *
-            [0.78, 0.66, 1][hit.axis];
+            hit.shade;
           r += lum * 1.12;
           g += lum * 1.01;
           b += lum * 0.86;
@@ -169,7 +163,7 @@ export function createView(canvas) {
       )
         continue;
       const ray = mote.p.map((n, i) => n - pos[i]);
-      if (world.trace(pos, ...ray, 0.999)) continue;
+      if (world.trace(pos, ...ray, 0.999, intersectStone)) continue;
       const u = (screen[0] - w / 2) / f,
         v = (screen[1] - h / 2) / f;
       ctx.fillStyle =

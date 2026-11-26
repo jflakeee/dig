@@ -1,3 +1,4 @@
+import { intersectStone } from '../next/rock-shapes.js';
 import assert from 'node:assert/strict';
 import { createWorld } from '../next/world.js';
 import { portalMarker } from '../next/view.js';
@@ -114,4 +115,21 @@ test('starter attraction is weak and ordinary portal strength is sampled once', 
     assert.equal(exit.portals()[0].strength, gate.strength);
     assert.ok(exit.gravity([0.5,0.5,0])[2] > 0);
   }
+});
+
+test('visual rays follow fractured silhouettes, while mining occupies full cells', () => {
+  const world = createWorld(true);
+  const depths = new Set();
+  for (let x = 0; x < 12; x++) {
+    const pos = [x + 0.92, 3.94, 2.5];
+    world.dig(x, 3, 2);
+    const cell = world.trace(pos, 0, 0, 1);
+    const surface = world.trace(pos, 0, 0, 1, 32, intersectStone);
+    assert.equal(cell.t, 0.5);
+    if (surface) {
+      assert.ok(surface.t >= cell.t);
+      depths.add(surface.t.toFixed(3));
+    }
+  }
+  assert.ok(depths.size >= 3);
 });
