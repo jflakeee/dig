@@ -1,3 +1,4 @@
+import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, radius } from './world.js';
 import { readSave, commit, saveKey } from './save.js';
 import { createView, portalMarker } from './view.js';
@@ -55,6 +56,7 @@ function hud() {
     el('reset').hidden = false;
   }
   el('confirm-reset').disabled = busy;
+  if (panel) el('cargo').textContent = (save?.cargo ?? []).map((n,i) => n ? cargoNames[i] + ' × ' + n : '').filter(Boolean).join(' · ');
   const marker = el('sensor');
   const nearest = world.portals().reduce((best, portal) => {
     const distance = Math.hypot(...portal.point.map((v, i) => v - pos[i]));
@@ -101,9 +103,13 @@ async function write(op, after) {
   busy = true;
   hud();
   try {
-    const session = save.front && (op === 'collect' || op === 'checkpoint')
+    let session = save.front && (op === 'collect' || op === 'checkpoint' || op?.type === 'pickup')
       ? {pos, velocity, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
       : null;
+    if (op?.type === 'transit') {
+      const destination = createWorld(false, Math.random, op.radius, op.strength);
+      session = {pos:[0.5,0.5,0.5],velocity:[0,0,0],yaw:0,pitch:0,sensor:false,entered:-1,world:destination.snapshot()};
+    }
     save = await commit(save.revision, op, session);
     checkpointAge = 0;
     after?.();
@@ -294,7 +300,12 @@ function tick(dt) {
   // sideways, but never translate it behind its current heading.
   const along = velocity.reduce((sum, v, i) => sum + v * d[i], 0);
   if (along < 0) velocity = velocity.map((v, i) => v - along * d[i]);
-  if (move(dt) && !sensor) {
+  const moved = move(dt);
+  if (moved && !busy) {
+    const type = world.takeNearby(pos);
+    if (type !== null) write({type:'pickup', item:type}, () => message(cargoNames[type] + ' 회수'));
+  }
+  if (moved && !sensor) {
     sensor = true;
     hud();
   }

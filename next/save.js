@@ -7,6 +7,7 @@ const fresh = () => ({
   front: null,
   transited: false,
   trips: 0,
+  cargo: [0,0,0],
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
@@ -20,6 +21,11 @@ function validSession(s) {
     Number.isFinite(w?.elapsed) && w.elapsed >= 0 && vector(w.center, Number.isSafeInteger) &&
     typeof w.hasMouth === 'boolean' && Array.isArray(w.chunks) && w.chunks.every(c =>
       c && vector([c.x,c.y,c.z], Number.isSafeInteger) &&
+      (c.kind === undefined || (['rock','cave','empty','warehouse'].includes(c.kind) &&
+        Number.isSafeInteger(c.seed) && c.seed >= 0 && c.seed <= 0xffffffff)) &&
+      (c.kind !== 'warehouse' || (Array.isArray(c.items) && c.items.length <= 9 && c.items.every(item =>
+        item && Number.isInteger(item.id) && item.id >= 0 && item.id < 9 && vector(item.point) &&
+        (item.type === null || [0,1,2].includes(item.type))))) &&
       (Array.isArray(c.air) ? c.air.every(n => Number.isInteger(n) && n >= 0 && n < 32768)
         : typeof c.air === 'string' && /^[A-Za-z0-9+/]{5462}==$/.test(c.air)) &&
       Array.isArray(c.remaining) && c.remaining.length === 6 && c.remaining.every(n => Number.isInteger(n) && n >= 0 && n <= 1024) &&
@@ -44,6 +50,7 @@ export function readSave() {
     s.revision < 0 ||
     !Number.isSafeInteger(s.rocks) ||
     s.rocks < 0 ||
+    (s.cargo !== undefined && !vector(s.cargo, n => Number.isSafeInteger(n) && n >= 0)) ||
     (s.session != null && !validSession(s.session)) ||
     !Array.isArray(s.drills) ||
     !(
@@ -70,6 +77,11 @@ export async function commit(revision, operation, session) {
       throw Error('다른 탭에서 진행이 바뀌었습니다. 다시 열어 주세요.');
     switch (operation?.type ?? operation) {
       case 'checkpoint':
+        break;
+      case 'pickup':
+        if (!s.front || !session || ![0,1,2].includes(operation.item)) throw Error('회수할 수 없습니다.');
+        s.cargo ??= [0,0,0];
+        s.cargo[operation.item]++;
         break;
       case 'collect':
         s.rocks++;

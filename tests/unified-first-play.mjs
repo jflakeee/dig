@@ -1,3 +1,4 @@
+import { createWorld } from '../next/world.js';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 
@@ -17,6 +18,8 @@ const context = await browser.newContext({
   hasTouch: true,
   isMobile: true,
 });
+// This route exercises continuous drilling across a solid-rock boundary.
+await context.addInitScript(() => { Math.random = () => 0.12; });
 const page = await context.newPage();
 page.on('pageerror', (e) => errors.push(e.message));
 const key = 'dig-unified-v1';
@@ -143,6 +146,19 @@ try {
   assert.equal(shared.rocks, 0);
   assert.deepEqual(shared.drills, ['drill-1']);
   await other.close();
+  const warehouse = createWorld(false, () => 0.86);
+  const item = warehouse.warehouseItems()[0].item;
+  const session = {pos:item.point,velocity:[0,0,0],yaw:0,pitch:0,sensor:true,entered:-1,world:warehouse.snapshot()};
+  await page.evaluate(([k,v]) => localStorage.setItem(k,JSON.stringify(v)),
+    [key,{...shared, transited:true,session}]);
+  await page.reload();
+  await page.waitForFunction(k => JSON.parse(localStorage.getItem(k)).cargo?.some(n => n > 0),key);
+  const recovered = await read();
+  const owner = recovered.session.world.chunks.find(c => c.x===0 && c.y===0 && c.z===0);
+  assert.ok(!owner.items.some(slot => slot.id === item.id));
+  await page.reload();
+  await page.locator('#menu').click();
+  await page.locator('#cargo').filter({hasText:'× 1'}).waitFor();
   await page.evaluate((k) => localStorage.setItem(k, 'broken-save'), key);
   await page.reload();
   await page.locator('#message').filter({ hasText: '원본을 보존' }).waitFor();

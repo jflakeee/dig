@@ -1,3 +1,4 @@
+import { identify } from './chunk-terrain.js';
 import { intersectStone } from './rock-shapes.js';
 import { forward } from './world.js';
 
@@ -148,6 +149,27 @@ export function createView(canvas) {
       const depth = dot(d);
       if (depth < 0.01) return null;
       return [w / 2 + (f * dot(right)) / depth, h / 2 - (f * dot(up)) / depth];
+    }
+    for (const {chunk,item} of world.warehouseItems()) {
+      const screen = project(item.point);
+      if (!screen || screen[0]<0 || screen[0]>=w || screen[1]<0 || screen[1]>=h) continue;
+      const ray = item.point.map((n,i) => n-pos[i]);
+      const distance = Math.hypot(...ray);
+      if (distance > 32 || world.trace(pos, ...ray, 0.999)) continue;
+      const type = identify(item,chunk);
+      const size = Math.min(14, f*0.32/Math.max(0.5,distance));
+      ctx.save();
+      ctx.translate(...screen);
+      ctx.rotate(now*0.35+item.id);
+      ctx.globalAlpha = light[0] / (1+distance*0.045);
+      ctx.fillStyle = ['#a2bdca','#b5a68c','#9c8fbd'][type];
+      if (type === 0) {
+        ctx.beginPath();
+        ctx.arc(0,0,size,0,Math.PI*2);
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.stroke();
+      } else ctx.fillRect(-size,-size*0.6,2*size,1.2*size);
+      ctx.restore();
     }
     const motes = updateDust(world, pos, Math.min(0.1, now - lastTime));
     lastTime = now;

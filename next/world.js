@@ -1,3 +1,4 @@
+import { terrainKinds, makeChunk, naturalSolid, identify } from './chunk-terrain.js';
 // One cell is half a metre. Coordinates name a voxel by its lower corner.
 export const radius = 0.92;
 export const exitMouth = [0.5, 0.5, -0.98];
@@ -10,7 +11,7 @@ export const offset = (p, d, t) => p.map((v, i) => v + d[i] * t);
 // Chunks are 16 m wide. Their voxel coordinates share one world frame.
 const side = 32;
 const chunkOf = (cell) => Math.floor((cell + 15) / side);
-export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64, arrivalStrength = 2.8, saved) {
+export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64, arrivalStrength = 2.8, saved, terrainRandom = random) {
   const chunks = new Map();
   let elapsed = 0;
   const initial = {
@@ -20,6 +21,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
   let cached,
     center = [0, 0, 0],
     hasMouth = true;
+  let starting = tutorial && !saved;
   function chunkAt(x, y, z, create) {
     const cx = chunkOf(x),
       cy = chunkOf(y),
@@ -29,7 +31,8 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
     const key = [cx, cy, cz].join(',');
     cached = chunks.get(key);
     if (!cached && create) {
-      cached = { x: cx, y: cy, z: cz, air: new Set(), remaining: Array(6).fill(side * side), faces: [] };
+      const kind = starting ? 'rock' : terrainKinds[Math.floor(terrainRandom() * terrainKinds.length)];
+      cached = makeChunk(cx, cy, cz, kind, kind === 'rock' ? 0 : Math.floor(terrainRandom() * 0x100000000));
       chunks.set(key, cached);
     }
     return cached;
@@ -37,10 +40,28 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
   function localIndex(x, y, z) {
     return (((x + 15) & 31) * side + ((y + 15) & 31)) * side + ((z + 15) & 31);
   }
+  function scheduleFace(chunk, owner, axis, sign) {
+      const point = owner.map(n => n * side + 1);
+      point[axis] += sign * side / 2;
+      const width = 1 + Math.floor(random() * side);
+      for (let i = 0; i < 3; i++)
+        if (i !== axis) point[i] += Math.floor(random() * (side - width + 1)) - (side - width) / 2;
+      chunk.faces.push({point, axis, sign, chunk: owner, exit: false,
+        radius: width / 2, strength: 0.8 + random() * 4,
+        ready: elapsed + 301 + random() * 59, cleared: elapsed});
+  }
+  function enter(chunk) {
+    if (chunk.entered) return;
+    chunk.entered = true;
+    if (chunk.kind !== 'empty' && chunk.kind !== 'warehouse') return;
+    const owner = [chunk.x,chunk.y,chunk.z];
+    for (let axis=0; axis<3; axis++)
+      for (const sign of [-1,1]) scheduleFace(chunk, owner, axis, sign);
+  }
   function dig(x, y, z) {
     const chunk = chunkAt(x, y, z, true);
     const index = localIndex(x, y, z);
-    if (chunk.air.has(index)) return;
+    if (!naturalSolid(chunk,x,y,z) || chunk.air.has(index)) return;
     chunk.air.add(index);
     const coords = [x, y, z];
     const owner = [chunk.x, chunk.y, chunk.z];
@@ -50,14 +71,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
       const sign = local === 0 ? -1 : 1;
       const face = axis * 2 + Number(sign > 0);
       if (--chunk.remaining[face] !== 0) continue;
-      const point = owner.map(n => n * side + 1);
-      point[axis] += sign * side / 2;
-      const width = 1 + Math.floor(random() * side);
-      for (let i = 0; i < 3; i++)
-        if (i !== axis) point[i] += Math.floor(random() * (side - width + 1)) - (side - width) / 2;
-      chunk.faces.push({point, axis, sign, chunk: owner, exit: false,
-        radius: width / 2, strength: 0.8 + random() * 4,
-        ready: elapsed + 301 + random() * 59, cleared: elapsed});
+      scheduleFace(chunk, owner, axis, sign);
     }
     if (chunk.faces.length === 6 && !chunk.linked &&
         elapsed - chunk.faces[0].cleared <= 300) {
@@ -87,12 +101,15 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
     }
     return pull;
   }
-  const solid = (x, y, z) =>
-    !chunkAt(x, y, z, false)?.air.has(localIndex(x, y, z));
+  function solid(x,y,z) {
+    const c = chunkAt(x,y,z,true);
+    return naturalSolid(c,x,y,z) && !c.air.has(localIndex(x,y,z));
+  }
   function stream(pos) {
     const next = pos.map(chunkOf);
     if (next.every((n, i) => n === center[i])) return;
     center = next;
+    enter(chunkAt(...pos.map(Math.floor), true));
     for (const [key, chunk] of chunks) {
       if (
         Math.max(
@@ -138,6 +155,21 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
       for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) dig(x, y, z);
   }
 
+  starting = false;
+  if (!saved) enter(chunkAt(0,0,0,true));
+
+  function warehouseItems() {
+    const entries = [];
+    for (const chunk of chunks.values())
+      for (const item of chunk.items ?? []) entries.push({chunk,item});
+    return entries;
+  }
+  function takeNearby(pos) {
+    const chunk = chunkAt(...pos.map(Math.floor), true);
+    const index = chunk.items?.findIndex(item => Math.hypot(...item.point.map((v,i) => v-pos[i])) <= 1.3);
+    if (index == null || index < 0) return null;
+    return identify(chunk.items.splice(index,1)[0],chunk);
+  }
   function blockers(p) {
     const found = [];
     for (let x = Math.floor(p[0] - radius); x <= p[0] + radius; x++)
@@ -193,7 +225,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
   }
   return {
     advance(dt) { elapsed += dt; },
-    snapshot, portals, gravity,
+    snapshot, portals, gravity, warehouseItems, takeNearby,
     hasChunk(x, y, z) { return chunks.has([x, y, z].join(',')); },
     tutorial,
     solid,

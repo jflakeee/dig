@@ -7,7 +7,7 @@ import { test } from 'node:test';
 test('excavation, ray hits and hull clearance cross each chunk face', () => {
   for (let axis = 0; axis < 3; axis++)
     for (const sign of [-1, 1]) {
-      const world = createWorld(false);
+      const world = createWorld(false, () => 0);
       const direction = [0, 0, 0];
       direction[axis] = sign;
       for (let i = 0; i < 140; i++) {
@@ -81,7 +81,7 @@ test('only the last solid cell schedules a face and gravity begins on opening', 
 
 test('six faces connect six neighbours within the inclusive deadline', () => {
   for (const seconds of [299.999, 300, 300.001]) {
-    const w = createWorld(false, () => 0.999999);
+    const w = createWorld(false, () => 0.999999, undefined, undefined, undefined, () => 0);
     w.dig(0,0,18);
     clearFace(w, 0, -1);
     w.advance(seconds);
@@ -105,7 +105,7 @@ test('starter attraction is weak and ordinary portal strength is sampled once', 
   assert.ok(starter.gravity([0.5,0.5,6])[2] > 0);
   for (const roll of [0, 0.9]) {
     let sample = roll;
-    const world = createWorld(false, () => sample);
+    const world = createWorld(false, () => sample, undefined, undefined, undefined, () => 0);
     clearFace(world, 2, 1);
     world.advance(361);
     sample = 0.5;
@@ -163,7 +163,7 @@ test('save round trip preserves excavation, portal countdown and chunk resets', 
   clearFace(world, 2, 1);
   world.advance(300);
   const restore = w => createWorld(true, () => { throw Error('unexpected reroll'); },
-    undefined, undefined, JSON.parse(JSON.stringify(w.snapshot())));
+    undefined, undefined, JSON.parse(JSON.stringify(w.snapshot())), () => 0);
   const loaded = restore(world);
   assert.equal(loaded.solid(0,0,16), false);
   assert.equal(loaded.solid(0,0,15), true);
@@ -177,4 +177,38 @@ test('save round trip preserves excavation, portal countdown and chunk resets', 
   reset.stream([0,0,0]);
   assert.equal(reset.solid(0,0,16), true);
   assert.deepEqual(reset.portals(), []);
+});
+
+test('empty faces start waiting on entry and never spawn neighbours on their own', () => {
+  const w = createWorld(true, () => 0.6);
+  assert.equal(w.solid(32,8,2),false);
+  w.advance(500);
+  assert.equal(w.portals().length,1);
+  w.stream([32,0,0]);
+  w.advance(360);
+  assert.equal(w.portals().length,7);
+  assert.equal(w.hasChunk(2,0,0),false);
+});
+
+test('cave has connected passages, solid walls and accurate face counts', () => {
+  const w = createWorld(false, () => 0.3);
+  for (let z = -15; z <= 16; z++) assert.equal(w.solid(0,0,z),false);
+  assert.equal(w.solid(12,12,12),true);
+  let count=0;
+  for(let x=-15;x<=16;x++) for(let y=-15;y<=16;y++) count+=Number(w.solid(x,y,16));
+  assert.equal(w.snapshot().chunks[0].remaining[5],count);
+  clearFace(w,2,1);
+  w.advance(361);
+  assert.ok(w.portals().some(p => !p.exit && p.axis===2 && p.sign===1));
+});
+
+test('warehouse pickups stay removed after reload', () => {
+  const w = createWorld(false, () => 0.86);
+  const first = w.warehouseItems()[0].item;
+  assert.equal(first.type,null);
+  assert.equal(w.solid(...first.point.map(Math.floor)),false);
+  assert.ok([0,1,2].includes(w.takeNearby(first.point)));
+  const restored = createWorld(false, Math.random, undefined, undefined, JSON.parse(JSON.stringify(w.snapshot())));
+  assert.equal(restored.warehouseItems().length,8);
+  assert.ok(restored.warehouseItems().every(({item}) => item.id !== first.id));
 });
