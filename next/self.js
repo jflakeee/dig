@@ -18,8 +18,9 @@ export const selfParts = [
 ].map(([id, name, recollection, likeness]) => ({id, name, recollection, likeness}));
 // Once every part is back, the memory underneath all the others returns:
 // the machine was a person, and this mine is the pile that killed them.
+// The death has happened again and again across universes; which time this is cannot be known.
 export const lastMemory = '나는 사람이었다. 내가 만든 포탈이 오작동한 날, 세상의 모든 물건이 한곳으로 쏟아져 들어왔다. ' +
-  '그 더미에 갈려 나는 죽었다. 지금 내가 파고 있는 것이 그 더미다.';
+  '그 더미에 갈려 나는 죽었다. 지금 내가 파고 있는 것이 그 더미다. 그 죽음이 몇 번째였는지는 알 수 없다.';
 export const finalMemory = level => level >= 8 ? lastMemory : null;
 export const selfShare = 0.02;   // of extra discoveries: very rarely
 export const recall = s => s?.selfParts?.length ?? 0;
