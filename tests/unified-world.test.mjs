@@ -133,3 +133,27 @@ test('visual rays follow fractured silhouettes, while mining occupies full cells
   }
   assert.ok(depths.size >= 3);
 });
+
+test('reset removes only the evicted chunk’s portals and pending openings', () => {
+  for (const tutorial of [true, false]) {
+    const world = createWorld(tutorial, () => 0);
+    clearFace(world, 2, 1);
+    for (let x = 17; x <= 48; x++)
+      for (let y = -15; y <= 16; y++) world.dig(x, y, 16);
+    world.advance(361);
+    clearFace(world, 2, -1);
+    const neighbour = world.portals().find(p => p.chunk[0] === 1);
+    assert.ok(neighbour);
+    assert.equal(world.portals().length, 3);
+    world.stream([32, 0, 0]);
+    assert.equal(world.portals().length, 3);
+    world.stream([64, 0, 0]);
+    assert.equal(world.mouth, null);
+    assert.deepEqual(world.portals(), [neighbour]);
+    world.stream([0, 0, 0]);
+    world.dig(0, 0, 0);
+    world.advance(1000);
+    assert.deepEqual(world.portals(), [neighbour]);
+    assert.deepEqual(world.gravity([0, 0, 0]), [0, 0, 0]);
+  }
+});
