@@ -176,6 +176,8 @@ section {
 }
 #decompose-preview {
   display: block;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
   margin: 8px 0 4px;
 }
 #stored-list {

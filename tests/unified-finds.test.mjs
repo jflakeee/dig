@@ -30,27 +30,36 @@ function dugWorld(seed) {
 }
 
 test('the 24 finds split into eight equipment, unknown and household items', () => {
-  assert.equal(finds.length, 24);
+  assert.equal(finds.filter(f => f.category !== 'artifact').length, 24);
   for (const category of ['equipment', 'unknown', 'household'])
     assert.equal(finds.filter(f => f.category === category).length, 8, category);
   for (const f of finds.filter(f => f.category === 'household'))
     for (const v of f.variants)
       for (const [e, n] of Object.entries(v.units)) assert.ok(elementSymbols.includes(e) && Number.isInteger(n) && n > 0, f.id + e);
-  for (const f of finds.filter(f => f.category !== 'household')) assert.ok(f.variants.every(v => v.units === null), f.id);
+  for (const f of finds.filter(f => ['equipment', 'unknown'].includes(f.category))) assert.ok(f.variants.every(v => !v.fractions), f.id);
   assert.deepEqual(finds.filter(f => f.sensitive).map(f => [f.id, f.sensitive.seconds, f.sensitive.damage]),
     [['pressure_capsule', 4, 10], ['heat_crystal', 5, 8]]);
 });
 
+// The item sample that lands in the middle of a kind's weighted band.
+function sampleFor(kind) {
+  const total = finds.reduce((n, f) => n + f.weight, 0);
+  let before = 0;
+  for (const f of finds) {
+    if (f.id === kind) return (before + f.weight / 2) / total;
+    before += f.weight;
+  }
+}
 test('a find is fixed by its samples, including durability and a stopped clock', () => {
   const at = (item, extra = 0) => rollFind(key => key.endsWith('item') ? item : extra, 'k');
   assert.equal(at(0).kind, 'drill_head');
-  assert.equal(at(0.999999).kind, 'earphones');
+  assert.equal(at(0.999999).kind, 'superheavy_vessel');
   assert.equal(at(0, 0).durability, 15);
   assert.equal(at(0, 0.999999).durability, 95);
-  const clock = rollFind(key => key.endsWith('item') ? 21.5 / 24 : key.endsWith('time') ? 0.999999 : 0, 'k');
+  const clock = rollFind(key => key.endsWith('item') ? sampleFor('desk_clock') : key.endsWith('time') ? 0.999999 : 0, 'k');
   assert.deepEqual([clock.kind, clock.stoppedAt, clockText(clock.stoppedAt)], ['desk_clock', 719, '11:59']);
   assert.equal(clockText(0), '12:00');
-  assert.equal(rollFind(key => key.endsWith('item') ? 17.5 / 24 : key.endsWith('variant') ? 0.5 : 0, 'k').variant, 'nickel');
+  assert.equal(rollFind(key => key.endsWith('item') ? sampleFor('spoon') : key.endsWith('variant') ? 0.5 : 0, 'k').variant, 'nickel');
 });
 
 test('a household find decomposes into its units while equipment stays whole', async t => {
@@ -59,7 +68,9 @@ test('a household find decomposes into its units while equipment stays whole', a
     {id: 'a', kind: 'spoon', variant: 'nickel'}, {id: 'b', kind: 'focus_lamp', variant: 'standard', durability: 40}],
     findLog: ['spoon', 'focus_lamp']})));
   const s = await commit(0, {type: 'decompose', find: 'spoon', variant: 'nickel'});
-  assert.deepEqual(s.elements, {Fe: 3, Cr: 1, Ni: 1});
+  assert.deepEqual(Object.keys(s.elements).sort(), ['Cr', 'Fe', 'Ni']);
+  const total = s.elements.Fe + s.elements.Cr + s.elements.Ni;
+  assert.ok(total > 40 * 0.71 && total < 40 * 0.89, String(total));
   assert.deepEqual(s.finds.map(p => p.id), ['b']);
   await assert.rejects(commit(s.revision, {type: 'decompose', find: 'focus_lamp', variant: 'standard'}), /분해할 원료/);
 });

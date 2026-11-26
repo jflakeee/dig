@@ -2,11 +2,12 @@ import { intersectStone } from './rock-shapes.js';
 import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, portalRayDistance, radius } from './world.js';
-import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts } from './save.js';
-import { mineralIds, mineralName, variantName, elementUnits } from './minerals.js';
+import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts, decompositionPreview } from './save.js';
+import { massText } from './composition.js';
+import { mineralIds, mineralName, variantName } from './minerals.js';
 import { elementSymbols } from './elements.js';
-import { specimenById, specimenLabel, specimenUnits } from './specimens.js';
-import { findById, findLabel, findUnits, clockText } from './finds.js';
+import { specimenById, specimenLabel } from './specimens.js';
+import { findById, findLabel, findPiece, clockText } from './finds.js';
 import { createView, portalMarker } from './view.js';
 const el = (id) => document.getElementById(id);
 const canvas = el('scene'),
@@ -103,21 +104,19 @@ function showDiscoveries() {
 function decomposeChoices() {
   const choices = mineralIds.flatMap(id => Object.entries(variantCounts(save, id)).filter(([, n]) => n > 0)
     .map(([v, n]) => ['m:' + id + ':' + v,
-      (variantName(id, v) === mineralName(id) ? mineralName(id) : variantName(id, v) + ' (' + mineralName(id) + ')') + ' · ' + n + '개',
-      elementUnits(id, v)]));
-  const groups = new Map();
-  for (const p of save.specimens ?? []) {
-    const value = 's:' + p.kind + ':' + (p.kind === 'capsule' ? p.element : p.variant);
-    groups.set(value, [(groups.get(value)?.[0] ?? 0) + 1, p]);
-  }
-  for (const [value, [n, p]] of groups)
-    choices.push([value, specimenLabel(p.kind, p.variant, p.element) + ' · ' + n + '개', specimenUnits(p.kind, p.variant, p.element)]);
-  const items = new Map();
-  for (const p of save.finds ?? []) if (findUnits(p.kind, p.variant)) {
-    const value = 'f:' + p.kind + ':' + p.variant;
-    items.set(value, [(items.get(value)?.[0] ?? 0) + 1, p]);
-  }
-  for (const [value, [n, p]] of items) choices.push([value, findLabel(p) + ' · ' + n + '개', findUnits(p.kind, p.variant)]);
+      (variantName(id, v) === mineralName(id) ? mineralName(id) : variantName(id, v) + ' (' + mineralName(id) + ')') + ' · ' + n + '개']));
+  const count = (list, valueOf, labelOf) => {
+    const groups = new Map();
+    for (const p of list) {
+      const value = valueOf(p);
+      if (value) groups.set(value, [(groups.get(value)?.[0] ?? 0) + 1, p]);
+    }
+    for (const [value, [n, p]] of groups) choices.push([value, labelOf(p) + ' · ' + n + '개']);
+  };
+  count(save.specimens ?? [], p => 's:' + p.kind + ':' + (p.kind === 'capsule' ? p.element : p.variant),
+    p => specimenLabel(p.kind, p.variant, p.element));
+  count(save.finds ?? [], p => findPiece(p.kind, p.variant) && 'f:' + p.kind + ':' + p.variant,
+    p => findLabel(p) + (findById(p.kind).setting ? ' (' + findById(p.kind).setting + ')' : ''));
   return choices;
 }
 function decomposeOperation(value) {
@@ -126,30 +125,32 @@ function decomposeOperation(value) {
   if (source === 'f') return {type: 'decompose', find: kind, variant};
   return kind === 'capsule' ? {type: 'decompose', kind, element: variant} : {type: 'decompose', kind, variant};
 }
-const unitText = units => Object.entries(units).map(([symbol, n]) => symbol + ' ' + n).join(' · ');
+const yieldText = out => elementSymbols.filter(e => out[e]).map(e => e + ' ' + massText(out[e], e)).join(' · ');
 function showDecomposer() {
   const box = el('decomposer');
   box.hidden = !save?.front;
   if (!panel || box.hidden) return;
   const select = el('decompose-source');
-  const choices = decomposeChoices();
-  const options = choices.map(([value, label]) => [value, label]);
+  const options = decomposeChoices();
   if (select.dataset.options !== JSON.stringify(options)) {
     const chosen = select.value;
     select.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
     select.dataset.options = JSON.stringify(options);
     if (options.some(([value]) => value === chosen)) select.value = chosen;
   }
-  const choice = choices.find(([value]) => value === select.value);
-  const units = choice?.[2];
-  el('decompose-preview').textContent = units ? choice[1].replace(/ · \d+개$/, '') + ' 1개 → ' + unitText(units) : '분해할 원료가 없습니다.';
-  el('decompose').disabled = busy || !units;
+  const choice = options.find(([value]) => value === select.value);
+  const result = choice && decompositionPreview(save, decomposeOperation(choice[0]));
+  // The loss is shown but never explained: the machine keeps no record of where it goes.
+  el('decompose-preview').textContent = result ? choice[1].replace(/ · \d+개$/, '') + ' 1개 · ' + massText(result.grams) +
+    ' → 회수 ' + massText(result.kept) + ' · 손실 ' + massText(result.grams - result.kept) + ' (원인 기록 없음)\n' + yieldText(result.out)
+    : '분해할 원료가 없습니다.';
+  el('decompose').disabled = busy || !result;
   const book = el('element-book');
   const log = save.elementLog ?? [];
   book.hidden = !log.length;
   el('element-count').textContent = log.length + ' / ' + elementSymbols.length + '종';
   el('element-list').textContent = elementSymbols.filter(symbol => log.includes(symbol))
-    .map(symbol => symbol + ' ' + (save.elements[symbol] ?? 0)).join(' · ');
+    .map(symbol => symbol + ' ' + massText(save.elements[symbol] ?? 0, symbol)).join(' · ');
 }
 // Finds kept whole: equipment with durability, unknown materials and items.
 function showStored() {
@@ -314,7 +315,8 @@ async function write(op, after) {
     const had = new Set([...(before.specimens ?? []), ...(before.finds ?? [])].map(p => p.id));
     const freshFinds = (save.finds ?? []).filter(p => !had.has(p.id));
     if (freshFinds.length && type !== 'capture') {
-      message(freshFinds.map(p => '발견 · ' + findLabel(p) + (p.durability !== undefined ? ' · 내구도 ' + p.durability + '%' : '') +
+      message(freshFinds.map(p => '발견 · ' + findLabel(p) + (findById(p.kind).setting ? ' (' + findById(p.kind).setting + ')' : '') +
+        (p.durability !== undefined ? ' · 내구도 ' + p.durability + '%' : '') +
         (p.kind === 'desk_clock' ? ' · ' + clockText(p.stoppedAt) + '에 멈춤' : '')).join(' · '));
       const first = freshFinds.find(p => !before.findLog?.includes(p.kind));
       if (first) {
@@ -402,12 +404,12 @@ el('equip-head').onclick = () => {
 };
 el('decompose').onclick = () => {
   const choice = decomposeChoices().find(([value]) => value === el('decompose-source').value);
-  if (!choice) return;
-  const units = choice[2];
+  const result = choice && decompositionPreview(save, decomposeOperation(choice[0]));
+  if (!result) return;
   const known = new Set(save.elementLog ?? []);
   write(decomposeOperation(choice[0]), () => {
-    message(choice[1].replace(/ · \d+개$/, '') + ' 분해 · ' + Object.entries(units).map(([symbol, n]) => symbol + ' +' + n).join(' · '));
-    const first = Object.keys(units).find(symbol => !known.has(symbol));
+    message(choice[1].replace(/ · \d+개$/, '') + ' 분해 · 회수 ' + massText(result.kept) + ' · 손실 ' + massText(result.grams - result.kept));
+    const first = elementSymbols.find(symbol => result.out[symbol] && !known.has(symbol));
     if (first) {
       discoveryNoticeUntil = age + 2;
       el('discovery-notice').textContent = '원소 도감에 기록됨 · ' + first;

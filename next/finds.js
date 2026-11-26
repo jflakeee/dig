@@ -1,8 +1,14 @@
-// Equipment, unknown materials and everyday items from docs/dig-nonmineral-finds.md.
+import { artifacts, settingWeight } from './artifacts.js';
+import { fractionsFromParts, fractionsFromUnits } from './composition.js';
+// Equipment, unknown materials and everyday items from docs/dig-nonmineral-finds.md,
+// followed by the Earth objects of docs/dig-earth-artifacts-elements.md.
 // They fill the share of the extra discovery roll that specimens and capsules
 // leave (35%). Item weights, durability range and element units are trial values.
 export const findVersion = 1;
 const one = units => [['standard', null, 1, units]];
+// Mass in grams of each everyday item, used by the decomposer.
+const householdGrams = {desk_fan: 2000, spoon: 40, lunch_box: 300, teacup: 150, brown_bottle: 250, desk_clock: 600,
+  handkerchief: 20, earphones: 15};
 // [id, name, category, sensitive: [alert, button, seconds, drill damage] | null, variants]
 // Variants: [variant id, label, share, element units | null].
 export const finds = [
@@ -25,16 +31,26 @@ export const finds = [
   ['desk_clock', '기계식 탁상시계', 'household', null, one({Cu: 2, Zn: 1, Fe: 1})],
   ['handkerchief', '면 손수건', 'household', null, one({C: 6, H: 10, O: 5})],
   ['earphones', '고장 난 이어폰', 'household', null, one({Cu: 1, C: 2, H: 3, Cl: 1})],
-].map(([id, name, category, sensitive = null, variants = one(null)]) => ({id, name, category,
+].map(([id, name, category, sensitive = null, variants = one(null)]) => ({id, name, category, weight: 2,
+  grams: householdGrams[id] ?? null,
   sensitive: sensitive && {alert: sensitive[0], button: sensitive[1], seconds: sensitive[2], damage: sensitive[3]},
-  variants: variants.map(([variant, label, share, units]) => ({variant, label: label ?? name, share, units}))}));
+  variants: variants.map(([variant, label, share, units]) => ({variant, label: label ?? name, share, units,
+    fractions: units && fractionsFromUnits(units)}))})).concat(artifacts.map(a => ({id: a.id, name: a.name,
+  category: 'artifact', setting: a.setting, weight: settingWeight[a.setting], grams: a.grams, sensitive: null,
+  variants: a.variants.map(v => ({...v, units: null, fractions: fractionsFromParts(v.parts)}))})));
 export const findById = id => finds.find(f => f.id === id);
-export const findUnits = (kind, variant) => findById(kind)?.variants.find(v => v.variant === variant)?.units ?? null;
+// What one piece puts into the decomposer: its grams and element mass fractions.
+// Equipment and unknown materials stay whole and have none.
+export function findPiece(kind, variant) {
+  const f = findById(kind), v = f?.variants.find(entry => entry.variant === variant);
+  return v?.fractions ? {grams: f.grams, fractions: v.fractions} : null;
+}
 export function findLabel(piece) {
   const f = findById(piece.kind);
   if (!f) return piece.kind;
   const v = f.variants.find(entry => entry.variant === piece.variant);
-  return f.variants.length > 1 ? f.name + ' (' + v.label + ')' : f.name;
+  return f.category === 'artifact' && f.variants.length > 1 ? f.name + ' (' + v.variant + ')'
+    : f.variants.length > 1 ? f.name + ' (' + v.label + ')' : f.name;
 }
 const pick = (entries, sample) => {
   const total = entries.reduce((n, [, w]) => n + w, 0);
@@ -45,10 +61,10 @@ const pick = (entries, sample) => {
   }
   return entries.at(-1)[0];
 };
-// One find from fixed samples: every item weighs the same. Equipment keeps a
+// One find from fixed samples, weighted per item. Equipment keeps a
 // durability between 15 and 95%; a desk clock keeps the minute it stopped.
 export function rollFind(random, key) {
-  const f = pick(finds.map(entry => [entry, 1]), random(key + 'item'));
+  const f = pick(finds.map(entry => [entry, entry.weight]), random(key + 'item'));
   const piece = {kind: f.id, variant: pick(f.variants.map(v => [v.variant, v.share]), random(key + 'variant'))};
   if (f.category === 'equipment') piece.durability = 15 + Math.floor(random(key + 'durability') * 81);
   if (f.id === 'desk_clock') piece.stoppedAt = Math.floor(random(key + 'time') * 720);
