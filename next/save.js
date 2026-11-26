@@ -5,11 +5,12 @@ import { blockDiscovery, capsuleElement, specimenById, specimenUnits, specimenPi
 import { findById, findPiece } from './finds.js';
 import { decompose, decompositionFee } from './composition.js';
 import { marketCycle, sellQuote, marketStock, auctionEstimate, auctionOutcome, auctionSeconds } from './trade.js';
+import { slotOf, captureBonus } from './equipment.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 9;
+export const saveVersion = 10;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -35,6 +36,8 @@ export const migrations = {
   7: s => ({...s, decomposeCount: 0}),
   // Drone trade: credits, a market seed and game-time market clock, auctions in escrow.
   8: s => ({...s, ...tradeStart()}),
+  // Fitted equipment by slot.
+  9: s => ({...s, equipment: {}}),
 };
 const tradeStart = () => ({credits: 0, marketSeed: Math.floor(Math.random() * 4294967296), marketTime: 0,
   marketClock: null, auctions: [], tradeLog: [], purchaseCount: 0});
@@ -194,6 +197,7 @@ const fresh = () => ({
   clockLog: [],
   decomposeCount: 0,
   ...tradeStart(),
+  equipment: {},
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
@@ -230,6 +234,8 @@ function validMinerals(s) {
       Number.isSafeInteger(a.estimate) && a.estimate > 0 && Number.isFinite(a.endsAt)) &&
     Array.isArray(s.tradeLog) && s.tradeLog.length <= 20 && s.tradeLog.every(t => typeof t === 'string') &&
     Number.isSafeInteger(s.purchaseCount) && s.purchaseCount >= 0 &&
+    s.equipment && typeof s.equipment === 'object' && !Array.isArray(s.equipment) &&
+    Object.entries(s.equipment).every(([slot, p]) => validFind(p) && slotOf(p.kind) === slot) &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
     new Set(s.elementLog).size === s.elementLog.length &&
     Array.isArray(s.specimens) && s.specimens.every(validPiece) &&
@@ -238,8 +244,9 @@ function validMinerals(s) {
     Array.isArray(s.clockLog) && s.clockLog.every(m => Number.isInteger(m) && m >= 0 && m < 720) &&
     Array.isArray(s.captures) && s.captures.every((c, i) => (validPiece(c) || validFind(c)) && captureRule(c.kind) &&
       Number.isFinite(c.seconds) && c.seconds > 0 && (c.expiresAt === null || (i === 0 && Number.isFinite(c.expiresAt)))) &&
-    new Set([...s.specimens, ...s.finds, ...s.captures, ...(s.auctions ?? []).map(a => a.piece)].map(p => p.id)).size ===
-      s.specimens.length + s.finds.length + s.captures.length + (s.auctions?.length ?? 0) &&
+    new Set([...s.specimens, ...s.finds, ...s.captures, ...(s.auctions ?? []).map(a => a.piece),
+      ...Object.values(s.equipment ?? {})].map(p => p.id)).size ===
+      s.specimens.length + s.finds.length + s.captures.length + (s.auctions?.length ?? 0) + Object.keys(s.equipment ?? {}).length &&
     Array.isArray(s.specimenLog) && s.specimenLog.every(kind => kind === 'capsule' || specimenById(kind)) &&
     new Set(s.specimenLog).size === s.specimenLog.length &&
     Number.isSafeInteger(s.capsuleMisses) && s.capsuleMisses >= 0;
@@ -396,6 +403,8 @@ export async function commit(revision, operation, session) {
       case 'drill':
         if (!s.front || s.drillCondition === 0) throw Error('드릴을 사용할 수 없습니다.');
         if (Math.random() < 0.05) s.drillCondition = Math.max(0,(s.drillCondition ?? 100)-2);
+        // A working auxiliary drill shares the strokes and wears by the same rule.
+        if (s.equipment.aux?.durability > 0 && Math.random() < 0.05) s.equipment.aux.durability = Math.max(0, s.equipment.aux.durability - 2);
         break;
       case 'laser':
         if (!s.front || s.drillCondition !== 0 || (s.ceramic ?? 0) >= ceramicPerRepair || s.rocks >= rocksPerCeramic) throw Error('긴급 채굴 조건이 바뀌었습니다.');
@@ -432,6 +441,23 @@ export async function commit(revision, operation, session) {
         s.transited = false;
         s.drillCondition = Math.floor((s.drillCondition ?? 100)*0.4);
         break;
+      case 'equip': {
+        // Fitting a piece returns whatever held the slot to storage.
+        const at = s.finds.findIndex(p => p.id === operation?.id);
+        const slot = at >= 0 && slotOf(s.finds[at].kind);
+        if (!s.front || !slot) throw Error('장착할 장비가 없습니다.');
+        const [piece] = s.finds.splice(at, 1);
+        if (s.equipment[slot]) s.finds.push(s.equipment[slot]);
+        s.equipment[slot] = piece;
+        break;
+      }
+      case 'unequip': {
+        const piece = s.equipment[operation?.slot];
+        if (!piece) throw Error('장착된 장비가 없습니다.');
+        delete s.equipment[operation.slot];
+        s.finds.push(piece);
+        break;
+      }
       case 'equip-head': {
         const at = s.finds.findIndex(p => p.id === operation?.id && p.kind === 'drill_head');
         if (!s.front || at < 0 || s.finds[at].durability <= (s.drillCondition ?? 100))
@@ -523,7 +549,7 @@ export async function commit(revision, operation, session) {
     } else if (d) {
       const piece = d.find ? {id: found.id, ...d.find} : {id: found.id, kind: d.kind, variant: d.variant};
       const rule = captureRule(piece.kind);
-      if (rule) s.captures.push({...piece, seconds: rule.seconds, expiresAt: null});
+      if (rule) s.captures.push({...piece, seconds: rule.seconds + captureBonus(s, piece.kind), expiresAt: null});
       else addSpecimen(s, piece);
     }
     // Moving to another space or rebooting leaves pending finds behind.

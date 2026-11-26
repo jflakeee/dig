@@ -5,6 +5,7 @@ import { createWorld, forward, offset, portalRayDistance, radius } from './world
 import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice } from './save.js';
 import { massText } from './composition.js';
 import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate } from './trade.js';
+import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
 import { mineralIds, mineralName, variantName } from './minerals.js';
 import { elementSymbols } from './elements.js';
 import { specimenById, specimenLabel } from './specimens.js';
@@ -258,17 +259,41 @@ function showTrade() {
 function showStored() {
   const box = el('stored');
   const pieces = save?.finds ?? [];
-  box.hidden = !save?.front || !pieces.length;
+  const fitted = Object.entries(save?.equipment ?? {});
+  box.hidden = !save?.front || (!pieces.length && !fitted.length);
   if (!panel || box.hidden) return;
-  el('stored-count').textContent = pieces.length + '개';
-  const lines = pieces.map(p => findLabel(p) + (p.durability !== undefined ? ' · 내구도 ' + p.durability + '%' : '') +
-    (p.kind === 'desk_clock' ? ' · 멈춘 시각 ' + clockText(p.stoppedAt) : '') +
-    (findById(p.kind).category === 'unknown' ? ' · 미분석' : findById(p.kind).category === 'equipment' && p.kind !== 'drill_head' ? ' · 장착 슬롯 준비 중' : ''));
-  const list = el('stored-list');
-  if (list.dataset.lines !== JSON.stringify(lines)) {
-    list.replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
-    list.dataset.lines = JSON.stringify(lines);
+  el('stored-count').textContent = pieces.length + '개' + (fitted.length ? ' · 장착 ' + fitted.length : '');
+  // Fitted pieces first, each with its effect and a button to take it off.
+  const fittedRows = fitted.map(([slot, p]) => [slot, slots[p.kind].label + ' · ' + findLabel(p) + ' · 내구도 ' + p.durability + '% · ' +
+    (p.durability > 0 ? slots[p.kind].effect : '고장으로 작동 안 함')]);
+  const fittedList = el('fitted-list');
+  if (fittedList.dataset.rows !== JSON.stringify(fittedRows)) {
+    fittedList.replaceChildren(...fittedRows.map(([slot, text]) => {
+      const li = Object.assign(document.createElement('li'), {textContent: text});
+      const off = Object.assign(document.createElement('button'), {textContent: '해제'});
+      off.onclick = () => write({type: 'unequip', slot}, () => message(text.split(' · ')[1] + ' 해제'));
+      li.append(off);
+      return li;
+    }));
+    fittedList.dataset.rows = JSON.stringify(fittedRows);
   }
+  const rows = pieces.map(p => [p.id, findLabel(p) + (p.durability !== undefined ? ' · 내구도 ' + p.durability + '%' : '') +
+    (p.kind === 'desk_clock' ? ' · 멈춘 시각 ' + clockText(p.stoppedAt) : '') +
+    (findById(p.kind).category === 'unknown' ? ' · 미분석' : ''), slotOf(p.kind)]);
+  const list = el('stored-list');
+  if (list.dataset.rows !== JSON.stringify(rows)) {
+    list.replaceChildren(...rows.map(([id, text, slot]) => {
+      const li = Object.assign(document.createElement('li'), {textContent: text});
+      if (slot) {
+        const on = Object.assign(document.createElement('button'), {textContent: save.equipment[slot] ? '교체 장착' : '장착'});
+        on.onclick = () => write({type: 'equip', id}, () => message(text.split(' · ')[0] + ' 장착'));
+        li.append(on);
+      }
+      return li;
+    }));
+    list.dataset.rows = JSON.stringify(rows);
+  }
+  for (const b of [...list.querySelectorAll('button'), ...fittedList.querySelectorAll('button')]) b.disabled = busy;
   const head = bestHead();
   el('equip-head').hidden = !head;
   el('equip-head').disabled = busy;
@@ -354,7 +379,7 @@ function hud() {
   }, null);
   const mouth = nearest?.portal.point;
   marker.hidden =
-    !sensor || !mouth || Math.hypot(...mouth.map((v, i) => v - pos[i])) > 32;
+    !sensor || !mouth || Math.hypot(...mouth.map((v, i) => v - pos[i])) > sensorRange(save);
   if (!marker.hidden) {
     const mark = portalMarker(
       mouth,
@@ -675,7 +700,7 @@ function tick(dt) {
     return;
   }
   if (busy) return;
-  const {push,damage,impactPoint} = world.hullContacts(dt,pos,velocity.map((v,i) => v+drift[i]),anchors.length > 0);
+  const {push,damage,impactPoint} = world.hullContacts(dt,pos,velocity.map((v,i) => v+drift[i]),anchors.length > 0 && anchorMass(save));
   const hazard = world.sense(pos,dt,damage > 0);
   hazardVisible = hazard.visible;
   for (const [loss,cause,origin] of [[damage,'impact',impactPoint],
@@ -734,7 +759,7 @@ function tick(dt) {
       targetTag = tag;
     }
     timer += dt;
-    if (timer >= 0.16) {
+    if (timer >= drillInterval(save)) {
       timer = 0;
       if (!world.dig(...target)) return;
       write({type: 'drill', cell: target}, () => {
@@ -786,6 +811,7 @@ function frame(time) {
         contact, fracture, age,
         mounted: !!save?.front && save.drillCondition !== 0,
         minerals: !!save?.front,
+        focus: !!fittedAndWorking(save, 'lamp'),
         working,
       },
       time / 1000,

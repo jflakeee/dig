@@ -23,7 +23,7 @@ jobs:
           npx vite preview --host 127.0.0.1 --port 4173 --base=/dig/ > /tmp/dig-preview.log 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4173/dig/dig-4d.html && break; sleep 1; done
           node --experimental-strip-types tests/dig-4d-restore-smoke.ts
-          node --test tests/unified-world.test.mjs tests/unified-minerals.test.mjs tests/unified-elements.test.mjs tests/unified-specimens.test.mjs tests/unified-finds.test.mjs tests/unified-artifacts.test.mjs tests/unified-trade.test.mjs
+          node --test tests/unified-world.test.mjs tests/unified-minerals.test.mjs tests/unified-elements.test.mjs tests/unified-specimens.test.mjs tests/unified-finds.test.mjs tests/unified-artifacts.test.mjs tests/unified-trade.test.mjs tests/unified-equipment.test.mjs
           node tests/unified-first-play.mjs
           node --experimental-strip-types tests/dig-4d-portal-generation.ts
           npx tsx tests/dig-4d-session-passage.test.ts

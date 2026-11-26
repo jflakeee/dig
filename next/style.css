@@ -207,6 +207,18 @@ section {
   overflow-wrap: anywhere;
   margin: 8px 0 4px;
 }
+#fitted-list {
+  margin: 0 0 8px;
+  padding-left: 20px;
+  color: #9fd8d1;
+}
+#stored-list li button, #fitted-list li button {
+  display: inline-block;
+  width: auto;
+  min-height: 36px;
+  padding: 6px 12px;
+  margin: 4px 0 4px 8px;
+}
 #stored-list {
   margin: 0 0 8px;
   padding-left: 20px;
