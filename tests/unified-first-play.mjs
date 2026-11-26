@@ -33,16 +33,24 @@ try {
     localStorage.setItem('dig-p0-v1', classic);
     localStorage.setItem('dig-4d-train-v1', '4d-marker');
   }, classic);
-  await page.waitForFunction(
-    () => document.querySelector('#rock b').textContent === '2',
-  );
+  for (const n of [1,2]) {
+    await page.waitForFunction(n => Number(document.querySelector('#rock b').textContent) === n, n);
+    const progress = await read();
+    const origin = progress.session.world.chunks.find(c => !c.x && !c.y && !c.z);
+    assert.equal(origin.air.length,27+n);
+  }
   await page.reload();
   assert.equal(await page.locator('#rock b').textContent(), '2');
-  await page.locator('#craft').waitFor();
-  await page.evaluate(() => {
-    document.querySelector('#craft').click();
-    document.querySelector('#craft').click();
-  });
+  assert.equal(await page.locator('#craft').count(),0);
+  await page.getByText('기본 드릴 제작 시작',{exact:true}).waitFor();
+  const building = await read();
+  assert.equal(building.rocks,3);
+  assert.equal(building.front,null);
+  assert.equal(building.session.world.chunks.find(c => !c.x && !c.y && !c.z).air.length,30);
+  await page.getByText('기본 드릴 제작중',{exact:true}).waitFor();
+  await page.reload();
+  assert.equal((await read()).craftReadyAt,building.craftReadyAt);
+  await page.getByText('기본 드릴 장착함',{exact:true}).waitFor();
   assert.equal(
     await page
       .getByRole('button', { name: /^(정지|재개|후진)$/, includeHidden: true })
@@ -133,11 +141,7 @@ try {
   await page.goto(base + 'next/');
   const other = await context.newPage();
   await other.goto(base + 'next/');
-  await Promise.all(
-    [page, other].map((p) =>
-      p.evaluate(() => document.querySelector('#craft').click()),
-    ),
-  );
+  // Both tabs resume the same legacy three-rock fabrication automatically.
   await page.waitForFunction(
     (k) => JSON.parse(localStorage.getItem(k)).front,
     key,

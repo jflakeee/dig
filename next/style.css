@@ -116,9 +116,13 @@ footer {
 footer button {
   pointer-events: auto;
 }
-#craft {
-  border-color: #ceb786;
-  background: #30291f;
+#fabrication {
+  width: fit-content;
+  margin: 0 auto 8px;
+  padding: 8px 14px;
+  border-radius: 16px;
+  background: #1b2325ed;
+  color: #ffe3a8;
 }
 small {
   padding-left: 10px;

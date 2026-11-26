@@ -1,7 +1,8 @@
+import { intersectStone } from './rock-shapes.js';
 import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, radius } from './world.js';
-import { readSave, commit, saveKey, rocksPerCeramic, ceramicPerRepair } from './save.js';
+import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair } from './save.js';
 import { createView, portalMarker } from './view.js';
 const el = (id) => document.getElementById(id);
 const canvas = el('scene'),
@@ -28,12 +29,15 @@ let age = 0,
   audio,
   osc,
   gain;
+let contact = null, fracture = null, installedUntil = 0;
 let checkpointAge = 0;
 let hull = 100;
 let hazardVisible = false;
 let laserJob = null;
 function loadWorld() {
   const session = save?.session;
+  contact = fracture = null;
+  installedUntil = 0;
   checkpointAge = 0;
   hazardVisible = false;
   laserJob = null;
@@ -55,8 +59,6 @@ function message(text) {
 }
 function hud() {
   el('rock').firstElementChild.textContent = save?.rocks ?? '—';
-  el('craft').hidden = fatal || !!save?.front || !(save?.rocks >= 3);
-  el('craft').disabled = busy;
   el('menu').hidden = !save?.front;
   el('menu').setAttribute('aria-expanded', String(panel));
   el('panel').hidden = !panel;
@@ -118,8 +120,10 @@ function hud() {
 function syncSave(force = false) {
   const latest = readSave();
   if (!force && latest.revision === save?.revision) return;
+  const mounted = !save?.front && latest.front;
   save = latest;
   loadWorld();
+  if (mounted) installedUntil = Date.now()+1600;
   if (!save.front) panel = false;
 }
 try {
@@ -135,7 +139,7 @@ async function write(op, after) {
   busy = true;
   hud();
   try {
-    let session = save.front && (['collect','drill','laser','repair','fire-ceramic','checkpoint'].includes(op) || op?.type === 'blast' || op?.type === 'pickup')
+    let session = (['collect','drill','laser','repair','fire-ceramic','checkpoint'].includes(op) || op?.type === 'blast' || op?.type === 'pickup')
       ? {hull, pos, velocity, drift, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
       : null;
     if (op?.type === 'transit') {
@@ -143,6 +147,7 @@ async function write(op, after) {
       session = {hull,pos:[0.5,0.5,0.5],velocity:[0,0,0],drift,yaw:0,pitch:0,sensor:false,entered:-1,world:destination.snapshot()};
     }
     save = await commit(save.revision, op, session);
+    if (op === 'craft') installedUntil = Date.now()+1600;
     checkpointAge = 0;
     after?.();
   } catch (e) {
@@ -209,12 +214,6 @@ el('emergency').onclick = () => {
     message('긴급 레이저 채굴 중');
     hud();
   }
-};
-el('craft').onclick = () => {
-  write('craft', () => {
-    timer = 0;
-    message('');
-  });
 };
 el('menu').onclick = () => {
   panel = !panel;
@@ -308,9 +307,22 @@ function tick(dt) {
   world.advance(dt);
   const d = forward(yaw, pitch);
   if (!save.front) {
-    if (busy || !world.trace(pos, ...d)) return;
+    if (busy) return;
+    if (save.rocks >= 3) {
+      contact = null;
+      if (!save.craftReadyAt) write('begin-craft');
+      else if (Date.now() >= save.craftReadyAt) write('craft');
+      return;
+    }
+    const hit = world.trace(pos,...d,32,intersectStone);
+    if (!hit) { contact = null; timer = 0; return; }
+    const cell = [hit.x,hit.y,hit.z], tag = cell.join(',');
+    if (targetTag !== tag) { targetTag = tag; timer = 0; }
     timer += dt;
-    if (timer >= 1.35) {
+    contact = {point:offset(pos,d,hit.t), heat:Math.min(1,timer/1.35)};
+    if (timer >= 1.35 && world.dig(...cell)) {
+      fracture = {point:contact.point, at:age};
+      contact = null;
       timer = 0;
       write('collect');
     }
@@ -417,7 +429,7 @@ function frame(time) {
     const light = [0, 0.5, 1].map((delay) =>
       Math.max(0, Math.min(1, (age - delay) * 1.7)),
     );
-    const working = !fatal && (!save?.front || !!laserJob || anchors.length > 0);
+    const working = !fatal && (!!contact || !!laserJob || anchors.length > 0);
     render(
       {
         world,
@@ -426,11 +438,22 @@ function frame(time) {
         pitch,
         light,
         anchors,
+        contact, fracture, age,
         mounted: !!save?.front && save.drillCondition !== 0,
         working,
       },
       time / 1000,
     );
+    const now = Date.now();
+    const notice = save?.craftReadyAt ? (now < save.craftReadyAt-fabricationMs+950 ?
+      '기본 드릴 제작 시작' : '기본 드릴 제작중') : now < installedUntil ? '기본 드릴 장착함' : '';
+    const toast = el('fabrication');
+    if (toast.textContent !== notice) {
+      toast.textContent = notice;
+      toast.hidden = !notice;
+      if (notice) toast.animate([{opacity:0},{opacity:1}],{duration:160});
+    }
+    if (osc && audio) osc.frequency.setTargetAtTime(contact ? 110+contact.heat*145 : 99,audio.currentTime,0.07);
     if (gain)
       gain.gain.setTargetAtTime(
         working ? Math.min(0.045, age * 0.012) : 0,

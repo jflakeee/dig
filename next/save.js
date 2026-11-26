@@ -1,5 +1,6 @@
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
+export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
 const fresh = () => ({
   version: 1,
@@ -9,6 +10,7 @@ const fresh = () => ({
   front: null,
   transited: false,
   trips: 0,
+  craftReadyAt: null,
   ceramic: 0,
   drillCondition: 100,
   cargo: [0,0,0],
@@ -66,6 +68,7 @@ export function readSave() {
     s.rocks < 0 ||
     (s.cargo !== undefined && !vector(s.cargo, n => Number.isSafeInteger(n) && n >= 0)) ||
     (s.drillCondition !== undefined && !(Number.isInteger(s.drillCondition) && s.drillCondition >= 0 && s.drillCondition <= 100)) ||
+    (s.craftReadyAt != null && (!Number.isSafeInteger(s.craftReadyAt) || s.craftReadyAt <= 0 || s.front || s.rocks < 3)) ||
     (s.ceramic !== undefined && !(Number.isSafeInteger(s.ceramic) && s.ceramic >= 0)) ||
     (s.session != null && !validSession(s.session)) ||
     !Array.isArray(s.drills) ||
@@ -124,12 +127,19 @@ export async function commit(revision, operation, session) {
         s.rocks++;
         break;
       case 'collect':
+        if (s.front || s.rocks >= 3 || !session) throw Error('채굴 기록이 바뀌었습니다.');
         s.rocks++;
+        if (s.rocks === 3) s.craftReadyAt = Date.now()+fabricationMs;
+        break;
+      case 'begin-craft':
+        if (s.front || s.rocks < 3 || s.craftReadyAt) throw Error('제작 기록이 바뀌었습니다.');
+        s.craftReadyAt = Date.now()+fabricationMs;
         break;
       case 'craft':
-        if (s.front || s.rocks < 3)
+        if (s.front || s.rocks < 3 || !s.craftReadyAt || Date.now() < s.craftReadyAt)
           throw Error('제작 조건을 다시 확인해 주세요.');
         s.rocks -= 3;
+        s.craftReadyAt = null;
         s.front = 'drill-1';
         s.drills.push(s.front);
         break;

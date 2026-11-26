@@ -238,10 +238,40 @@ export function createView(canvas) {
       ctx.stroke();
     }
     if (!s.mounted && working && light[0] > 0) {
-      line(w * 0.71, h, w * 0.5, h * 0.5, '#bd5726', 2);
-      line(w * 0.71, h, w * 0.5, h * 0.5, '#ffd599');
-      ctx.fillStyle = '#ffecbd';
-      ctx.fillRect(w * 0.5 - 1, h * 0.5 - 1, 3, 3);
+      const at = s.contact ? project(s.contact.point) : [w/2,h/2];
+      if (at) {
+        const [x,y] = at, heat = s.contact?.heat ?? 0.45;
+        const size = (3+heat*9) * (0.94+0.06*Math.sin(now*43));
+        const glow = ctx.createRadialGradient(x,y,0,x,y,size);
+        glow.addColorStop(0,'#fff4c3');
+        glow.addColorStop(0.18,'#ffba58');
+        glow.addColorStop(1,'rgba(245,76,14,0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(x-size,y-size,size*2,size*2);
+        for (let i=0;i<5;i++) {
+          const angle = i*2.4+0.6;
+          const length = size*heat*(0.6+0.3*Math.sin(i));
+          line(x,y,x+Math.cos(angle)*length,y+Math.sin(angle)*length,'#d68645',0.7);
+        }
+        line(w*0.71,h,x,y,'rgba(253,106,52,0.28)',3);
+        line(w*0.71,h,x,y,'#ffce87',0.85);
+        for (let i=0;i<6;i++) {
+          const life = (now*2.8+i/6)%1;
+          const angle = i*2.4;
+          ctx.fillStyle = 'rgba(255,211,139,'+((1-life)*heat)+')';
+          ctx.fillRect(x+Math.cos(angle)*life*size*1.8,y+Math.sin(angle)*life*size*1.8,1,1);
+        }
+      }
+    }
+    if (s.fracture && s.age-s.fracture.at < 0.5) {
+      const life = (s.age-s.fracture.at)*2;
+      for (let i=0;i<12;i++) {
+        const point = s.fracture.point.map((v,j) => v + Math.sin(i*2.4+j*7.1)*life*0.32);
+        const at = project(point);
+        if (!at) continue;
+        ctx.fillStyle = 'rgba(166,139,104,'+(1-life)+')';
+        ctx.fillRect(...at,i%3+1,i%2+1);
+      }
     }
     if (s.mounted) {
       for (const [n, point] of anchors.entries()) {
