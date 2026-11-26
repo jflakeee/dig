@@ -57,7 +57,9 @@ export function createView(canvas) {
   resize();
   new ResizeObserver(resize).observe(canvas);
   return function render(s, now) {
-    const { world, pos, yaw, pitch, light, working, anchors, contact, minerals } = s;
+    const { world, pos, yaw, pitch, light, working, anchors, contact, minerals, focus } = s;
+    // A focusing lamp narrows the central beam and carries it further.
+    const spread = focus ? 30 : 16, beam = focus ? 0.55 : 0.28, falloff = focus ? 0.05 : 0.12;
     const w = canvas.width,
       h = canvas.height,
       f = Math.min(w, h) * 0.82;
@@ -102,10 +104,10 @@ export function createView(canvas) {
             light[0] * Math.exp(-5 * ((u + 0.22) ** 2 + (v - 0.06) ** 2));
           const rightLight =
             light[1] * Math.exp(-6 * ((u - 0.24) ** 2 + (v + 0.1) ** 2));
-          const core = light[2] * Math.exp(-16 * (u * u + v * v));
+          const core = light[2] * Math.exp(-spread * (u * u + v * v));
           const lum =
-            (((left * 0.65 + rightLight * 0.55 + core * 0.28) * grain * 185) /
-              (1 + 0.12 * hit.t ** 1.45)) *
+            (((left * 0.65 + rightLight * 0.55 + core * beam) * grain * 185) /
+              (1 + falloff * hit.t ** 1.45)) *
             hit.shade;
           // Once a drill is mounted, exposed faces show the block's minerals:
           // the base tints the stone, a companion appears as grains.

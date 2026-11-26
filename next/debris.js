@@ -13,7 +13,8 @@ export function hitHull(part, pos, speed, anchored) {
   const normal = gap.map(v => v/distance);
   const approach = normal.reduce((sum,n,i) => sum+n*(part.speed[i]-speed[i]),0);
   if (approach <= 0) return [0,0,0];
-  const hullMass = anchored ? 48 : 8;
+  // `anchored` is true (48) or the anchored mass itself when a chain winder helps.
+  const hullMass = anchored ? (anchored === true ? 48 : anchored) : 8;
   const impulse = 1.15*approach/(1/part.mass + 1/hullMass);
   part.speed = part.speed.map((v,i) => v-normal[i]*impulse/part.mass);
   return normal.map(n => n*impulse/hullMass);
