@@ -1,11 +1,11 @@
 # DIG ⛏️
 
-**모바일 우선 3D 채굴·탐험 게임** · Three.js + TypeScript · 브라우저에서 바로 플레이
+**모바일 우선 3D 채굴·탐험 게임** · 브라우저에서 바로 플레이
 
 [![Build and deploy](https://github.com/jflakeee/dig/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/jflakeee/dig/actions/workflows/build.yml)
 [![Dependency audit](https://github.com/jflakeee/dig/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/jflakeee/dig/actions/workflows/security.yml)
 
-[🎮 게임 플레이](https://jflakeee.github.io/dig/) · [📋 개발 기록](docs/map-systems-20261118.md) · [🐛 문제 제보](https://github.com/jflakeee/dig/issues) · [⚙️ GitHub Actions](https://github.com/jflakeee/dig/actions)
+[🎮 통합설계 시험판 플레이](https://jflakeee.github.io/dig/next/) · [클래식 플레이](https://jflakeee.github.io/dig/) · [📋 개발 기록](docs/map-systems-20261118.md) · [🐛 문제 제보](https://github.com/jflakeee/dig/issues) · [⚙️ GitHub Actions](https://github.com/jflakeee/dig/actions)
 
 > 설치 없이 실행하는 1인칭 복셀 채굴 프로토타입입니다. 개발 중인 게임으로, 모바일 기기별 성능과 조작감은 달라질 수 있습니다.
 
@@ -14,10 +14,17 @@
 | 버전 | 실행 주소 |
 | --- | --- |
 | 클래식 | [현재 게임](https://jflakeee.github.io/dig/) |
-| 통합설계 시험판 · 첫 드릴과 첫 포탈 | [시험 플레이](https://jflakeee.github.io/dig/next/) |
+| 통합설계 시험판 · 자동 채굴과 중력 포탈 | [시험 플레이](https://jflakeee.github.io/dig/next/) |
 | 2026-11-25 보존판 | [클래식](https://jflakeee.github.io/dig/versions/2026-11-25/) · [4D 시제품](https://jflakeee.github.io/dig/versions/2026-11-25/dig-4d.html) |
 
-시험판은 화면을 드래그해 방향을 바꾸고, 일반 암석 3개로 첫 드릴을 제작합니다. 드릴을 장착하면 시야 방향으로 계속 전진하며, 메뉴를 열거나 포탈을 지나도 운행이 이어집니다. 청크 끝에서는 그대로 다음 암반을 채굴합니다. 포탈 방향은 시야 안에서는 원형 표식, 시야 밖에서는 화면 가장자리의 화살표로 표시합니다.
+## 시험판 플레이 방법
+
+어둠 속에서 채굴 기계의 조명이 켜지면 레이저가 일반 암석을 수집합니다. 암석 3개가 모이면 **드릴 제작**을 누르세요. 드릴이 전방에 장착되면 기체가 채굴하면서 자동 전진합니다. 화면을 드래그해 방향을 바꿀 수 있고 메뉴를 열어도 채굴은 계속됩니다.
+
+- **암석**은 위치에 따라 64가지 불규칙한 다면체 모양으로 나타납니다. 잘린 모서리와 틈으로 뒤쪽 암석이 보이며 채굴과 충돌은 0.5m 블록 단위입니다.
+- **첫 포탈**은 시작 청크 전방에 항상 나타나며 중력이 약합니다. 센서는 포탈 방향을 화면 안의 원이나 화면 가장자리 화살표로 알려줍니다.
+- **추가 포탈**은 청크 한 면의 블록 1,024개를 모두 제거한 뒤 5분과 짧은 무작위 지연이 지나면 열립니다. 통로마다 한 번 정해진 무작위 중력이 해당 청크의 기체와 먼지에 작용합니다. 첫 면을 비운 뒤 5분 안에 여섯 면을 모두 비우면 이웃 청크 여섯 곳이 동시에 연결됩니다.
+- **저장**은 암석 수량, 드릴, 포탈 통과 기록을 보존합니다. 새로고침하면 굴착 지형과 열리기를 기다리는 포탈은 초기화됩니다.
 
 ## 클래식 게임 소개
 
@@ -30,7 +37,7 @@
 - **탐험 기록:** 동굴 발견, 탐험 목표와 진행 상황을 확인합니다.
 - **저장:** 브라우저 로컬 저장소에 진행 상황을 저장합니다. 저장 실패·충돌에 대한 보호 로직이 포함되어 있습니다.
 
-## 플레이 방법
+## 클래식 플레이 방법
 
 | 조작 | PC | 모바일 |
 | --- | --- | --- |
@@ -46,11 +53,11 @@
 ## 실행 환경
 
 - 최신 Chromium 기반 브라우저 권장
-- WebGL 사용 가능 환경 필요
+- 클래식은 WebGL 사용 가능 환경 필요
 - 모바일 터치 조작 지원
 - 진행 상황은 **현재 브라우저·기기**의 로컬 저장소에 보관됩니다. 브라우저 데이터를 삭제하거나 다른 기기에서 접속하면 저장 기록이 이어지지 않을 수 있습니다.
 
-## 자주 묻는 질문
+## 클래식 자주 묻는 질문
 
 **게임이 검은 화면으로 표시되나요?** WebGL을 지원하는 최신 브라우저에서 다시 열고, 브라우저의 하드웨어 가속 설정을 확인해 보세요. 기기·브라우저 정보와 함께 문제를 제보하면 도움이 됩니다.
 
@@ -62,8 +69,8 @@
 
 ## 개발 환경
 
-- **엔진 / 렌더링:** Three.js
-- **언어:** TypeScript
+- **렌더링:** 클래식은 Three.js, 통합설계 시험판은 Canvas 2D 광선 추적
+- **언어:** TypeScript, JavaScript
 - **빌드:** Vite
 - **오디오:** plinkfx
 - **배포:** GitHub Pages
@@ -94,15 +101,17 @@ npm run build -- --base=/dig/
 node --experimental-strip-types --test tests/*.test.mjs
 ```
 
-브라우저 스모크 테스트는 Playwright와 빌드된 게임을 제공하는 로컬 미리보기 서버가 필요합니다. 실제 CI 구성은 [browser.yml](.github/workflows/browser.yml)을 참고하세요.
+브라우저 스모크 테스트는 Playwright와 빌드된 게임을 제공하는 로컬 미리보기 서버가 필요합니다. [통합판·4D 검증](.github/workflows/dig-4d-restore.yml)과 [클래식 브라우저 검증](.github/workflows/browser.yml)에서 실행 절차를 확인할 수 있습니다.
 
-## 개발 중인 차기 월드 설계 (미구현)
+## 시험판 후속 구현
 
-하늘과 지표면이 없는 3차원 무한 지하 월드, 매점 건물 대신 메뉴형 상점, 원거리 청크 초기화, 채굴로 새로 노출된 블록의 광물 실시간 결정을 설계했습니다. **현재 플레이 가능한 main 버전에는 아직 적용되지 않았습니다.**
+굴착 지형과 포탈 생성 예약의 새로고침 복원, 빈 공간·동굴·부유 창고 생성, 포탈 중력에 의한 블록 이탈과 화물 충돌은 후속 작업입니다. 사망 시 장비 내구도 감소와 사망 원인에 따른 화물 손실 규칙도 상세설계에 포함되어 있습니다.
 
-- [최신 설계 문서](docs/infinite-underground-world-20261122.md)
+- [통합판 구현 상세설계](docs/dig-next-implementation-detail-20261126.md)
+- [청크 여섯 면과 포탈 생성 규칙](docs/dig-chunk-faces-and-portals.md)
+- [포탈 중력·연쇄 붕괴·재기동 설계](docs/dig-portal-collapse-and-reboot.md)
 - [프로젝트 메모리·결정사항](docs/PROJECT_MEMORY.md)
-- [온라인 3종 모드 설계 — 개발 보류](docs/online-multiplayer-modes-20261123.md)
+- [온라인 모드 설계](docs/online-multiplayer-modes-20261123.md)
 
 ## 개발 및 배포 현황
 
