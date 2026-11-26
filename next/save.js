@@ -1,11 +1,12 @@
 import { cellOwner, savedAir } from './world.js';
 import { blockYield, mineralIds, variants, defaultVariant, rockVariantAt, elementUnits } from './minerals.js';
 import { elementSymbols } from './elements.js';
+import { blockDiscovery, capsuleElement, specimenById, specimenUnits, captureSeconds } from './specimens.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 5;
+export const saveVersion = 6;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -20,7 +21,27 @@ export const migrations = {
   3: s => ({...s, variants: {}}),
   // Element inventory by symbol and the order each element was first recovered.
   4: s => ({...s, elements: {}, elementLog: []}),
+  // Specimen and capsule pieces, kinds first found, sensitive finds awaiting
+  // capture and the run of capsules that held registered elements.
+  5: s => ({...s, specimens: [], specimenLog: [], captures: [], capsuleMisses: 0}),
 };
+// Sensitive finds wait in `captures`; only the first has a deadline in world
+// seconds. A deadline reached before the capture input loses the find.
+function expireCaptures(s, now) {
+  const lost = [];
+  while (s.captures.length) {
+    const head = s.captures[0];
+    head.expiresAt ??= now + head.seconds;
+    if (now < head.expiresAt) break;
+    lost.push(s.captures.shift());
+    if (s.captures[0]) s.captures[0].expiresAt = head.expiresAt + s.captures[0].seconds;
+  }
+  return lost;
+}
+function addSpecimen(s, piece) {
+  s.specimens.push(piece);
+  if (!s.specimenLog.includes(piece.kind)) s.specimenLog.push(piece.kind);
+}
 // Sub-species counts. `variants` holds only non-default sub-species, keyed
 // "mineral:variant"; the rest of a mineral's total is its default sub-species.
 const total = (s, id) => id === 'rock' ? s.rocks : s.minerals[id] ?? 0;
@@ -74,6 +95,10 @@ const fresh = () => ({
   variants: {},
   elements: {},
   elementLog: [],
+  specimens: [],
+  specimenLog: [],
+  captures: [],
+  capsuleMisses: 0,
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
@@ -101,7 +126,18 @@ function validMinerals(s) {
     s.elements && typeof s.elements === 'object' && !Array.isArray(s.elements) &&
     Object.entries(s.elements).every(([symbol, n]) => s.elementLog.includes(symbol) && Number.isSafeInteger(n) && n > 0) &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
-    new Set(s.elementLog).size === s.elementLog.length;
+    new Set(s.elementLog).size === s.elementLog.length &&
+    Array.isArray(s.specimens) && s.specimens.every(validPiece) &&
+    Array.isArray(s.captures) && s.captures.every((c, i) => validPiece(c) && specimenById(c.kind)?.sensitive &&
+      Number.isFinite(c.seconds) && c.seconds > 0 && (c.expiresAt === null || (i === 0 && Number.isFinite(c.expiresAt)))) &&
+    new Set([...s.specimens, ...s.captures].map(p => p.id)).size === s.specimens.length + s.captures.length &&
+    Array.isArray(s.specimenLog) && s.specimenLog.every(kind => kind === 'capsule' || specimenById(kind)) &&
+    new Set(s.specimenLog).size === s.specimenLog.length &&
+    Number.isSafeInteger(s.capsuleMisses) && s.capsuleMisses >= 0;
+}
+function validPiece(p) {
+  return p && typeof p.id === 'string' && p.id.length <= 80 &&
+    (p.kind === 'capsule' ? specimenUnits('capsule', null, p.element) !== null : specimenUnits(p.kind, p.variant) !== null);
 }
 function validSession(s) {
   const w = s?.world;
@@ -208,6 +244,10 @@ export async function commit(revision, operation, session) {
       found = !Number.isSafeInteger(seed) ? {base: 'rock', companion: null}
         : s.front ? blockYield(seed, chunk, epoch, index)
         : {base: 'rock', baseVariant: rockVariantAt(seed, chunk, epoch, index), companion: null};
+      // The block's work key doubles as the id of whatever it uncovers.
+      if (s.front && Number.isSafeInteger(seed))
+        found.discovery = blockDiscovery(seed, chunk.join(',') + ':' + epoch + ':cell' + index);
+      found.id = chunk.join(',') + ':' + epoch + ':' + index + '@' + (seed ?? 0);
     }
     switch (type) {
       case 'blast':
@@ -277,11 +317,31 @@ export async function commit(revision, operation, session) {
         s.transited = false;
         s.drillCondition = Math.floor((s.drillCondition ?? 100)*0.4);
         break;
+      case 'capture': {
+        if (!s.front || !session || !Number.isFinite(session.world?.elapsed)) throw Error('포집할 수 없습니다.');
+        expireCaptures(s, session.world.elapsed);
+        const head = s.captures[0];
+        if (!head || head.id !== operation.id) throw Error('포집 시간이 지났습니다.');
+        s.captures.shift();
+        if (s.captures[0]) s.captures[0].expiresAt = session.world.elapsed + s.captures[0].seconds;
+        const {expiresAt, seconds, ...piece} = head;
+        addSpecimen(s, piece);
+        break;
+      }
       case 'decompose': {
         // One piece leaves and its element units arrive in the same save.
-        const units = elementUnits(operation?.mineral, operation?.variant);
-        if (!s.front || !units) throw Error('분해할 원료를 다시 선택해 주세요.');
-        spendVariant(s, operation.mineral, operation.variant);
+        let units;
+        if (operation?.kind) {
+          const at = s.specimens.findIndex(p => p.kind === operation.kind &&
+            (p.kind === 'capsule' ? p.element === operation.element : p.variant === operation.variant));
+          if (!s.front || at < 0) throw Error('분해할 원료가 없습니다.');
+          const [piece] = s.specimens.splice(at, 1);
+          units = specimenUnits(piece.kind, piece.variant, piece.element);
+        } else {
+          units = elementUnits(operation?.mineral, operation?.variant);
+          if (!s.front || !units) throw Error('분해할 원료를 다시 선택해 주세요.');
+          spendVariant(s, operation.mineral, operation.variant);
+        }
         for (const [symbol, n] of Object.entries(units)) {
           if ((s.elements[symbol] ?? 0) > Number.MAX_SAFE_INTEGER - n) throw Error('원소 보관 한도에 도달했습니다.');
           s.elements[symbol] = (s.elements[symbol] ?? 0) + n;
@@ -302,6 +362,17 @@ export async function commit(revision, operation, session) {
       grant(s, id, variant);
       if (!s.mineralLog.includes(id)) s.mineralLog.push(id);
     }
+    const d = found?.discovery;
+    if (d?.kind === 'capsule') {
+      const element = capsuleElement(d.sample, s.elementLog, s.capsuleMisses);
+      s.capsuleMisses = s.elementLog.includes(element) ? s.capsuleMisses + 1 : 0;
+      addSpecimen(s, {id: found.id, kind: 'capsule', element});
+    } else if (d && specimenById(d.kind).sensitive) {
+      s.captures.push({id: found.id, kind: d.kind, variant: d.variant, seconds: captureSeconds, expiresAt: null});
+    } else if (d) addSpecimen(s, {id: found.id, kind: d.kind, variant: d.variant});
+    // Moving to another space or rebooting leaves pending finds behind.
+    if (type === 'transit' || type === 'reboot' || type === 'reset') s.captures = [];
+    else if (session && Number.isFinite(session.world?.elapsed)) expireCaptures(s, session.world.elapsed);
     if (type === 'collect' && s.rocks === 3) s.craftReadyAt = Date.now()+fabricationMs;
     if (session) s.session = session;
     s.revision++;
