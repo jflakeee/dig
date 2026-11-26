@@ -7,6 +7,7 @@ const fresh = () => ({
   front: null,
   transited: false,
   trips: 0,
+  drillCondition: 100,
   cargo: [0,0,0],
   session: null,
   arrivalRadius: 1.64,
@@ -16,9 +17,10 @@ const unreadable = '저장 기록을 읽을 수 없습니다. 원본을 보존�
 const vector = (v, valid = Number.isFinite) => Array.isArray(v) && v.length === 3 && v.every(n => valid(n));
 function validSession(s) {
   const w = s?.world;
-  return vector(s?.pos) && vector(s.velocity) && (s.drift === undefined || vector(s.drift)) && Number.isFinite(s.yaw) && Number.isFinite(s.pitch) &&
+  return (s?.hull === undefined || (Number.isFinite(s.hull) && s.hull > 0 && s.hull <= 100)) && vector(s?.pos) && vector(s.velocity) && (s.drift === undefined || vector(s.drift)) && Number.isFinite(s.yaw) && Number.isFinite(s.pitch) &&
     typeof s.sensor === 'boolean' && Number.isInteger(s.entered) && s.entered >= -1 &&
     Number.isFinite(w?.elapsed) && w.elapsed >= 0 && vector(w.center, Number.isSafeInteger) &&
+    (w.cargoTime === undefined || (Number.isFinite(w.cargoTime) && w.cargoTime >= 0 && w.cargoTime < 0.05)) &&
     typeof w.hasMouth === 'boolean' && Array.isArray(w.chunks) && w.chunks.every(c =>
       c && vector([c.x,c.y,c.z], Number.isSafeInteger) &&
       (c.debris === undefined || (c.debris && Number.isSafeInteger(c.debris.tick) && c.debris.tick >= 0 &&
@@ -29,6 +31,8 @@ function validSession(s) {
         Number.isSafeInteger(c.seed) && c.seed >= 0 && c.seed <= 0xffffffff)) &&
       (c.kind !== 'warehouse' || (Array.isArray(c.items) && c.items.length <= 9 && c.items.every(item =>
         item && Number.isInteger(item.id) && item.id >= 0 && item.id < 9 && vector(item.point) &&
+        (item.speed === undefined || vector(item.speed)) &&
+        (item.cooldown === undefined || (Number.isFinite(item.cooldown) && item.cooldown >= 0)) &&
         (item.type === null || [0,1,2].includes(item.type))))) &&
       (Array.isArray(c.air) ? c.air.every(n => Number.isInteger(n) && n >= 0 && n < 32768)
         : typeof c.air === 'string' && /^[A-Za-z0-9+/]{5462}==$/.test(c.air)) &&
@@ -55,6 +59,7 @@ export function readSave() {
     !Number.isSafeInteger(s.rocks) ||
     s.rocks < 0 ||
     (s.cargo !== undefined && !vector(s.cargo, n => Number.isSafeInteger(n) && n >= 0)) ||
+    (s.drillCondition !== undefined && !(Number.isInteger(s.drillCondition) && s.drillCondition >= 0 && s.drillCondition <= 100)) ||
     (s.session != null && !validSession(s.session)) ||
     !Array.isArray(s.drills) ||
     !(
@@ -104,6 +109,11 @@ export async function commit(revision, operation, session) {
         s.trips = (s.trips ?? Number(s.transited)) + 1;
         s.transited = true;
         s.session = null;
+        break;
+      case 'reboot':
+        s.session = null;
+        s.transited = false;
+        s.drillCondition = Math.floor((s.drillCondition ?? 100)*0.4);
         break;
       case 'reset':
         Object.assign(s, fresh(), { revision });

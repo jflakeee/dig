@@ -19,7 +19,19 @@ export function hitHull(part, pos, speed, anchored) {
   return normal.map(n => n*impulse/hullMass);
 }
 
-export function simulate(state, dt, pos, speed, anchored, solid, remove, field) {
+export function contactDamage(body, pos, speed, field, dt, blocked) {
+  const gap = pos.map((v,i) => v-body.point[i]);
+  const distance = Math.hypot(...gap);
+  if (distance < 0.0001 || distance > 1.3) return 0;
+  const normal = gap.map(v => v/distance);
+  const closing = normal.reduce((sum,n,i) => sum+n*(body.speed[i]-speed[i]),0);
+  const impact = Math.max(0, closing-2.5)**2 * body.mass;
+  const load = normal.reduce((sum,n,i) => sum+n*field[i],0) * body.mass;
+  const pinned = load > 0 && blocked(pos.map((v,i) => v+0.16*normal[i]));
+  return impact + (pinned ? load*dt : 0);
+}
+
+export function simulate(state, dt, pos, speed, anchored, solid, remove, field, onContact) {
   const push = [0,0,0];
   state.time += dt;
   while (state.time + 1e-9 >= step) {
@@ -56,7 +68,9 @@ export function simulate(state, dt, pos, speed, anchored, solid, remove, field) 
           part.speed[i] *= -0.25;
         } else part.point = next;
       }
-      const hit = hitHull(part,pos,speed.map((v,i) => v+push[i]),anchored);
+      const relativeTo = speed.map((v,i) => v+push[i]);
+      onContact?.(part,relativeTo,pull,step);
+      const hit = hitHull(part,pos,relativeTo,anchored);
       for (let i=0; i<3; i++) push[i] += hit[i];
     }
   }

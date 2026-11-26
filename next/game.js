@@ -28,9 +28,11 @@ let age = 0,
   osc,
   gain;
 let checkpointAge = 0;
+let hull = 100;
 function loadWorld() {
   const session = save?.session;
   checkpointAge = 0;
+  hull = session?.hull ?? 100;
   world = createWorld(!save?.transited, Math.random, save?.arrivalRadius, save?.arrivalStrength, session?.world);
   pos = session?.pos ?? [0.5, 0.5, 0.5];
   velocity = session?.velocity ?? [0, 0, 0];
@@ -59,6 +61,10 @@ function hud() {
   }
   el('confirm-reset').disabled = busy;
   if (panel) el('cargo').textContent = (save?.cargo ?? []).map((n,i) => n ? cargoNames[i] + ' × ' + n : '').filter(Boolean).join(' · ');
+  if (panel && save.front) {
+    const cargo = el('cargo');
+    cargo.textContent = [cargo.textContent, '기체 ' + Math.ceil(hull) + '% · 드릴 ' + (save.drillCondition ?? 100) + '%'].filter(Boolean).join(' | ');
+  }
   const marker = el('sensor');
   const nearest = world.portals().reduce((best, portal) => {
     const distance = Math.hypot(...portal.point.map((v, i) => v - pos[i]));
@@ -106,11 +112,11 @@ async function write(op, after) {
   hud();
   try {
     let session = save.front && (op === 'collect' || op === 'checkpoint' || op?.type === 'pickup')
-      ? {pos, velocity, drift, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
+      ? {hull, pos, velocity, drift, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
       : null;
     if (op?.type === 'transit') {
       const destination = createWorld(false, Math.random, op.radius, op.strength);
-      session = {pos:[0.5,0.5,0.5],velocity:[0,0,0],drift,yaw:0,pitch:0,sensor:false,entered:-1,world:destination.snapshot()};
+      session = {hull,pos:[0.5,0.5,0.5],velocity:[0,0,0],drift,yaw:0,pitch:0,sensor:false,entered:-1,world:destination.snapshot()};
     }
     save = await commit(save.revision, op, session);
     checkpointAge = 0;
@@ -265,7 +271,19 @@ function tick(dt) {
     return;
   }
   if (busy) return;
-  const push = world.debrisStep(dt,pos,velocity.map((v,i) => v+drift[i]),anchors.length > 0);
+  const {push,damage} = world.hullContacts(dt,pos,velocity.map((v,i) => v+drift[i]),anchors.length > 0);
+  if (damage > 0) {
+    hull = Math.max(0,hull-damage);
+    if (hull === 0) {
+      write('reboot', () => {
+        age = 0;
+        loadWorld();
+        message('기체 파손 · 재기동');
+      });
+      return;
+    }
+    message('충격·압착 감지 · 기체 ' + Math.ceil(hull) + '%');
+  }
   drift = drift.map((v,i) => (v+push[i])*Math.exp(-1.2*dt));
   if (Math.hypot(...drift) > 0.001) {
     if (!move(dt,drift)) drift = [0,0,0];
@@ -289,7 +307,7 @@ function tick(dt) {
       targetTag = tag;
     }
     timer += dt;
-    if (timer >= 0.16) {
+    if (timer >= (save.drillCondition === 0 ? 1.35 : 0.16)) {
       timer = 0;
       world.dig(...target);
       write('collect', () => {
@@ -310,7 +328,7 @@ function tick(dt) {
   if (along < 0) velocity = velocity.map((v, i) => v - along * d[i]);
   const moved = move(dt);
   if (moved && !busy) {
-    const type = world.takeNearby(pos);
+    const type = world.takeNearby(pos,velocity.map((v,i) => v+drift[i]));
     if (type !== null) write({type:'pickup', item:type}, () => message(cargoNames[type] + ' 회수'));
   }
   if (moved && !sensor) {
@@ -336,7 +354,7 @@ function frame(time) {
         pitch,
         light,
         anchors,
-        mounted: !!save?.front,
+        mounted: !!save?.front && save.drillCondition !== 0,
         working,
       },
       time / 1000,

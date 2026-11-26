@@ -1,3 +1,5 @@
+import { contactDamage } from '../next/debris.js';
+import { commit, readSave, saveKey } from '../next/save.js';
 import { hitHull } from '../next/debris.js';
 import { intersectStone } from '../next/rock-shapes.js';
 import assert from 'node:assert/strict';
@@ -236,4 +238,45 @@ test('fragment push depends on mass, closing speed and chain anchoring', () => {
   assert.equal(push(4,-2,false),0);
   assert.ok(push(4,0,false) < push(1,0,false));
   assert.ok(push(1,0,false) < push(1,0,true));
+});
+
+test('pressure accumulates only while a body pins the hull against solid rock', () => {
+  const body = {point:[-1,0,0],speed:[0,0,0],mass:4};
+  const pos = [0,0,0], speed = [0,0,0], field = [2,0,0];
+  assert.equal(contactDamage(body,pos,speed,field,0.05,() => false),0);
+  assert.equal(contactDamage(body,pos,speed,field,0.05,p => p[0]>0),0.4);
+  assert.equal(contactDamage(body,pos,speed,[-2,0,0],0.05,() => true),0);
+});
+
+test('fast floating cargo damages the hull and remains in the world after impact', () => {
+  const world = createWorld(false,() => 0.86);
+  const item = world.warehouseItems()[0].item;
+  const pos = item.point.map((v,i) => v+(i===0 ? 1 : 0));
+  item.speed = [6,0,0];
+  assert.equal(world.takeNearby(pos),null);
+  const result = world.hullContacts(0.05,pos,[0,0,0],false);
+  assert.ok(result.damage>0 && result.push[0]>0);
+  assert.equal(world.takeNearby(pos),null);
+  const restored = createWorld(false,() => 0.86,undefined,undefined,JSON.parse(JSON.stringify(world.snapshot())));
+  assert.deepEqual(restored.warehouseItems()[0].item,item);
+});
+
+test('fatal collision reboots once, retaining cargo and damaging the mounted drill', async t => {
+  const data = new Map();
+  const original = ['navigator','localStorage'].map(k => Object.getOwnPropertyDescriptor(globalThis,k));
+  t.after(() => ['navigator','localStorage'].forEach((k,i) => {
+    if (original[i]) Object.defineProperty(globalThis,k,original[i]); else delete globalThis[k];
+  }));
+  Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:k=>data.get(k)??null,setItem:(k,v)=>data.set(k,v)}});
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{locks:{request:async(k,f)=>f()}}});
+  const previous = {...readSave(), front:'drill-1',drills:['drill-1'],cargo:[2,1,3],transited:true};
+  data.set(saveKey,JSON.stringify(previous));
+  const next = await commit(previous.revision,'reboot');
+  assert.equal(next.drillCondition,40);
+  assert.deepEqual(next.cargo,previous.cargo);
+  assert.deepEqual(next.drills,previous.drills);
+  assert.equal(next.transited,false);
+  assert.equal(next.session,null);
+  await assert.rejects(commit(previous.revision,'reboot'));
+  assert.equal(readSave().drillCondition,40);
 });

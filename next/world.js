@@ -1,4 +1,4 @@
-import { simulate } from './debris.js';
+import { simulate, hitHull, contactDamage } from './debris.js';
 import { terrainKinds, makeChunk, naturalSolid, identify } from './chunk-terrain.js';
 // One cell is half a metre. Coordinates name a voxel by its lower corner.
 export const radius = 0.92;
@@ -88,13 +88,13 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
   function fragments() {
     return chunks.get('0,0,0')?.debris?.parts ?? [];
   }
-  function debrisStep(dt, pos, speed, anchored) {
+  function debrisStep(dt, pos, speed, anchored, onContact) {
     if (tutorial || !hasMouth) return [0,0,0];
     const chunk = chunks.get('0,0,0');
     const state = chunk.debris ??= {tick:0,time:0,parts:[]};
     state.parts = state.parts.filter(part => part.point.every((v,i) => Math.abs(chunkOf(Math.floor(v))-center[i]) <= 1));
     const active = portals();
-    return simulate(state,dt,pos,speed,anchored,solid,(x,y,z) => dig(x,y,z,false),p => gravity(p,active));
+    return simulate(state,dt,pos,speed,anchored,solid,(x,y,z) => dig(x,y,z,false),p => gravity(p,active),onContact);
   }
   function portals() {
     const result = hasMouth ? [initial] : [];
@@ -139,7 +139,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
     }
   }
   function snapshot() {
-    return {elapsed, center, hasMouth, chunks: Array.from(chunks.values(), chunk => {
+    return {elapsed, center, hasMouth, cargoTime, chunks: Array.from(chunks.values(), chunk => {
       const {air, ...state} = chunk;
       if (air.size < 1024) return {...state, air: Array.from(air)};
       const bytes = new Uint8Array(side ** 3 / 8);
@@ -178,11 +178,51 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
       for (const item of chunk.items ?? []) entries.push({chunk,item});
     return entries;
   }
-  function takeNearby(pos) {
-    const chunk = chunkAt(...pos.map(Math.floor), true);
-    const index = chunk.items?.findIndex(item => Math.hypot(...item.point.map((v,i) => v-pos[i])) <= 1.3);
-    if (index == null || index < 0) return null;
-    return identify(chunk.items.splice(index,1)[0],chunk);
+  function takeNearby(pos, velocity = [0,0,0]) {
+    for (const {chunk,item} of warehouseItems()) {
+      if (Math.hypot(...item.point.map((v,i) => v-pos[i])) > 1.3 || item.cooldown > 0) continue;
+      if (Math.hypot(...velocity.map((v,i) => v-(item.speed?.[i] ?? 0))) > 2.5) continue;
+      chunk.items.splice(chunk.items.indexOf(item),1);
+      return identify(item,chunk);
+    }
+    return null;
+  }
+
+  let cargoTime = saved?.cargoTime ?? 0;
+  function hullContacts(dt,pos,speed,anchored) {
+    let damage = 0;
+    const blocked = point => blockers(point).length > 0;
+    function contact(body,relativeTo,field,time) {
+      const loss = contactDamage(body,pos,relativeTo,field,time,blocked);
+      damage += loss;
+      return loss;
+    }
+    const push = debrisStep(dt,pos,speed,anchored,contact);
+    cargoTime += dt;
+    const active = portals();
+    while (cargoTime + 1e-9 >= 0.05) {
+      cargoTime = Math.max(0,cargoTime-0.05);
+      for (const {item,chunk} of warehouseItems()) {
+        item.speed ??= [0,0,0];
+        const mass = 1 + ((chunk.seed + item.id*17) % 5);
+        const field = gravity(item.point,active);
+        for (let i=0; i<3; i++) {
+          item.speed[i] = (item.speed[i] + 0.05*field[i])*0.999;
+          const point = item.point.slice();
+          point[i] += 0.05*item.speed[i];
+          if (solid(...point.map(Math.floor))) item.speed[i] *= -0.25;
+          else item.point = point;
+        }
+        item.cooldown = Math.max(0,(item.cooldown ?? 0)-0.05);
+        const body = {point:item.point,speed:item.speed,mass};
+        const relativeTo = speed.map((v,i) => v+push[i]);
+        if (contact(body,relativeTo,field,0.05) > 0) item.cooldown = 0.5;
+        const hit = hitHull(body,pos,relativeTo,anchored);
+        item.speed = body.speed;
+        for (let i=0; i<3; i++) push[i] += hit[i];
+      }
+    }
+    return {push,damage};
   }
   function blockers(p) {
     const found = [];
@@ -239,7 +279,7 @@ export function createWorld(tutorial, random = Math.random, arrivalRadius = 1.64
   }
   return {
     advance(dt) { elapsed += dt; },
-    debrisStep, fragments, snapshot, portals, gravity, warehouseItems, takeNearby,
+    hullContacts, debrisStep, fragments, snapshot, portals, gravity, warehouseItems, takeNearby,
     hasChunk(x, y, z) { return chunks.has([x, y, z].join(',')); },
     tutorial,
     solid,
