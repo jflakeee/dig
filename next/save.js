@@ -2,11 +2,12 @@ import { cellOwner, savedAir } from './world.js';
 import { blockYield, mineralIds, variants, defaultVariant, rockVariantAt, elementUnits } from './minerals.js';
 import { elementSymbols } from './elements.js';
 import { blockDiscovery, capsuleElement, specimenById, specimenUnits, captureSeconds } from './specimens.js';
+import { findById, findUnits } from './finds.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 6;
+export const saveVersion = 7;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -24,7 +25,13 @@ export const migrations = {
   // Specimen and capsule pieces, kinds first found, sensitive finds awaiting
   // capture and the run of capsules that held registered elements.
   5: s => ({...s, specimens: [], specimenLog: [], captures: [], capsuleMisses: 0}),
+  // Equipment, unknown materials and everyday items, and the kinds first found.
+  // `clockLog` keeps the minute each recovered desk clock stopped at.
+  6: s => ({...s, finds: [], findLog: [], clockLog: []}),
 };
+// Capture rules for a sensitive specimen or find: seconds allowed and the
+// drill damage an expired find deals (a lost gas or mercury deals none).
+const captureRule = kind => findById(kind)?.sensitive ?? (specimenById(kind)?.sensitive ? {seconds: captureSeconds, damage: 0} : null);
 // Sensitive finds wait in `captures`; only the first has a deadline in world
 // seconds. A deadline reached before the capture input loses the find.
 function expireCaptures(s, now) {
@@ -34,11 +41,20 @@ function expireCaptures(s, now) {
     head.expiresAt ??= now + head.seconds;
     if (now < head.expiresAt) break;
     lost.push(s.captures.shift());
+    // An unstable find that is not secured in time bursts against the drill once.
+    const damage = captureRule(head.kind)?.damage ?? 0;
+    if (damage && s.front) s.drillCondition = Math.max(0, (s.drillCondition ?? 100) - damage);
     if (s.captures[0]) s.captures[0].expiresAt = head.expiresAt + s.captures[0].seconds;
   }
   return lost;
 }
 function addSpecimen(s, piece) {
+  if (findById(piece.kind)) {
+    s.finds.push(piece);
+    if (!s.findLog.includes(piece.kind)) s.findLog.push(piece.kind);
+    if (piece.kind === 'desk_clock') s.clockLog.push(piece.stoppedAt);
+    return;
+  }
   s.specimens.push(piece);
   if (!s.specimenLog.includes(piece.kind)) s.specimenLog.push(piece.kind);
 }
@@ -99,6 +115,9 @@ const fresh = () => ({
   specimenLog: [],
   captures: [],
   capsuleMisses: 0,
+  finds: [],
+  findLog: [],
+  clockLog: [],
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
@@ -128,12 +147,21 @@ function validMinerals(s) {
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
     new Set(s.elementLog).size === s.elementLog.length &&
     Array.isArray(s.specimens) && s.specimens.every(validPiece) &&
-    Array.isArray(s.captures) && s.captures.every((c, i) => validPiece(c) && specimenById(c.kind)?.sensitive &&
+    Array.isArray(s.finds) && s.finds.every(validFind) &&
+    Array.isArray(s.findLog) && s.findLog.every(kind => findById(kind)) && new Set(s.findLog).size === s.findLog.length &&
+    Array.isArray(s.clockLog) && s.clockLog.every(m => Number.isInteger(m) && m >= 0 && m < 720) &&
+    Array.isArray(s.captures) && s.captures.every((c, i) => (validPiece(c) || validFind(c)) && captureRule(c.kind) &&
       Number.isFinite(c.seconds) && c.seconds > 0 && (c.expiresAt === null || (i === 0 && Number.isFinite(c.expiresAt)))) &&
-    new Set([...s.specimens, ...s.captures].map(p => p.id)).size === s.specimens.length + s.captures.length &&
+    new Set([...s.specimens, ...s.finds, ...s.captures].map(p => p.id)).size === s.specimens.length + s.finds.length + s.captures.length &&
     Array.isArray(s.specimenLog) && s.specimenLog.every(kind => kind === 'capsule' || specimenById(kind)) &&
     new Set(s.specimenLog).size === s.specimenLog.length &&
     Number.isSafeInteger(s.capsuleMisses) && s.capsuleMisses >= 0;
+}
+function validFind(p) {
+  const f = p && findById(p.kind);
+  return !!f && typeof p.id === 'string' && p.id.length <= 80 && f.variants.some(v => v.variant === p.variant) &&
+    (f.category !== 'equipment' || (Number.isInteger(p.durability) && p.durability >= 0 && p.durability <= 100)) &&
+    (p.kind !== 'desk_clock' || (Number.isInteger(p.stoppedAt) && p.stoppedAt >= 0 && p.stoppedAt < 720));
 }
 function validPiece(p) {
   return p && typeof p.id === 'string' && p.id.length <= 80 &&
@@ -317,6 +345,14 @@ export async function commit(revision, operation, session) {
         s.transited = false;
         s.drillCondition = Math.floor((s.drillCondition ?? 100)*0.4);
         break;
+      case 'equip-head': {
+        const at = s.finds.findIndex(p => p.id === operation?.id && p.kind === 'drill_head');
+        if (!s.front || at < 0 || s.finds[at].durability <= (s.drillCondition ?? 100))
+          throw Error('교체할 드릴 헤드가 없습니다.');
+        // The worn cutting head is discarded and the found one takes its place.
+        s.drillCondition = s.finds.splice(at, 1)[0].durability;
+        break;
+      }
       case 'capture': {
         if (!s.front || !session || !Number.isFinite(session.world?.elapsed)) throw Error('포집할 수 없습니다.');
         expireCaptures(s, session.world.elapsed);
@@ -331,7 +367,13 @@ export async function commit(revision, operation, session) {
       case 'decompose': {
         // One piece leaves and its element units arrive in the same save.
         let units;
-        if (operation?.kind) {
+        if (operation?.find) {
+          // Only everyday items break down here; equipment and unknown materials keep their value whole.
+          const at = s.finds.findIndex(p => p.kind === operation.find && p.variant === operation.variant && findUnits(p.kind, p.variant));
+          if (!s.front || at < 0) throw Error('분해할 원료가 없습니다.');
+          const [piece] = s.finds.splice(at, 1);
+          units = findUnits(piece.kind, piece.variant);
+        } else if (operation?.kind) {
           const at = s.specimens.findIndex(p => p.kind === operation.kind &&
             (p.kind === 'capsule' ? p.element === operation.element : p.variant === operation.variant));
           if (!s.front || at < 0) throw Error('분해할 원료가 없습니다.');
@@ -367,9 +409,12 @@ export async function commit(revision, operation, session) {
       const element = capsuleElement(d.sample, s.elementLog, s.capsuleMisses);
       s.capsuleMisses = s.elementLog.includes(element) ? s.capsuleMisses + 1 : 0;
       addSpecimen(s, {id: found.id, kind: 'capsule', element});
-    } else if (d && specimenById(d.kind).sensitive) {
-      s.captures.push({id: found.id, kind: d.kind, variant: d.variant, seconds: captureSeconds, expiresAt: null});
-    } else if (d) addSpecimen(s, {id: found.id, kind: d.kind, variant: d.variant});
+    } else if (d) {
+      const piece = d.find ? {id: found.id, ...d.find} : {id: found.id, kind: d.kind, variant: d.variant};
+      const rule = captureRule(piece.kind);
+      if (rule) s.captures.push({...piece, seconds: rule.seconds, expiresAt: null});
+      else addSpecimen(s, piece);
+    }
     // Moving to another space or rebooting leaves pending finds behind.
     if (type === 'transit' || type === 'reboot' || type === 'reset') s.captures = [];
     else if (session && Number.isFinite(session.world?.elapsed)) expireCaptures(s, session.world.elapsed);

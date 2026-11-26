@@ -178,6 +178,10 @@ section {
   display: block;
   margin: 8px 0 4px;
 }
+#stored-list {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
 #element-list {
   margin: 0 0 12px;
   line-height: 1.6;

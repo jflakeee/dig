@@ -6,6 +6,7 @@ import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRe
 import { mineralIds, mineralName, variantName, elementUnits } from './minerals.js';
 import { elementSymbols } from './elements.js';
 import { specimenById, specimenLabel, specimenUnits } from './specimens.js';
+import { findById, findLabel, findUnits, clockText } from './finds.js';
 import { createView, portalMarker } from './view.js';
 const el = (id) => document.getElementById(id);
 const canvas = el('scene'),
@@ -77,7 +78,8 @@ function showDiscoveries() {
   const entries = save?.discoveries ?? [];
   const found = save?.mineralLog ?? [];
   const samples = save?.specimenLog ?? [];
-  book.hidden = !entries.length && !found.length && !samples.length;
+  const items = save?.findLog ?? [];
+  book.hidden = !entries.length && !found.length && !samples.length && !items.length;
   if (!panel || book.hidden) {
     book.open = false;
     return;
@@ -85,6 +87,8 @@ function showDiscoveries() {
   const list = el('discovery-list');
   const lines = [...found.map(id => '광물 · ' + mineralName(id)),
     ...samples.map(kind => '시료 · ' + (kind === 'capsule' ? '원소 표본 캡슐' : specimenById(kind).name)),
+    ...items.map(kind => '물품 · ' + findById(kind).name + (kind === 'desk_clock' && save.clockLog?.length
+      ? ' · 멈춘 시각 ' + save.clockLog.map(clockText).join(', ') : '')),
     ...entries.map(({item,count}) => cargoNames[item] + ' · 누적 회수 ' + count + '개')];
   if (list.textContent === lines.join('')) return;
   list.replaceChildren(...lines.map(text => {
@@ -108,11 +112,18 @@ function decomposeChoices() {
   }
   for (const [value, [n, p]] of groups)
     choices.push([value, specimenLabel(p.kind, p.variant, p.element) + ' · ' + n + '개', specimenUnits(p.kind, p.variant, p.element)]);
+  const items = new Map();
+  for (const p of save.finds ?? []) if (findUnits(p.kind, p.variant)) {
+    const value = 'f:' + p.kind + ':' + p.variant;
+    items.set(value, [(items.get(value)?.[0] ?? 0) + 1, p]);
+  }
+  for (const [value, [n, p]] of items) choices.push([value, findLabel(p) + ' · ' + n + '개', findUnits(p.kind, p.variant)]);
   return choices;
 }
 function decomposeOperation(value) {
   const [source, kind, variant] = value.split(':');
   if (source === 'm') return {type: 'decompose', mineral: kind, variant};
+  if (source === 'f') return {type: 'decompose', find: kind, variant};
   return kind === 'capsule' ? {type: 'decompose', kind, element: variant} : {type: 'decompose', kind, variant};
 }
 const unitText = units => Object.entries(units).map(([symbol, n]) => symbol + ' ' + n).join(' · ');
@@ -140,6 +151,30 @@ function showDecomposer() {
   el('element-list').textContent = elementSymbols.filter(symbol => log.includes(symbol))
     .map(symbol => symbol + ' ' + (save.elements[symbol] ?? 0)).join(' · ');
 }
+// Finds kept whole: equipment with durability, unknown materials and items.
+function showStored() {
+  const box = el('stored');
+  const pieces = save?.finds ?? [];
+  box.hidden = !save?.front || !pieces.length;
+  if (!panel || box.hidden) return;
+  el('stored-count').textContent = pieces.length + '개';
+  const lines = pieces.map(p => findLabel(p) + (p.durability !== undefined ? ' · 내구도 ' + p.durability + '%' : '') +
+    (p.kind === 'desk_clock' ? ' · 멈춘 시각 ' + clockText(p.stoppedAt) : '') +
+    (findById(p.kind).category === 'unknown' ? ' · 미분석' : findById(p.kind).category === 'equipment' && p.kind !== 'drill_head' ? ' · 장착 슬롯 준비 중' : ''));
+  const list = el('stored-list');
+  if (list.dataset.lines !== JSON.stringify(lines)) {
+    list.replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
+    list.dataset.lines = JSON.stringify(lines);
+  }
+  const head = bestHead();
+  el('equip-head').hidden = !head;
+  el('equip-head').disabled = busy;
+  if (head) el('equip-head').textContent = '드릴 헤드 교체 · 내구도 ' + (save.drillCondition ?? 100) + '% → ' + head.durability + '%';
+}
+function bestHead() {
+  return (save?.finds ?? []).filter(p => p.kind === 'drill_head' && p.durability > (save.drillCondition ?? 100))
+    .sort((a, b) => b.durability - a.durability)[0];
+}
 function recoverCargo(item, label) {
   const isNew = !save.discoveries.some(entry => entry.item === item);
   write({type:'pickup', item}, () => {
@@ -157,6 +192,7 @@ function hud() {
   el('panel').hidden = !panel;
   showDiscoveries();
   showDecomposer();
+  showStored();
   if (!panel) {
     el('reset-prompt').hidden = true;
     el('reset').hidden = false;
@@ -192,10 +228,12 @@ function hud() {
   const left = pending ? pending.expiresAt - world.elapsed : 0;
   el('capture-alert').hidden = el('capture').hidden = !pending || left <= 0;
   if (pending && left > 0) {
-    const label = specimenById(pending.kind).sensitive;
-    el('capture-alert').textContent = label + ' · ' + (pending.kind === 'mercury' ? '밀봉' : '포집') + '까지 ' + Math.ceil(left) + '초' +
+    const rule = findById(pending.kind)?.sensitive;
+    const label = rule ? rule.alert : specimenById(pending.kind).sensitive;
+    const verb = rule ? rule.button.split(' ')[0] : pending.kind === 'mercury' ? '밀봉' : '포집';
+    el('capture-alert').textContent = label + ' · ' + verb + '까지 ' + Math.ceil(left) + '초' +
       (save.captures.length > 1 ? ' · 대기 ' + (save.captures.length - 1) : '');
-    el('capture').textContent = pending.kind === 'mercury' ? '냉각 밀봉' : '기체 포집';
+    el('capture').textContent = rule ? rule.button : pending.kind === 'mercury' ? '냉각 밀봉' : '기체 포집';
   }
   el('capture').disabled = busy;
   const hazard = world.hazard;
@@ -273,7 +311,17 @@ async function write(op, after) {
         el('discovery-notice').textContent = '발견 도감에 기록됨 · ' + mineralName(first);
       }
     }
-    const had = new Set((before.specimens ?? []).map(p => p.id));
+    const had = new Set([...(before.specimens ?? []), ...(before.finds ?? [])].map(p => p.id));
+    const freshFinds = (save.finds ?? []).filter(p => !had.has(p.id));
+    if (freshFinds.length && type !== 'capture') {
+      message(freshFinds.map(p => '발견 · ' + findLabel(p) + (p.durability !== undefined ? ' · 내구도 ' + p.durability + '%' : '') +
+        (p.kind === 'desk_clock' ? ' · ' + clockText(p.stoppedAt) + '에 멈춤' : '')).join(' · '));
+      const first = freshFinds.find(p => !before.findLog?.includes(p.kind));
+      if (first) {
+        discoveryNoticeUntil = age + 2;
+        el('discovery-notice').textContent = '발견 도감에 기록됨 · ' + findById(first.kind).name;
+      }
+    }
     const fresh = (save.specimens ?? []).filter(p => !had.has(p.id));
     if (fresh.length && type !== 'capture') {
       message(fresh.map(p => p.kind === 'capsule' ? '원소 표본 캡슐 회수 · ' + p.element : '시료 발견 · ' + specimenLabel(p.kind, p.variant)).join(' · '));
@@ -283,10 +331,11 @@ async function write(op, after) {
         el('discovery-notice').textContent = '발견 도감에 기록됨 · ' + (first.kind === 'capsule' ? '원소 표본 캡슐' : specimenById(first.kind).name);
       }
     }
-    const kept = new Set([...(save.captures ?? []), ...(save.specimens ?? [])].map(p => p.id));
+    const kept = new Set([...(save.captures ?? []), ...(save.specimens ?? []), ...(save.finds ?? [])].map(p => p.id));
     const lost = (before.captures ?? []).filter(p => !kept.has(p.id));
     if (lost.length && !['transit', 'reboot', 'reset'].includes(type))
-      message(lost.map(p => specimenLabel(p.kind, p.variant) + ' 소실').join(' · '));
+      message(lost.map(p => findById(p.kind)?.sensitive ? findLabel(p) + ' 폭발 · 드릴 -' + findById(p.kind).sensitive.damage
+        : specimenLabel(p.kind, p.variant) + ' 소실').join(' · '));
     if (type === 'craft') installedUntil = Date.now()+1600;
     checkpointAge = 0;
     after?.();
@@ -344,7 +393,12 @@ el('decompose-source').onchange = () => hud();
 el('capture').onclick = () => {
   const pending = save?.captures?.[0];
   if (!pending) return;
-  write({type: 'capture', id: pending.id}, () => message(specimenLabel(pending.kind, pending.variant) + ' 회수'));
+  write({type: 'capture', id: pending.id}, () =>
+    message((findById(pending.kind) ? findLabel(pending) : specimenLabel(pending.kind, pending.variant)) + ' 회수'));
+};
+el('equip-head').onclick = () => {
+  const head = bestHead();
+  if (head) write({type: 'equip-head', id: head.id}, () => message('드릴 헤드 교체 · 내구도 ' + save.drillCondition + '%'));
 };
 el('decompose').onclick = () => {
   const choice = decomposeChoices().find(([value]) => value === el('decompose-source').value);
