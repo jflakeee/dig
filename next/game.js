@@ -2,8 +2,9 @@ import { intersectStone } from './rock-shapes.js';
 import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, portalRayDistance, radius } from './world.js';
-import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts, decompositionPreview } from './save.js';
+import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice } from './save.js';
 import { massText } from './composition.js';
+import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate } from './trade.js';
 import { mineralIds, mineralName, variantName } from './minerals.js';
 import { elementSymbols } from './elements.js';
 import { specimenById, specimenLabel } from './specimens.js';
@@ -152,6 +153,107 @@ function showDecomposer() {
   el('element-list').textContent = elementSymbols.filter(symbol => log.includes(symbol))
     .map(symbol => symbol + ' ' + massText(save.elements[symbol] ?? 0, symbol)).join(' · ');
 }
+// Drone trade with machines of other times. Prices hold for one market cycle.
+const credit = n => n.toLocaleString('ko-KR') + ' ' + currency;
+const pieceName = p => p.kind === 'capsule' || specimenById(p.kind) ? specimenLabel(p.kind, p.variant, p.element) : findLabel(p);
+function tradeOperation(value) {
+  const [source, kind, variant, id] = value.split('|');
+  return {source, kind, variant, element: kind === 'capsule' ? variant : undefined, id: id || undefined};
+}
+function sellChoices() {
+  const choices = [];
+  for (const id of mineralIds)
+    for (const [v, n] of Object.entries(variantCounts(save, id))) if (n > 0)
+      choices.push(['m|' + id + '|' + v, (variantName(id, v) === mineralName(id) ? mineralName(id) : variantName(id, v) + ' (' + mineralName(id) + ')') + ' · ' + n + '개']);
+  const groups = new Map();
+  for (const p of save.specimens) if (p.kind !== 'capsule') {
+    const value = 's|' + p.kind + '|' + p.variant;
+    groups.set(value, [(groups.get(value)?.[0] ?? 0) + 1, p]);
+  }
+  for (const p of save.finds) {
+    const c = findById(p.kind).category;
+    if (c === 'unknown') continue;
+    const value = 'f|' + p.kind + '|' + p.variant + (c === 'equipment' ? '|' + p.id : '');
+    groups.set(value, [(groups.get(value)?.[0] ?? 0) + 1, p]);
+  }
+  for (const [value, [n, p]] of groups)
+    choices.push([value, pieceName(p) + (p.durability !== undefined ? ' · 내구도 ' + p.durability + '%' : '') + ' · ' + n + '개']);
+  return choices.map(([value, label]) => [value, label, sellPrice(save, tradeOperation(value))]).filter(c => c[2]);
+}
+function auctionChoices() {
+  const out = [];
+  for (const p of save.specimens) if (p.kind === 'capsule') out.push(['s|capsule|' + p.element + '|' + p.id, pieceName(p), auctionEstimate(p)]);
+  for (const p of save.finds) if (findById(p.kind).category === 'unknown') out.push(['f|' + p.kind + '|' + p.variant + '|' + p.id, pieceName(p), auctionEstimate(p)]);
+  return out;
+}
+function fillSelect(select, options) {
+  if (select.dataset.options === JSON.stringify(options)) return;
+  const chosen = select.value;
+  select.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
+  select.dataset.options = JSON.stringify(options);
+  if (options.some(([value]) => value === chosen)) select.value = chosen;
+}
+// Log entries are "sold:<id>:<price>:<fee>" or "unsold:<id>"; ids may contain colons.
+function tradeLogText(entry) {
+  const parts = entry.split(':');
+  if (parts[0] === 'unsold') return '유찰 · ' + (tradeNames.get(parts.slice(1).join(':')) ?? '경매품') + ' 반환';
+  const fee = Number(parts.pop()), price = Number(parts.pop());
+  return '낙찰 · ' + (tradeNames.get(parts.slice(1).join(':')) ?? '경매품') + ' · ' + credit(price) + ' (수수료 ' + credit(fee) + ')';
+}
+const tradeNames = new Map();
+function showTrade() {
+  const box = el('trade');
+  box.hidden = !save?.front;
+  if (!panel || box.hidden) return;
+  const cycle = marketCycle(save.marketTime);
+  const trader = traderOf(save.marketSeed, cycle);
+  el('credits').textContent = credit(save.credits);
+  const left = Math.ceil((cycle + 1) * cycleSeconds - save.marketTime);
+  el('trader').textContent = '신호 #' + trader.signal + ' · ' + trader.name + ' · 시세 갱신까지 ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+  const sells = sellChoices();
+  fillSelect(el('sell-source'), sells.map(([value, label, price]) => [value, label + ' → ' + credit(price)]));
+  const sell = sells.find(([value]) => value === el('sell-source').value);
+  el('sell').textContent = sell ? '1개 판매 · ' + credit(sell[2]) : '판매할 물품 없음';
+  el('sell').disabled = busy || !sell;
+  const stock = marketStock(save.marketSeed, cycle);
+  const buttons = stock.map(o => '구매 · ' + o.name + (o.durability ? ' (내구도 ' + o.durability + '%)' : '') + ' · ' + credit(o.price));
+  const list = el('buy-list');
+  if (list.dataset.labels !== JSON.stringify(buttons)) {
+    list.replaceChildren(...stock.map((o, i) => {
+      const b = Object.assign(document.createElement('button'), {textContent: buttons[i]});
+      b.dataset.item = o.item;
+      b.onclick = () => {
+        const offer = marketStock(save.marketSeed, marketCycle(save.marketTime)).find(x => x.item === o.item);
+        write({type: 'buy', item: o.item, price: offer.price}, () => message(offer.name + ' 구매 · ' + credit(offer.price)));
+      };
+      return b;
+    }));
+    list.dataset.labels = JSON.stringify(buttons);
+  }
+  for (const b of list.children) b.disabled = busy || save.credits < (stock.find(o => o.item === b.dataset.item)?.price ?? Infinity);
+  const auctions = auctionChoices();
+  fillSelect(el('auction-source'), auctions.map(([value, label, estimate]) => [value, label + ' · 추정 ' + credit(estimate)]));
+  el('auction').disabled = busy || !auctions.length;
+  el('auction').textContent = auctions.length ? '경매 등록 · ' + auctionSeconds + '초 뒤 결과' : '경매에 올릴 물품 없음';
+  for (const a of save.auctions) tradeNames.set(a.id, pieceName(a.piece));
+  const rows = save.auctions.map(a => [a.id, pieceName(a.piece) + ' · 추정 ' + credit(a.estimate) + ' · 마감까지 ' + Math.max(0, Math.ceil(a.endsAt - save.marketTime)) + '초']);
+  const auctionList = el('auction-list');
+  if (auctionList.dataset.rows !== JSON.stringify(rows)) {
+    auctionList.replaceChildren(...rows.map(([id, text]) => {
+      const li = Object.assign(document.createElement('li'), {textContent: text + ' '});
+      const cancel = Object.assign(document.createElement('button'), {textContent: '등록 취소'});
+      cancel.onclick = () => write({type: 'cancel-auction', id}, () => message('경매 취소 · 물품 반환'));
+      li.append(cancel);
+      return li;
+    }));
+    auctionList.dataset.rows = JSON.stringify(rows);
+  }
+  const log = save.tradeLog.slice(0, 5).map(tradeLogText);
+  if (el('trade-log').dataset.lines !== JSON.stringify(log)) {
+    el('trade-log').replaceChildren(...log.map(text => Object.assign(document.createElement('li'), {textContent: text})));
+    el('trade-log').dataset.lines = JSON.stringify(log);
+  }
+}
 // Finds kept whole: equipment with durability, unknown materials and items.
 function showStored() {
   const box = el('stored');
@@ -194,6 +296,7 @@ function hud() {
   showDiscoveries();
   showDecomposer();
   showStored();
+  showTrade();
   if (!panel) {
     el('reset-prompt').hidden = true;
     el('reset').hidden = false;
@@ -338,6 +441,9 @@ async function write(op, after) {
     if (lost.length && !['transit', 'reboot', 'reset'].includes(type))
       message(lost.map(p => findById(p.kind)?.sensitive ? findLabel(p) + ' 폭발 · 드릴 -' + findById(p.kind).sensitive.damage
         : specimenLabel(p.kind, p.variant) + ' 소실').join(' · '));
+    for (const a of before.auctions ?? []) tradeNames.set(a.id, pieceName(a.piece));
+    const settled = (save.tradeLog ?? []).filter(entry => !(before.tradeLog ?? []).includes(entry));
+    if (settled.length) message(settled.map(tradeLogText).join(' · '));
     if (type === 'craft') installedUntil = Date.now()+1600;
     checkpointAge = 0;
     after?.();
@@ -392,6 +498,19 @@ el('stabilize').onclick = () => {
   recoverCargo(2, '밀봉 회수 · 미확인 결정');
 };
 el('decompose-source').onchange = () => hud();
+el('sell-source').onchange = () => hud();
+el('sell').onclick = () => {
+  const value = el('sell-source').value;
+  const price = value && sellPrice(save, tradeOperation(value));
+  if (!price) return;
+  const label = el('sell-source').selectedOptions[0]?.textContent.replace(/ · \d+개 → .*$/, '');
+  write({type: 'sell', ...tradeOperation(value), price}, () => message(label + ' 판매 · ' + credit(price)));
+};
+el('auction').onclick = () => {
+  const value = el('auction-source').value;
+  if (!value) return;
+  write({type: 'auction', ...tradeOperation(value)}, () => message('경매 등록 · 다른 시간대 채굴기의 입찰을 기다립니다'));
+};
 el('capture').onclick = () => {
   const pending = save?.captures?.[0];
   if (!pending) return;

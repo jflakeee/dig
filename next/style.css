@@ -159,6 +159,33 @@ section {
   text-shadow: 0 1px 3px #000;
   margin-bottom: 4px;
 }
+#trade label {
+  display: block;
+  margin: 8px 0 4px;
+  font-size: 0.9em;
+  color: #b9c4c2;
+}
+#trade select {
+  width: 100%;
+  min-height: 44px;
+  background: #192022;
+  color: #e9efed;
+  border: 1px solid #697574;
+  border-radius: 5px;
+  font: inherit;
+}
+#trader {
+  margin: 4px 0;
+  color: #9fd8d1;
+}
+#auction-list, #trade-log {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+#trade-log {
+  color: #b9c4c2;
+  font-size: 0.9em;
+}
 #decomposer label {
   display: block;
   margin: 4px 0;

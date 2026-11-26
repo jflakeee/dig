@@ -4,11 +4,12 @@ import { elementSymbols } from './elements.js';
 import { blockDiscovery, capsuleElement, specimenById, specimenUnits, specimenPiece, captureSeconds } from './specimens.js';
 import { findById, findPiece } from './finds.js';
 import { decompose, decompositionFee } from './composition.js';
+import { marketCycle, sellQuote, marketStock, auctionEstimate, auctionOutcome, auctionSeconds } from './trade.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 8;
+export const saveVersion = 9;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -32,7 +33,54 @@ export const migrations = {
   // Elements become grams (one former unit counts as one gram) and the
   // decomposer counts its runs, which fix each run's loss.
   7: s => ({...s, decomposeCount: 0}),
+  // Drone trade: credits, a market seed and game-time market clock, auctions in escrow.
+  8: s => ({...s, ...tradeStart()}),
 };
+const tradeStart = () => ({credits: 0, marketSeed: Math.floor(Math.random() * 4294967296), marketTime: 0,
+  marketClock: null, auctions: [], tradeLog: [], purchaseCount: 0});
+// The market clock follows world time while playing; a new world or a jump
+// back (another space, a reboot) restarts the reference without adding time.
+function advanceMarket(s, world) {
+  if (!world || !Number.isFinite(world.elapsed)) return;
+  const prev = s.marketClock;
+  if (prev && prev.seed === (world.seed ?? 0) && world.elapsed >= prev.elapsed)
+    s.marketTime += Math.min(world.elapsed - prev.elapsed, 30);
+  s.marketClock = {seed: world.seed ?? 0, elapsed: world.elapsed};
+}
+function logTrade(s, text) {
+  s.tradeLog.unshift(text);
+  s.tradeLog.length = Math.min(s.tradeLog.length, 20);
+}
+// Auctions settle once, when the market clock reaches their end.
+function settleAuctions(s) {
+  for (const a of s.auctions.filter(a => s.marketTime >= a.endsAt)) {
+    const result = auctionOutcome(s.marketSeed, a.id, a.estimate);
+    if (result.sold) {
+      s.credits += result.net;
+      logTrade(s, 'sold:' + a.id + ':' + result.price + ':' + result.fee);
+    } else {
+      (a.origin === 'specimens' ? s.specimens : s.finds).push(a.piece);
+      logTrade(s, 'unsold:' + a.id);
+    }
+  }
+  s.auctions = s.auctions.filter(a => s.marketTime < a.endsAt);
+}
+// The piece or mineral a trade operation names, and how to take it away.
+function tradeTarget(s, op) {
+  if (op?.source === 'm' && variants[op.kind] && (variantCounts(s, op.kind)[op.variant] ?? 0) > 0)
+    return {thing: {mineral: op.kind}, key: 'm:' + op.kind, take: () => spendVariant(s, op.kind, op.variant)};
+  const list = op?.source === 's' ? s.specimens : op?.source === 'f' ? s.finds : null;
+  const at = list ? list.findIndex(p => op.id ? p.id === op.id : p.kind === op.kind &&
+    (p.kind === 'capsule' ? p.element === op.element : p.variant === op.variant)) : -1;
+  if (at < 0) return null;
+  const piece = list[at];
+  return {thing: piece, piece, origin: op.source === 's' ? 'specimens' : 'finds',
+    key: op.source + ':' + piece.kind + ':' + (piece.element ?? piece.variant), take: () => list.splice(at, 1)};
+}
+export function sellPrice(s, op) {
+  const t = tradeTarget(s, op);
+  return t && sellQuote(s.marketSeed, marketCycle(s.marketTime), t.thing, t.key);
+}
 // What decomposing the piece named by `operation` would yield, without
 // changing the save: input grams, the share lost and element grams out.
 export function decompositionPreview(s, operation) {
@@ -145,6 +193,7 @@ const fresh = () => ({
   findLog: [],
   clockLog: [],
   decomposeCount: 0,
+  ...tradeStart(),
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
@@ -172,6 +221,15 @@ function validMinerals(s) {
     s.elements && typeof s.elements === 'object' && !Array.isArray(s.elements) &&
     Object.entries(s.elements).every(([symbol, n]) => s.elementLog.includes(symbol) && Number.isFinite(n) && n > 0) &&
     Number.isSafeInteger(s.decomposeCount) && s.decomposeCount >= 0 &&
+    Number.isSafeInteger(s.credits) && s.credits >= 0 &&
+    Number.isSafeInteger(s.marketSeed) && s.marketSeed >= 0 && s.marketSeed <= 0xffffffff &&
+    Number.isFinite(s.marketTime) && s.marketTime >= 0 &&
+    (s.marketClock === null || (Number.isFinite(s.marketClock?.seed) && Number.isFinite(s.marketClock.elapsed))) &&
+    Array.isArray(s.auctions) && s.auctions.every(a => a && typeof a.id === 'string' && a.piece?.id === a.id &&
+      ['specimens', 'finds'].includes(a.origin) && (a.origin === 'specimens' ? validPiece(a.piece) : validFind(a.piece)) &&
+      Number.isSafeInteger(a.estimate) && a.estimate > 0 && Number.isFinite(a.endsAt)) &&
+    Array.isArray(s.tradeLog) && s.tradeLog.length <= 20 && s.tradeLog.every(t => typeof t === 'string') &&
+    Number.isSafeInteger(s.purchaseCount) && s.purchaseCount >= 0 &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
     new Set(s.elementLog).size === s.elementLog.length &&
     Array.isArray(s.specimens) && s.specimens.every(validPiece) &&
@@ -180,7 +238,8 @@ function validMinerals(s) {
     Array.isArray(s.clockLog) && s.clockLog.every(m => Number.isInteger(m) && m >= 0 && m < 720) &&
     Array.isArray(s.captures) && s.captures.every((c, i) => (validPiece(c) || validFind(c)) && captureRule(c.kind) &&
       Number.isFinite(c.seconds) && c.seconds > 0 && (c.expiresAt === null || (i === 0 && Number.isFinite(c.expiresAt)))) &&
-    new Set([...s.specimens, ...s.finds, ...s.captures].map(p => p.id)).size === s.specimens.length + s.finds.length + s.captures.length &&
+    new Set([...s.specimens, ...s.finds, ...s.captures, ...(s.auctions ?? []).map(a => a.piece)].map(p => p.id)).size ===
+      s.specimens.length + s.finds.length + s.captures.length + (s.auctions?.length ?? 0) &&
     Array.isArray(s.specimenLog) && s.specimenLog.every(kind => kind === 'capsule' || specimenById(kind)) &&
     new Set(s.specimenLog).size === s.specimenLog.length &&
     Number.isSafeInteger(s.capsuleMisses) && s.capsuleMisses >= 0;
@@ -407,6 +466,42 @@ export async function commit(revision, operation, session) {
         s.decomposeCount++;
         break;
       }
+      case 'sell': {
+        // The confirmed price must still be this cycle's offer; otherwise show the new one first.
+        const t = s.front && tradeTarget(s, operation);
+        const price = t && sellQuote(s.marketSeed, marketCycle(s.marketTime), t.thing, t.key);
+        if (!price) throw Error('판매할 물품이 없습니다.');
+        if (price !== operation.price) throw Error('시세가 바뀌었습니다. 새 가격을 확인해 주세요.');
+        t.take();
+        s.credits += price;
+        break;
+      }
+      case 'buy': {
+        const offer = s.front && marketStock(s.marketSeed, marketCycle(s.marketTime)).find(o => o.item === operation?.item);
+        if (!offer) throw Error('구매할 수 없습니다.');
+        if (offer.price !== operation.price) throw Error('시세가 바뀌었습니다. 새 가격을 확인해 주세요.');
+        if (s.credits < offer.price) throw Error('크레딧이 부족합니다.');
+        s.credits -= offer.price;
+        if (offer.item === 'ceramic') s.ceramic = (s.ceramic ?? 0) + 1;
+        else s.finds.push({id: 'buy:' + s.purchaseCount, kind: 'drill_head', variant: 'standard', durability: offer.durability});
+        s.purchaseCount++;
+        break;
+      }
+      case 'auction': {
+        const t = s.front && tradeTarget(s, operation);
+        const estimate = t?.piece && auctionEstimate(t.piece);
+        if (!estimate) throw Error('경매에 올릴 수 없습니다.');
+        t.take();
+        s.auctions.push({id: t.piece.id, piece: t.piece, origin: t.origin, estimate, endsAt: s.marketTime + auctionSeconds});
+        break;
+      }
+      case 'cancel-auction': {
+        const at = s.auctions.findIndex(a => a.id === operation?.id);
+        if (at < 0) throw Error('이미 끝난 경매입니다.');
+        const [a] = s.auctions.splice(at, 1);
+        (a.origin === 'specimens' ? s.specimens : s.finds).push(a.piece);
+        break;
+      }
       case 'reset':
         Object.assign(s, fresh(), { revision });
         break;
@@ -435,6 +530,10 @@ export async function commit(revision, operation, session) {
     if (type === 'transit' || type === 'reboot' || type === 'reset') s.captures = [];
     else if (session && Number.isFinite(session.world?.elapsed)) expireCaptures(s, session.world.elapsed);
     if (type === 'collect' && s.rocks === 3) s.craftReadyAt = Date.now()+fabricationMs;
+    if (type !== 'reset') {
+      advanceMarket(s, session?.world);
+      settleAuctions(s);
+    }
     if (session) s.session = session;
     s.revision++;
     localStorage.setItem(saveKey, JSON.stringify(s));
