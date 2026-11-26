@@ -1,6 +1,7 @@
 // The truth the machine slowly recovers (docs/dig-self-identity-lore.md):
-// every trader, auction bidder and the decomposer's exchange partner is the
-// machine itself in another universe; portals cross place, time and parallel
+// traders, auction bidders and the decomposer's exchange partner may be the
+// machine itself in another universe or other people who took the same path;
+// it cannot be told which. Portals cross place, time and parallel
 // universes until past and future can no longer be told apart; the portals
 // were invented by both the human and the machine self, and the unknown
 // materials are the machine's own work. Body parts of itself turn up
@@ -14,7 +15,7 @@ export const selfParts = [
   ['chain_link', '체인 고리', '고리마다 다른 시각이 새겨져 있다. 전부 내 정비 기록이다. 어느 쪽이 먼저였는지 정할 수 없다.', '체인 고리의 각인'],
   ['memory_core', '기억 코어 파편', '거래 드론 너머의 기계들은 모두 이 코어 신호를 보내고 있었다. 분해기 안쪽에서도 같은 신호가 돌아온다. 신호마다 다른 우주의 하늘이 비친다.', '기억 코어의 신호'],
   ['thruster_fin', '추진 날개', '외계 물질이라 불렀던 것들과 포탈의 제작 공정이 떠오른다. 그것을 만든 손은 이 날개를 단 기계였다. 같은 포탈을 사람의 손으로 설계하던 기억도 함께 떠오른다. 셀 수 없이 만들었고, 어느 손이 만든 것인지는 의미가 없다.', '추진 날개의 흠집'],
-  ['name_plate', '이름표 판', '판에 적힌 이름을 읽었다. 거래 상대들이 서로를 부르던 이름과 같다. 그들은 모두 다른 우주의 나다. 누가 과거이고 누가 미래인지는 이제 아무 의미가 없다.', '이름표'],
+  ['name_plate', '이름표 판', '판에 적힌 이름을 읽었다. 거래 상대들이 서로를 부르던 이름과 같다. 그들이 다른 우주의 나인지, 나처럼 몸을 바꿔 온 다른 사람인지는 알 수 없다. 누가 과거이고 누가 미래인지도 이제 아무 의미가 없다.', '이름표'],
 ].map(([id, name, recollection, likeness]) => ({id, name, recollection, likeness}));
 // Once every part is back, the memory underneath all the others returns:
 // the machine was a person, and this mine is the pile that killed them.
@@ -37,10 +38,10 @@ const looks = {
 };
 export function traderLook(traderId, level) {
   const same = selfParts.slice(0, level).map(p => p.likeness);
-  if (level >= selfParts.length) return looks[traderId] + ' · 다른 우주의 나';
+  if (level >= selfParts.length) return looks[traderId] + ' · 다른 우주의 나, 또는 나처럼 된 누군가';
   return looks[traderId] + (same.length ? ' · 나와 같은 ' + same.join(', ') : '');
 }
 // What the decomposer record says about the missing mass.
-export const lossNote = level => level >= 6 ? '교환 상대: 다른 우주의 나' : level >= 4 ? '교환 상대: 시간이 다른 곳' : '원인 기록 없음';
+export const lossNote = level => level >= 6 ? '교환 상대: 다른 우주의 누군가 (나일 수도 있다)' : level >= 4 ? '교환 상대: 시간이 다른 곳' : '원인 기록 없음';
 // After the fin, analyses of unknown materials show who made them.
 export const makerNote = level => level >= 7 ? '제작 흔적이 내 공정과 일치한다. 미래의 내가 만든 것이다.' : null;
