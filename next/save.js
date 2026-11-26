@@ -8,11 +8,12 @@ import { marketCycle, sellQuote, marketStock, auctionEstimate, auctionOutcome, a
 import { slotOf, captureBonus } from './equipment.js';
 import { studies, fragments } from './research.js';
 import { selfParts, nextPart } from './self.js';
+import { chooseEnding, endingCounters, counterFor, endingById } from './endings.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 12;
+export const saveVersion = 13;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -44,6 +45,9 @@ export const migrations = {
   10: s => ({...s, research: [], researchJob: null, memoryLog: []}),
   // Parts of the machine's own body found so far, in order; each restores memory.
   11: s => ({...s, selfParts: []}),
+  // How often the player researched, fitted equipment and repaired, and the
+  // ending fixed from those counts once the last memory returns.
+  12: s => ({...s, actions: {research: 0, equip: 0, repair: 0}, ending: null}),
 };
 // An analysis finishes once the market clock passes its end; its kind is then known.
 function finishResearch(s) {
@@ -216,6 +220,8 @@ const fresh = () => ({
   researchJob: null,
   memoryLog: [],
   selfParts: [],
+  actions: {research: 0, equip: 0, repair: 0},
+  ending: null,
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
@@ -259,6 +265,9 @@ function validMinerals(s) {
       Number.isFinite(s.researchJob.endsAt))) &&
     Array.isArray(s.memoryLog) && s.memoryLog.every((n, i) => n === i) && s.memoryLog.length <= fragments.length &&
     Array.isArray(s.selfParts) && s.selfParts.every(id => selfParts.some(p => p.id === id)) && new Set(s.selfParts).size === s.selfParts.length &&
+    s.actions && endingCounters.every(k => Number.isSafeInteger(s.actions[k]) && s.actions[k] >= 0) &&
+    Object.keys(s.actions).length === endingCounters.length &&
+    (s.ending === null || (endingById(s.ending) && s.selfParts.length === selfParts.length)) &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
     new Set(s.elementLog).size === s.elementLog.length &&
     Array.isArray(s.specimens) && s.specimens.every(validPiece) &&
@@ -593,6 +602,8 @@ export async function commit(revision, operation, session) {
       // A part of the machine itself rejoins the body at once; it is never stored or traded.
       const part = nextPart(s.selfParts, d.self);
       if (part) s.selfParts.push(part);
+      // The last part brings back the last memory; the ending is fixed then.
+      if (part && s.selfParts.length === selfParts.length) s.ending = chooseEnding(s.actions);
     } else if (d?.kind === 'capsule') {
       const element = capsuleElement(d.sample, s.elementLog, s.capsuleMisses);
       s.capsuleMisses = s.elementLog.includes(element) ? s.capsuleMisses + 1 : 0;
@@ -607,6 +618,8 @@ export async function commit(revision, operation, session) {
     if (type === 'transit' || type === 'reboot' || type === 'reset') s.captures = [];
     else if (session && Number.isFinite(session.world?.elapsed)) expireCaptures(s, session.world.elapsed);
     if (type === 'collect' && s.rocks === 3) s.craftReadyAt = Date.now()+fabricationMs;
+    const counter = counterFor(type, operation);
+    if (counter) s.actions[counter]++;
     if (type !== 'reset') {
       advanceMarket(s, session?.world);
       settleAuctions(s);

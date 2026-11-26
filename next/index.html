@@ -58,6 +58,7 @@
         <details id="self-book" hidden>
           <summary>자기 기억 <span id="self-count"></span></summary>
           <ul id="self-list"></ul>
+          <button id="ending-replay" hidden>엔딩 다시 보기</button>
         </details>
         <details id="element-book" hidden>
           <summary>원소 도감 <span id="element-count"></span></summary>
@@ -96,6 +97,12 @@
         <button id="close">닫기</button>
       </section>
     </main>
+    <section id="ending" aria-live="polite" hidden>
+      <canvas id="ending-canvas" aria-hidden="true"></canvas>
+      <p id="ending-line"></p>
+      <h2 id="ending-title"></h2>
+      <button id="ending-skip">건너뛰기</button>
+    </section>
     <script type="module" src="./game.js"></script>
   </body>
 </html>

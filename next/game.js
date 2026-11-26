@@ -8,6 +8,7 @@ import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketSt
 import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
 import { studies, fragments } from './research.js';
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
+import { endingById } from './endings.js';
 import { mineralIds, mineralName, variantName } from './minerals.js';
 import { elementSymbols } from './elements.js';
 import { specimenById, specimenLabel } from './specimens.js';
@@ -297,6 +298,75 @@ function showResearch() {
     el('memory-list').dataset.rows = JSON.stringify(lines);
   }
 }
+// Ending sequence: an animation per ending with its lines shown in turn.
+// Mining keeps running underneath; the player can skip at any time.
+let endingRun = null;
+function playEnding(id) {
+  const ending = endingById(id);
+  if (!ending) return;
+  const box = el('ending'), canvas = el('ending-canvas'), line = el('ending-line'), title = el('ending-title');
+  const ctx = canvas.getContext('2d');
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const lineSeconds = 4.5, start = performance.now();
+  box.hidden = false;
+  title.textContent = '';
+  el('ending-skip').textContent = '건너뛰기';
+  const run = {stop: false};
+  endingRun?.stop && (endingRun.stop = true);
+  endingRun = run;
+  const dots = Array.from({length: 140}, (_, i) => ({a: i * 2.399, r: Math.random(), s: 0.3 + Math.random()}));
+  function draw(now) {
+    if (run.stop) return;
+    const t = (now - start) / 1000;
+    const w = canvas.width = canvas.clientWidth, h = canvas.height = canvas.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+    const k = still ? 0 : t;
+    for (const d of dots) {
+      ctx.fillStyle = 'hsla(' + ending.hue + ',70%,' + (45 + 30 * d.s) + '%,' + (0.25 + 0.45 * d.s) + ')';
+      let x, y, size = 1.5 + 2.5 * d.s;
+      if (ending.motion === 'rain') {
+        // Memories falling past like unread text.
+        x = (d.r * w + d.a * 37) % w;
+        y = ((d.s * 90 * k + d.a * 53) % (h + 40)) - 20;
+        ctx.fillRect(x, y, 1.5, 10 + 18 * d.s);
+        continue;
+      }
+      if (ending.motion === 'assemble') {
+        // Parts drawn in from the edges to form one body.
+        const p = Math.min(1, k / 18 + d.r * 0.2);
+        const far = Math.max(w, h) * (0.9 - 0.6 * d.r);
+        const near = Math.min(w, h) * 0.18 * (0.6 + 0.4 * d.s);
+        const radius = far + (near - far) * p;
+        x = w / 2 + Math.cos(d.a) * radius;
+        y = h / 2 + Math.sin(d.a) * radius;
+      } else {
+        // Time turning without end.
+        const radius = Math.min(w, h) * (0.05 + 0.45 * d.r);
+        const angle = d.a + k * (0.6 - d.r * 0.4);
+        x = w / 2 + Math.cos(angle) * radius;
+        y = h / 2 + Math.sin(angle) * radius;
+      }
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const i = Math.floor(t / lineSeconds);
+    if (i < ending.lines.length) {
+      if (line.textContent !== ending.lines[i]) line.textContent = ending.lines[i];
+      line.style.opacity = still ? 1 : Math.min(1, (t % lineSeconds) / 0.8, (lineSeconds - t % lineSeconds) / 0.8);
+    } else {
+      line.textContent = '';
+      title.textContent = '엔딩 · ' + ending.title;
+      el('ending-skip').textContent = '닫기';
+    }
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+}
+function closeEnding() {
+  if (endingRun) endingRun.stop = true;
+  el('ending').hidden = true;
+}
 // The machine's own recovered memory, one recollection per body part found.
 function showSelf() {
   const found = save?.selfParts ?? [];
@@ -305,6 +375,8 @@ function showSelf() {
   el('self-count').textContent = found.length + ' / ' + selfParts.length;
   const lines = found.map(id => selfParts.find(p => p.id === id)).map(p => p.name + ' · ' + p.recollection);
   if (finalMemory(found.length)) lines.push('마지막 기억 · ' + finalMemory(found.length));
+  el('ending-replay').hidden = !save.ending;
+  if (save.ending) el('ending-replay').textContent = '엔딩 다시 보기 · ' + endingById(save.ending).title;
   if (el('self-list').dataset.rows !== JSON.stringify(lines)) {
     el('self-list').replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
     el('self-list').dataset.rows = JSON.stringify(lines);
@@ -507,6 +579,8 @@ async function write(op, after) {
       memoryUntil = age + (finalMemory(save.selfParts.length) ? 20 : 10);
       discoveryNoticeUntil = age + 3;
       el('discovery-notice').textContent = '기억 일부 복구 · ' + save.selfParts.length + ' / ' + selfParts.length;
+      // With the last memory back, the ending chosen from the player's habits follows it.
+      if (save.ending && !before.ending) setTimeout(() => playEnding(save.ending), 8000);
     }
     const had = new Set([...(before.specimens ?? []), ...(before.finds ?? [])].map(p => p.id));
     const freshFinds = (save.finds ?? []).filter(p => !had.has(p.id));
@@ -591,6 +665,8 @@ el('stabilize').onclick = () => {
   recoverCargo(2, '밀봉 회수 · 미확인 결정');
 };
 el('decompose-source').onchange = () => hud();
+el('ending-skip').onclick = closeEnding;
+el('ending-replay').onclick = () => playEnding(save.ending);
 el('sell-source').onchange = () => hud();
 el('research-source').onchange = () => hud();
 el('research-start').onclick = () => {

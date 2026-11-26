@@ -272,6 +272,49 @@ section button {
   width: 100%;
   margin: 4px 0;
 }
+/* Ending sequence: drawn animation with lines of text over it. */
+#ending {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: #020304;
+  display: grid;
+  place-items: center;
+  padding: 24px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left));
+}
+#ending-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+#ending-line, #ending-title {
+  position: relative;
+  max-width: 34em;
+  text-align: center;
+  color: #eef3f1;
+  text-shadow: 0 1px 6px #000;
+  transition: opacity 0.8s ease;
+}
+#ending-line {
+  font-size: 1.1em;
+  line-height: 1.7;
+  font-style: italic;
+}
+#ending-title {
+  margin: 0;
+  font-size: 1.4em;
+  letter-spacing: 0.08em;
+}
+#ending-skip {
+  position: absolute;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  width: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  #ending-line, #ending-title { transition: none; }
+}
 [hidden] {
   display: none !important;
 }
