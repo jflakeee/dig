@@ -160,13 +160,13 @@ try {
   await page.locator('#menu').click();
   await page.locator('#cargo').filter({hasText:'× 1'}).waitFor();
   item.speed = [6,0,0];
-  const collision = {...session,hull:0.5,pos:item.point.map((v,i) => v+Number(i===0)),world:warehouse.snapshot()};
+  const collision = {...session,yaw:Math.PI/2,hull:0.5,pos:item.point.map((v,i) => v+Number(i===0)),world:warehouse.snapshot()};
   await page.evaluate(([k,v]) => localStorage.setItem(k,JSON.stringify(v)),
-    [key,{...recovered,session:collision}]);
+    [key,{...recovered,cargo:[2,1,1],session:collision}]);
   await page.reload();
   await page.locator('#message').filter({hasText:'기체 파손'}).waitFor();
   const rebooted = await read();
-  assert.deepEqual(rebooted.cargo,recovered.cargo);
+  assert.deepEqual(rebooted.cargo,[1,1,1]);
   assert.equal(rebooted.drillCondition,40);
   await page.reload();
   assert.equal((await read()).drillCondition,40);
