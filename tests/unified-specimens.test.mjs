@@ -139,7 +139,7 @@ test('waiting finds start their timers in turn and moving away abandons them', a
 test('a capsule holds one element, counts repeats and decomposes without its shell', async t => {
   const data = mockStorage(t);
   t.mock.method(Math, 'random', () => 0.5);
-  const seed = seedFor(d => d?.kind === 'capsule');
+  const seed = seedFor(d => d?.kind === 'capsule' && !d.form);
   const all = elementSymbols.filter(e => e !== 'Og');
   data.set(saveKey, JSON.stringify(drilling({elements: {H: 1}, elementLog: all.map(e => e), capsuleMisses: 10})));
   const s = await commit(0, {type: 'drill', cell: [0, 0, 3]}, sessionOf(dugWorld(seed)));
@@ -169,4 +169,37 @@ test('a version-5 save opens with no specimens and malformed pieces are rejected
     data.set(saveKey, JSON.stringify({...clean, ...bad}));
     assert.throws(readSave, /원본을 보존/, JSON.stringify(bad));
   }
+});
+
+test('a share of capsules arrive unstable and burst against the drill when missed', async t => {
+  const { capsuleForm, capsuleForms } = await import('../next/specimens.js');
+  assert.deepEqual([0, 0.1999, 0.2, 0.2999, 0.3, 0.999].map(capsuleForm), ['pressure', 'pressure', 'energy', 'energy', null, null]);
+  const data = mockStorage(t);
+  t.mock.method(Math, 'random', () => 0.5);
+  const base = drilling({drillCondition: 50});
+  for (const [form, damage] of [['pressure', 10], ['energy', 8]]) {
+    const seed = seedFor(d => d?.kind === 'capsule' && d.form === form);
+    const fitted = form === 'pressure' ? {gripper: {id: 'g', kind: 'buffer_gripper', variant: 'standard', durability: 50}} : {};
+    const start = JSON.stringify({...base, equipment: fitted});
+    for (const kept of [true, false]) {
+      data.set(saveKey, start);
+      const world = dugWorld(seed);
+      const found = await commit(0, {type: 'drill', cell: [0, 0, 3]}, sessionOf(world));
+      const piece = found.captures[0];
+      assert.deepEqual([piece.kind, piece.form, piece.seconds], ['capsule', form, capsuleForms[form].seconds + (form === 'pressure' ? 2 : 0)]);
+      assert.deepEqual(found.specimens, []);
+      world.advance(kept ? piece.seconds - 0.01 : piece.seconds);
+      if (kept) {
+        const s = await commit(found.revision, {type: 'capture', id: piece.id}, sessionOf(world));
+        assert.deepEqual(s.specimens.map(p => [p.kind, p.form]), [['capsule', form]]);
+        const split = await commit(s.revision, {type: 'decompose', kind: 'capsule', element: piece.element});
+        assert.ok(split.elements[piece.element] > 0);
+      } else {
+        const s = await commit(found.revision, 'checkpoint', sessionOf(world));
+        assert.deepEqual([s.captures, s.specimens, s.drillCondition], [[], [], found.drillCondition - damage]);
+      }
+    }
+  }
+  data.set(saveKey, JSON.stringify({...readSave(), specimens: [{id: 'x', kind: 'capsule', element: 'Og', form: 'plasma'}]}));
+  assert.throws(readSave, /원본을 보존/);
 });

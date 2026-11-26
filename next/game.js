@@ -2,7 +2,7 @@ import { intersectStone } from './rock-shapes.js';
 import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, portalRayDistance, radius } from './world.js';
-import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice } from './save.js';
+import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice, captureRule } from './save.js';
 import { massText } from './composition.js';
 import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate } from './trade.js';
 import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
@@ -125,7 +125,7 @@ function decomposeChoices() {
     for (const [value, [n, p]] of groups) choices.push([value, labelOf(p) + ' · ' + n + '개']);
   };
   count(save.specimens ?? [], p => 's:' + p.kind + ':' + (p.kind === 'capsule' ? p.element : p.variant),
-    p => specimenLabel(p.kind, p.variant, p.element));
+    p => specimenLabel(p.kind, p.variant, p.element, p.form));
   count(save.finds ?? [], p => findPiece(p.kind, p.variant) && 'f:' + p.kind + ':' + p.variant,
     p => findLabel(p) + (findById(p.kind).setting ? ' (' + findById(p.kind).setting + ')' : ''));
   return choices;
@@ -165,7 +165,7 @@ function showDecomposer() {
 }
 // Drone trade with machines of other times. Prices hold for one market cycle.
 const credit = n => n.toLocaleString('ko-KR') + ' ' + currency;
-const pieceName = p => p.kind === 'capsule' || specimenById(p.kind) ? specimenLabel(p.kind, p.variant, p.element) : findLabel(p);
+const pieceName = p => p.kind === 'capsule' || specimenById(p.kind) ? specimenLabel(p.kind, p.variant, p.element, p.form) : findLabel(p);
 function tradeOperation(value) {
   const [source, kind, variant, id] = value.split('|');
   return {source, kind, variant, element: kind === 'capsule' ? variant : undefined, id: id || undefined};
@@ -514,12 +514,11 @@ function hud() {
   const left = pending ? pending.expiresAt - world.elapsed : 0;
   el('capture-alert').hidden = el('capture').hidden = !pending || left <= 0;
   if (pending && left > 0) {
-    const rule = findById(pending.kind)?.sensitive;
-    const label = rule ? rule.alert : specimenById(pending.kind).sensitive;
-    const verb = rule ? rule.button.split(' ')[0] : pending.kind === 'mercury' ? '밀봉' : '포집';
-    el('capture-alert').textContent = label + ' · ' + verb + '까지 ' + Math.ceil(left) + '초' +
+    const rule = captureRule(pending);
+    const verb = rule.button.split(' ')[0];
+    el('capture-alert').textContent = rule.alert + ' · ' + (verb === '기체' ? '포집' : verb === '냉각' ? '밀봉' : verb) + '까지 ' + Math.ceil(left) + '초' +
       (save.captures.length > 1 ? ' · 대기 ' + (save.captures.length - 1) : '');
-    el('capture').textContent = rule ? rule.button : pending.kind === 'mercury' ? '냉각 밀봉' : '기체 포집';
+    el('capture').textContent = rule.button;
   }
   el('capture').disabled = busy;
   const hazard = world.hazard;
@@ -634,7 +633,7 @@ async function write(op, after) {
     }
     const fresh = (save.specimens ?? []).filter(p => !had.has(p.id));
     if (fresh.length && type !== 'capture') {
-      message(fresh.map(p => p.kind === 'capsule' ? '원소 표본 캡슐 회수 · ' + p.element : '시료 발견 · ' + specimenLabel(p.kind, p.variant)).join(' · '));
+      message(fresh.map(p => p.kind === 'capsule' ? specimenLabel(p.kind, null, p.element, p.form) + ' 회수' : '시료 발견 · ' + specimenLabel(p.kind, p.variant)).join(' · '));
       const first = fresh.find(p => !before.specimenLog?.includes(p.kind));
       if (first) {
         discoveryNoticeUntil = age + 2;
@@ -645,6 +644,7 @@ async function write(op, after) {
     const lost = (before.captures ?? []).filter(p => !kept.has(p.id));
     if (lost.length && !['transit', 'reboot', 'reset'].includes(type))
       message(lost.map(p => findById(p.kind)?.sensitive ? findLabel(p) + ' 폭발 · 드릴 -' + findById(p.kind).sensitive.damage
+        : p.kind === 'capsule' ? specimenLabel(p.kind, null, p.element, p.form) + ' 폭발 · 드릴 -' + captureRule(p).damage
         : specimenLabel(p.kind, p.variant) + ' 소실').join(' · '));
     for (const a of before.auctions ?? []) tradeNames.set(a.id, pieceName(a.piece));
     const settled = (save.tradeLog ?? []).filter(entry => !(before.tradeLog ?? []).includes(entry));
@@ -740,7 +740,7 @@ el('capture').onclick = () => {
   const pending = save?.captures?.[0];
   if (!pending) return;
   write({type: 'capture', id: pending.id}, () =>
-    message((findById(pending.kind) ? findLabel(pending) : specimenLabel(pending.kind, pending.variant)) + ' 회수'));
+    message((findById(pending.kind) ? findLabel(pending) : specimenLabel(pending.kind, pending.variant, pending.element, pending.form)) + ' 회수'));
 };
 el('equip-head').onclick = () => {
   const head = bestHead();

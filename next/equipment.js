@@ -19,9 +19,10 @@ export function working(s, slot) {
 export const drillInterval = s => working(s, 'aux') ? 0.12 : 0.16;
 export const sensorRange = s => working(s, 'sensor') ? 64 : 32;
 export const anchorMass = s => working(s, 'chain') ? 72 : 48;
-// Extra capture seconds for a sensitive find kind.
-export function captureBonus(s, kind) {
+// Extra capture seconds for a sensitive piece (a kind, or a capsule with its form).
+export function captureBonus(s, piece) {
+  const kind = typeof piece === 'string' ? piece : piece?.kind === 'capsule' ? piece.form + '_capsule' : piece?.kind;
   if (kind === 'pressure_capsule') return working(s, 'gripper') ? 2 : 0;
-  if (['hydrogen', 'noble_gas', 'mercury', 'heat_crystal'].includes(kind)) return working(s, 'cartridge') ? 2 : 0;
+  if (['hydrogen', 'noble_gas', 'mercury', 'heat_crystal', 'energy_capsule'].includes(kind)) return working(s, 'cartridge') ? 2 : 0;
   return 0;
 }

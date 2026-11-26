@@ -1,7 +1,7 @@
 import { cellOwner, savedAir } from './world.js';
 import { blockYield, mineralIds, variants, defaultVariant, rockVariantAt, mineralPiece } from './minerals.js';
 import { elementSymbols } from './elements.js';
-import { blockDiscovery, capsuleElement, specimenById, specimenUnits, specimenPiece, captureSeconds } from './specimens.js';
+import { blockDiscovery, capsuleElement, specimenById, specimenUnits, specimenPiece, captureSeconds, capsuleForms } from './specimens.js';
 import { findById, findPiece } from './finds.js';
 import { decompose, decompositionFee } from './composition.js';
 import { marketCycle, sellQuote, marketStock, auctionEstimate, auctionOutcome, auctionSeconds } from './trade.js';
@@ -148,7 +148,16 @@ export function decompositionPreview(s, operation) {
 }
 // Capture rules for a sensitive specimen or find: seconds allowed and the
 // drill damage an expired find deals (a lost gas or mercury deals none).
-const captureRule = kind => findById(kind)?.sensitive ?? (specimenById(kind)?.sensitive ? {seconds: captureSeconds, damage: 0} : null);
+// What securing a sensitive piece takes: alert, button, seconds and the
+// drill damage when it is missed. Gas and mercury are simply lost.
+export function captureRule(piece) {
+  if (piece?.kind === 'capsule') return capsuleForms[piece.form] ?? null;
+  const find = findById(piece?.kind)?.sensitive;
+  if (find) return find;
+  const label = specimenById(piece?.kind)?.sensitive;
+  if (!label) return null;
+  return {alert: label, button: piece.kind === 'mercury' ? '냉각 밀봉' : '기체 포집', seconds: captureSeconds, damage: 0};
+}
 // Sensitive finds wait in `captures`; only the first has a deadline in world
 // seconds. A deadline reached before the capture input loses the find.
 function expireCaptures(s, now) {
@@ -159,7 +168,7 @@ function expireCaptures(s, now) {
     if (now < head.expiresAt) break;
     lost.push(s.captures.shift());
     // An unstable find that is not secured in time bursts against the drill once.
-    const damage = captureRule(head.kind)?.damage ?? 0;
+    const damage = captureRule(head)?.damage ?? 0;
     if (damage && s.front) s.drillCondition = Math.max(0, (s.drillCondition ?? 100) - damage);
     if (s.captures[0]) s.captures[0].expiresAt = head.expiresAt + s.captures[0].seconds;
   }
@@ -303,7 +312,7 @@ function validMinerals(s) {
     Array.isArray(s.finds) && s.finds.every(validFind) &&
     Array.isArray(s.findLog) && s.findLog.every(kind => findById(kind)) && new Set(s.findLog).size === s.findLog.length &&
     Array.isArray(s.clockLog) && s.clockLog.every(m => Number.isInteger(m) && m >= 0 && m < 720) &&
-    Array.isArray(s.captures) && s.captures.every((c, i) => (validPiece(c) || validFind(c)) && captureRule(c.kind) &&
+    Array.isArray(s.captures) && s.captures.every((c, i) => (validPiece(c) || validFind(c)) && captureRule(c) &&
       Number.isFinite(c.seconds) && c.seconds > 0 && (c.expiresAt === null || (i === 0 && Number.isFinite(c.expiresAt)))) &&
     new Set([...s.specimens, ...s.finds, ...s.captures, ...(s.auctions ?? []).map(a => a.piece),
       ...Object.values(s.equipment ?? {})].map(p => p.id)).size ===
@@ -320,7 +329,8 @@ function validFind(p) {
 }
 function validPiece(p) {
   return p && typeof p.id === 'string' && p.id.length <= 80 &&
-    (p.kind === 'capsule' ? specimenUnits('capsule', null, p.element) !== null : specimenUnits(p.kind, p.variant) !== null);
+    (p.kind === 'capsule' ? specimenUnits('capsule', null, p.element) !== null && (p.form === undefined || !!capsuleForms[p.form])
+      : specimenUnits(p.kind, p.variant) !== null);
 }
 function validSession(s) {
   const w = s?.world;
@@ -667,11 +677,14 @@ export async function commit(revision, operation, session) {
     } else if (d?.kind === 'capsule') {
       const element = capsuleElement(d.sample, s.elementLog, s.capsuleMisses);
       s.capsuleMisses = s.elementLog.includes(element) ? s.capsuleMisses + 1 : 0;
-      addSpecimen(s, {id: found.id, kind: 'capsule', element});
+      // An unstable capsule waits in the capture queue; once secured it keeps its form.
+      const piece = d.form ? {id: found.id, kind: 'capsule', element, form: d.form} : {id: found.id, kind: 'capsule', element};
+      if (d.form) s.captures.push({...piece, seconds: capsuleForms[d.form].seconds + captureBonus(s, piece), expiresAt: null});
+      else addSpecimen(s, piece);
     } else if (d) {
       const piece = d.find ? {id: found.id, ...d.find} : {id: found.id, kind: d.kind, variant: d.variant};
-      const rule = captureRule(piece.kind);
-      if (rule) s.captures.push({...piece, seconds: rule.seconds + captureBonus(s, piece.kind), expiresAt: null});
+      const rule = captureRule(piece);
+      if (rule) s.captures.push({...piece, seconds: rule.seconds + captureBonus(s, piece), expiresAt: null});
       else addSpecimen(s, piece);
     }
     // Moving to another space or rebooting leaves pending finds behind.

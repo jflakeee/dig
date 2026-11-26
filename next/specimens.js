@@ -72,6 +72,20 @@ export const specimens = [
 // Elements no mineral can supply in play: Tc, Pm, At, Fr, Np, Pu and Am-Og.
 export const capsuleOnly = ['Tc', 'Pm', 'At', 'Fr', 'Np', 'Pu', ...elementSymbols.slice(94)];
 export const capsuleGuarantee = 10;
+// Sensitive capsule forms from docs/dig-mineral-catalog-expansion.md: a share
+// of capsules arrive unstable and must be secured in time or they burst.
+export const capsuleForms = {
+  pressure: {name: '미래 압력 캡슐', alert: '압력 캡슐 균열 확대', button: '완충 회수', seconds: 4, damage: 10, share: 0.2},
+  energy: {name: '미래 에너지 결정', alert: '에너지 결정 열 불안정', button: '차열 격리', seconds: 5, damage: 8, share: 0.1},
+};
+// Compared in whole per-mille so band edges do not drift with float sums.
+export function capsuleForm(sample) {
+  const point = Math.floor(sample * 1000);
+  const pressure = Math.round(capsuleForms.pressure.share * 1000), energy = Math.round(capsuleForms.energy.share * 1000);
+  if (point < pressure) return 'pressure';
+  if (point < pressure + energy) return 'energy';
+  return null;
+}
 export const specimenById = id => specimens.find(s => s.id === id);
 // Grams per piece: inclusions hold little gas, capsules a milligram sample.
 const specimenGrams = kind => ({hydrogen: 0.5, noble_gas: 0.5, mercury: 5, capsule: 0.001})[kind] ?? 50;
@@ -83,8 +97,8 @@ export function specimenUnits(kind, variant, element) {
   if (kind === 'capsule') return elementSymbols.includes(element) ? {[element]: 1} : null;
   return specimenById(kind)?.variants.find(v => v.variant === variant)?.units ?? null;
 }
-export function specimenLabel(kind, variant, element) {
-  if (kind === 'capsule') return '원소 표본 캡슐 (' + element + ')';
+export function specimenLabel(kind, variant, element, form) {
+  if (kind === 'capsule') return (capsuleForms[form]?.name ?? '원소 표본 캡슐') + ' (' + element + ')';
   const s = specimenById(kind);
   const v = s?.variants.find(entry => entry.variant === variant);
   return !s ? kind : s.variants.length > 1 ? s.name + ' (' + v.label + ')' : s.name;
@@ -109,7 +123,7 @@ export function blockDiscovery(seed, key, random = k => roll(seed, k)) {
     const s = weighted(specimens.map(entry => [entry, entry.weight]), random(key + 'specimen'));
     return {kind: s.id, variant: weighted(s.variants.map(v => [v.variant, v.share]), random(key + 'variant'))};
   }
-  if (kind < specimenShare + capsuleShare) return {kind: 'capsule', sample: random(key + 'capsule')};
+  if (kind < specimenShare + capsuleShare) return {kind: 'capsule', sample: random(key + 'capsule'), form: capsuleForm(random(key + 'capsule-form'))};
   if (kind < specimenShare + capsuleShare + selfShare) return {self: random(key + 'self')};
   return {find: rollFind(random, key + 'find-')};
 }
