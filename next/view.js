@@ -1,6 +1,6 @@
 import { identify } from './chunk-terrain.js';
 import { intersectStone } from './rock-shapes.js';
-import { forward } from './world.js';
+import { forward, portalRayDistance } from './world.js';
 
 import { createDust } from './dust.js';
 function noise(x, y, z) {
@@ -56,7 +56,7 @@ export function createView(canvas) {
   resize();
   new ResizeObserver(resize).observe(canvas);
   return function render(s, now) {
-    const { world, pos, yaw, pitch, light, working, anchors } = s;
+    const { world, pos, yaw, pitch, light, working, anchors, contact } = s;
     const w = canvas.width,
       h = canvas.height,
       f = Math.min(w, h) * 0.82;
@@ -109,32 +109,40 @@ export function createView(canvas) {
           r += lum * 1.12;
           g += lum * 1.01;
           b += lum * 0.86;
+          if (contact && hit.x === contact.x && hit.y === contact.y && hit.z === contact.z) {
+            const px = x - contact.point[0], py = y - contact.point[1], pz = z - contact.point[2];
+            const radius = 0.07 + 0.27 * contact.heat;
+            const distance2 = (px*px + py*py + pz*pz) / (radius*radius);
+            if (distance2 < 1) {
+              const intensity = (1-distance2) ** 2 * (0.35 + 0.65*contact.heat) * grain;
+              r += 380 * intensity;
+              g += 185 * intensity ** 2;
+              b += 85 * intensity ** 3;
+            }
+          }
         }
         let nearest = hit?.t ?? 32;
         for (const portal of portals) {
           const axis = portal.axis, u = (axis + 1) % 3, v = (axis + 2) % 3;
           const ray = [dx, dy, dz];
-          if (ray[axis] * portal.sign <= 0.001) continue;
-          const t = (portal.point[axis] - pos[axis]) / ray[axis];
-          if (t <= 0 || t > nearest + 0.00001) continue;
+          const t = portalRayDistance(portal, pos, ray, nearest);
+          if (!Number.isFinite(t)) continue;
           const scale = 1.64 / portal.radius;
           const ex = (pos[u] + ray[u] * t - portal.point[u]) * scale;
           const ey = (pos[v] + ray[v] * t - portal.point[v]) * scale;
           const dist = Math.max(Math.abs(ex), Math.abs(ey)) ** 2;
-          if (dist <= 1.64 ** 2) {
-            nearest = t;
-            const era = Math.floor(now / 3) % 3,
-              ridge =
-                Math.sin(ex * (4 + era) + era) * 0.25 + 0.1 * Math.sin(ex * 9);
-            const rim = Math.exp(-8 * Math.abs(dist - 2.48)) * 85;
-            const value =
-              (ey > ridge
-                ? 30 + ey * 13
-                : 15 + 10 * Math.sin(ey * 15 + ex * 3)) + rim;
-            r = value * [0.75, 1.42, 0.81][era];
-            g = value * [1.29, 1.03, 1.1][era];
-            b = value * [1.36, 0.73, 1.53][era];
-          }
+          nearest = t;
+          const era = Math.floor(now / 3) % 3,
+            ridge =
+              Math.sin(ex * (4 + era) + era) * 0.25 + 0.1 * Math.sin(ex * 9);
+          const rim = Math.exp(-8 * Math.abs(dist - 2.48)) * 85;
+          const value =
+            (ey > ridge
+              ? 30 + ey * 13
+              : 15 + 10 * Math.sin(ey * 15 + ex * 3)) + rim;
+          r = value * [0.75, 1.42, 0.81][era];
+          g = value * [1.29, 1.03, 1.1][era];
+          b = value * [1.36, 0.73, 1.53][era];
         }
         const k = 4 * (i + j * w);
         source[k] = r;
@@ -237,29 +245,22 @@ export function createView(canvas) {
       ctx.lineWidth = width;
       ctx.stroke();
     }
-    if (!s.mounted && working && light[0] > 0) {
-      const at = s.contact ? project(s.contact.point) : [w/2,h/2];
+    if (contact && light[0] > 0) {
+      const at = project(contact.point);
       if (at) {
-        const [x,y] = at, heat = s.contact?.heat ?? 0.45;
-        const size = (3+heat*9) * (0.94+0.06*Math.sin(now*43));
-        const glow = ctx.createRadialGradient(x,y,0,x,y,size);
-        glow.addColorStop(0,'#fff4c3');
-        glow.addColorStop(0.18,'#ffba58');
-        glow.addColorStop(1,'rgba(245,76,14,0)');
-        ctx.fillStyle = glow;
-        ctx.fillRect(x-size,y-size,size*2,size*2);
-        for (let i=0;i<5;i++) {
-          const angle = i*2.4+0.6;
-          const length = size*heat*(0.6+0.3*Math.sin(i));
-          line(x,y,x+Math.cos(angle)*length,y+Math.sin(angle)*length,'#d68645',0.7);
-        }
+        const [x,y] = at;
+        const heat = contact.heat;
+        const distance = Math.hypot(...contact.point.map((v,i) => v-pos[i]));
+        const size = f * (0.045 + 0.14*heat) / Math.max(0.25,distance);
         line(w*0.71,h,x,y,'rgba(253,106,52,0.28)',3);
         line(w*0.71,h,x,y,'#ffce87',0.85);
         for (let i=0;i<6;i++) {
           const life = (now*2.8+i/6)%1;
           const angle = i*2.4;
-          ctx.fillStyle = 'rgba(255,211,139,'+((1-life)*heat)+')';
-          ctx.fillRect(x+Math.cos(angle)*life*size*1.8,y+Math.sin(angle)*life*size*1.8,1,1);
+          const sparkX = x+Math.cos(angle)*life*size*1.8;
+          const sparkY = y+Math.sin(angle)*life*size*1.8;
+          line(sparkX,sparkY,sparkX+Math.cos(angle)*size*0.15,sparkY+Math.sin(angle)*size*0.15,
+            'rgba(255,211,139,'+((1-life)*heat)+')');
         }
       }
     }

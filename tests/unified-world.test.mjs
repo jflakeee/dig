@@ -4,7 +4,7 @@ import { commit, readSave, saveKey, saveVersion } from '../next/save.js';
 import { hitHull } from '../next/debris.js';
 import { intersectStone } from '../next/rock-shapes.js';
 import assert from 'node:assert/strict';
-import { createWorld } from '../next/world.js';
+import { createWorld, portalRayDistance } from '../next/world.js';
 import { portalMarker } from '../next/view.js';
 import { test } from 'node:test';
 
@@ -26,6 +26,15 @@ test('excavation, ray hits and hull clearance cross each chunk face', () => {
       }
     }
 });
+test('the portal masks stone behind its near side only inside the opening', () => {
+  const portal = createWorld(true).portals()[0];
+  const ray = [0,0,1];
+  assert.equal(portalRayDistance(portal,[0.5,0.5,4.5],ray,3.5),2.5);
+  assert.equal(portalRayDistance(portal,[0.5,0.5,4.5],ray,1),Infinity);
+  assert.equal(portalRayDistance(portal,[3,0.5,4.5],ray,3.5),Infinity);
+  assert.equal(portalRayDistance(portal,[0.5,0.5,8],[0,0,-1],3.5),Infinity);
+});
+
 test('sensor projects ahead and points toward off-screen portals on both axes', () => {
   const project = (p) => portalMarker(p, [0, 0, 0], 0, 0, 390, 844);
   assert.deepEqual(project([0, 0, 4]), {
