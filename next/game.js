@@ -170,8 +170,9 @@ async function write(op, after) {
   if (busy || fatal) return;
   busy = true;
   hud();
+  const type = op?.type ?? op;
   try {
-    let session = (['collect','drill','laser','repair','fire-ceramic','checkpoint'].includes(op) || op?.type === 'blast' || op?.type === 'pickup')
+    let session = ['collect','drill','laser','repair','fire-ceramic','checkpoint','blast','pickup'].includes(type)
       ? {hull, pos, velocity, drift, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
       : null;
     if (op?.type === 'transit') {
@@ -179,8 +180,8 @@ async function write(op, after) {
       session = {hull,pos:[0.5,0.5,0.5],velocity:[0,0,0],drift,yaw:0,pitch:0,sensor:false,entered:-1,world:destination.snapshot()};
     }
     save = await commit(save.revision, op, session);
-    if (op === 'collect' || op === 'laser' || op === 'drill') lastRockGain = age;
-    if (op === 'craft') installedUntil = Date.now()+1600;
+    if (type === 'collect' || type === 'laser' || type === 'drill') lastRockGain = age;
+    if (type === 'craft') installedUntil = Date.now()+1600;
     checkpointAge = 0;
     after?.();
   } catch (e) {
@@ -345,7 +346,7 @@ function heatStone(hit, direction, elapsed, operation) {
   contact = {point, x:hit.x, y:hit.y, z:hit.z, heat:Math.min(1, elapsed / 1.35)};
   if (elapsed < 1.35 || !world.dig(hit.x, hit.y, hit.z)) return false;
   contact = null;
-  write(operation, () => {
+  write({type: operation, cell: [hit.x, hit.y, hit.z]}, () => {
     fracture = {point, at:age};
     if (operation === 'laser') message('긴급 채굴 완료 · 일반 암석 1개');
   });
@@ -434,7 +435,7 @@ function tick(dt) {
     if (timer >= 0.16) {
       timer = 0;
       if (!world.dig(...target)) return;
-      write('drill', () => {
+      write({type: 'drill', cell: target}, () => {
         anchors = [];
         if (save.drillCondition === 0) message('드릴 파손 · 긴급 레이저 또는 메뉴에서 수리');
       });

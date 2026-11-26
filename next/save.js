@@ -1,3 +1,4 @@
+import { cellOwner, savedAir } from './world.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
@@ -124,7 +125,19 @@ export async function commit(revision, operation, session) {
     const s = readSave();
     if (s.revision !== revision)
       throw Error('다른 탭에서 진행이 바뀌었습니다. 다시 열어 주세요.');
-    switch (operation?.type ?? operation) {
+    const type = operation?.type ?? operation;
+    if (['collect', 'drill', 'laser'].includes(type)) {
+      // The work key is the cell's chunk, generation and index. A cell already
+      // excavated in the committed world returns the committed result unpaid.
+      if (!vector(operation?.cell, Number.isSafeInteger) || !session) throw Error('채굴 기록이 바뀌었습니다.');
+      const {chunk, index} = cellOwner(...operation.cell);
+      const find = w => w?.chunks.find(c => c.x === chunk[0] && c.y === chunk[1] && c.z === chunk[2]);
+      const next = find(session.world);
+      if (!next || !savedAir(next, index)) throw Error('채굴 기록이 바뀌었습니다.');
+      const prior = find(s.session?.world);
+      if (prior && (prior.epoch ?? 0) === (next.epoch ?? 0) && savedAir(prior, index)) return s;
+    }
+    switch (type) {
       case 'blast':
         if (!session || !Number.isInteger(operation.wear) || operation.wear < 0) throw Error('폭발 저장 오류');
         s.drillCondition = Math.max(0,(s.drillCondition ?? 100)-operation.wear);
@@ -154,16 +167,16 @@ export async function commit(revision, operation, session) {
         s.drillCondition = 100;
         break;
       case 'drill':
-        if (!s.front || s.drillCondition === 0 || !session) throw Error('드릴을 사용할 수 없습니다.');
+        if (!s.front || s.drillCondition === 0) throw Error('드릴을 사용할 수 없습니다.');
         if (Math.random() < 0.05) s.drillCondition = Math.max(0,(s.drillCondition ?? 100)-2);
         s.rocks++;
         break;
       case 'laser':
-        if (!s.front || s.drillCondition !== 0 || !session || (s.ceramic ?? 0) >= ceramicPerRepair || s.rocks >= rocksPerCeramic) throw Error('긴급 채굴 조건이 바뀌었습니다.');
+        if (!s.front || s.drillCondition !== 0 || (s.ceramic ?? 0) >= ceramicPerRepair || s.rocks >= rocksPerCeramic) throw Error('긴급 채굴 조건이 바뀌었습니다.');
         s.rocks++;
         break;
       case 'collect':
-        if (s.front || s.rocks >= 3 || !session) throw Error('채굴 기록이 바뀌었습니다.');
+        if (s.front || s.rocks >= 3) throw Error('채굴 기록이 바뀌었습니다.');
         s.rocks++;
         if (s.rocks === 3) s.craftReadyAt = Date.now()+fabricationMs;
         break;
