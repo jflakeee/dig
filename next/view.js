@@ -221,6 +221,20 @@ export function createView(canvas) {
       } else ctx.fillRect(-size,-size*0.6,2*size,1.2*size);
       ctx.restore();
     }
+    // Pieces flung out of a full train, tinted like their mineral.
+    for (const {item} of world.ejected()) {
+      const screen = project(item.point);
+      if (!screen || screen[0]<0 || screen[0]>=w || screen[1]<0 || screen[1]>=h) continue;
+      const ray = item.point.map((n,i) => n-pos[i]);
+      const distance = Math.hypot(...ray);
+      if (distance > 24 || world.trace(pos, ...ray, 0.999)) continue;
+      const tint = item.mineral ? mineralTint(item.mineral) : [1.2, 1.1, 1.4];
+      const size = Math.min(8, f*0.16/Math.max(0.5,distance));
+      ctx.globalAlpha = light[0] / (1+distance*0.05);
+      ctx.fillStyle = 'rgb(' + tint.map(c => Math.min(255, Math.round(150*c))).join(',') + ')';
+      ctx.fillRect(screen[0]-size/2, screen[1]-size/2, size, size);
+      ctx.globalAlpha = 1;
+    }
     const motes = updateDust(world, pos, Math.min(0.1, now - lastTime));
     lastTime = now;
     for (const mote of motes) {
