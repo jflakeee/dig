@@ -89,7 +89,9 @@ test('only the last solid cell schedules a face and gravity begins on opening', 
   assert.equal(gate.radius, 0.5);
   assert.equal(gate.point[2], 17);
   assert.ok(w.gravity([-14,-14,-14], [gate])[2] > 0);
-  assert.deepEqual(w.gravity([0,0,18]), [0,0,0]);
+  // Portal pull stops at its chunk; only that chunk's own microgravity, if any, remains.
+  const micro = w.microgravity([0,0,18]);
+  assert.deepEqual(w.gravity([0,0,18]).map(v => +v.toFixed(12)), (micro ? micro.dir.map(v => v * micro.strength) : [0,0,0]).map(v => +v.toFixed(12)));
 });
 
 test('six faces connect six neighbours within the inclusive deadline', () => {
@@ -491,4 +493,23 @@ test('minerals swept through after the machine pour out of the exit for a few se
   const restored = createWorld(false, undefined, 1.64, 4.8, saved, () => 0);
   for (let t = 0; t < 4; t += 1 / 60) restored.hullContacts(1 / 60, [0.5, 0.5, 0.5], [0, 0, 0], false);
   assert.equal(restored.snapshot().chunks.find(c => !c.x && !c.y && !c.z).debris.pour.left, 0);
+});
+
+test('some chunks hold a weak microgravity fixed by seed, chunk and generation; the origin has none', () => {
+  const fieldsOf = seed => {
+    const w = createWorld(false, undefined, 1.64, 2.8, undefined, undefined, seed);
+    return Array.from({length: 40}, (_, i) => w.microgravity([i * 32 + 0.5, 0.5, 0.5]));
+  };
+  assert.deepEqual(fieldsOf(9), fieldsOf(9));
+  const present = fieldsOf(9).slice(1).filter(Boolean);
+  assert.equal(fieldsOf(9)[0], null);
+  assert.ok(present.length > 3 && present.length < 20, 'about a quarter of chunks');
+  for (const f of present) {
+    assert.ok(f.strength >= 0.15 && f.strength <= 0.6);
+    assert.ok(Math.abs(Math.hypot(...f.dir) - 1) < 1e-9);
+  }
+  const w = createWorld(false, undefined, 1.64, 2.8, undefined, undefined, 9);
+  const at = [Array.from({length: 40}, (_, i) => i).find(i => i && w.microgravity([i * 32 + 0.5, 0.5, 0.5])) * 32 + 0.5, 0.5, 0.5];
+  const f = w.microgravity(at);
+  assert.deepEqual(w.gravity(at, []), f.dir.map(v => v * f.strength));
 });

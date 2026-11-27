@@ -454,6 +454,22 @@ function showPortal() {
   el('build-portal').disabled = poor || short.length > 0;
   el('build-portal').textContent = short.length ? '원소 부족 · ' + short.map(([e]) => e).join(', ') : poor ? '크레딧 부족' : save.portalBuilt ? '포탈 다시 제작' : '포탈 제작';
 }
+// The gravity sensor reads the field of the chunk the machine is in: whether
+// there is one, how strong, and which way relative to the machine's heading.
+function showMicro() {
+  const f = save?.front ? world.microgravity(pos) : null;
+  let text = '';
+  if (f) {
+    const ahead = forward(yaw, 0), side = [Math.cos(yaw), 0, -Math.sin(yaw)];
+    const dot = v => v.reduce((n, x, i) => n + x * f.dir[i], 0);
+    const parts = [[dot(ahead), '앞', '뒤'], [dot(side), '오른쪽', '왼쪽'], [f.dir[1], '위', '아래']]
+      .filter(([v]) => Math.abs(v) > 0.35).map(([v, plus, minus]) => v > 0 ? plus : minus);
+    text = '미세중력 감지 · 세기 ' + f.strength.toFixed(2) + ' · 방향 ' + (parts.join('·') || '불분명') + (f.varied ? ' · 위치마다 변함' : '');
+  }
+  const out = el('micro');
+  if (out.textContent !== text) out.textContent = text;
+  out.hidden = !text;
+}
 function showResearch() {
   const box = el('research');
   const owned = [...new Set(save?.finds?.filter(p => studies[p.kind]).map(p => p.kind) ?? [])];
@@ -1454,6 +1470,7 @@ function frame(time) {
   if (time - lastDraw >= 33) {
     lastDraw = time;
     if (crossing) showTrainStrip();
+    showMicro();
     if (panel && save?.front && valueCollapse(save) >= 2) showCredits();
     el('discovery-notice').hidden = age >= discoveryNoticeUntil;
     el('memory-line').hidden = age >= memoryUntil;
