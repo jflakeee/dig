@@ -37,3 +37,15 @@ export function carFill(s) {
 export function wagonsBeyondSafe(s) {
   return (s?.wagons ?? []).filter((_, i) => machineLength + wagonLength * (i + 1) > safeLength);
 }
+// Each car's state while the train crosses a chunk boundary, front first:
+// 'passed' once its rear end is over, 'lost' when it lies past the 16 m safe
+// length (left in the collapsing chunk), otherwise 'pending'. `traveled` is
+// metres driven since the machine's front crossed.
+export function crossingCars(s, traveled) {
+  const wagons = s?.wagons?.length ?? 0;
+  return Array.from({length: wagons + 1}, (_, i) => {
+    const rear = machineLength + wagonLength * i;
+    if (i && rear > safeLength) return 'lost';
+    return traveled >= rear ? 'passed' : 'pending';
+  });
+}
