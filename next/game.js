@@ -8,7 +8,7 @@ import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketSt
 import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
 import { studies, fragments } from './research.js';
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
-import { endingById } from './endings.js';
+import { endingById, endings } from './endings.js';
 import { trainLength, capacity, load, canCouple, wagonCost, safeLength, wagonsBeyondSafe } from './train.js';
 import { mineralIds, mineralName, variantName } from './minerals.js';
 import { elementSymbols } from './elements.js';
@@ -49,6 +49,8 @@ let discoveryNoticeUntil = 0;
 let laserJob = null;
 // Chunk the machine was last in, and whether a long-train crossing awaits saving.
 let lastChunk = '', crossPending = false;
+// Whether the new-run button is waiting for its confirming press.
+let confirmCycle = false;
 // `?seed=N` fixes the seed of every newly created world (N plus the number of
 // completed trips), so automated checks see the same terrain on each run.
 // Without it each new world draws a random seed. Saved worlds keep their own.
@@ -425,13 +427,27 @@ function showTrain() {
 // The machine's own recovered memory, one recollection per body part found.
 function showSelf() {
   const found = save?.selfParts ?? [];
-  el('self-book').hidden = !found.length;
-  if (!panel || !found.length) return;
+  const seen = save?.endingsSeen ?? [];
+  el('self-book').hidden = !found.length && !seen.length;
+  if (!panel || el('self-book').hidden) return;
   el('self-count').textContent = found.length + ' / ' + selfParts.length;
   const lines = found.map(id => selfParts.find(p => p.id === id)).map(p => p.name + ' · ' + p.recollection);
   if (finalMemory(found.length)) lines.push('마지막 기억 · ' + finalMemory(found.length));
-  el('ending-replay').hidden = !save.ending;
-  if (save.ending) el('ending-replay').textContent = '엔딩 다시 보기 · ' + endingById(save.ending).title;
+  // Endings seen in any run can be replayed; a new run lets memory go but keeps them.
+  el('endings-seen').hidden = !seen.length;
+  el('endings-seen').textContent = '본 엔딩 ' + seen.length + ' / ' + endings.length;
+  const replays = el('ending-replays');
+  if (replays.dataset.seen !== seen.join()) {
+    replays.replaceChildren(...seen.map(id => {
+      const b = Object.assign(document.createElement('button'), {textContent: '엔딩 다시 보기 · ' + endingById(id).title});
+      b.onclick = () => playEnding(id);
+      return b;
+    }));
+    replays.dataset.seen = seen.join();
+  }
+  el('new-cycle').hidden = !save.ending;
+  el('new-cycle').disabled = busy;
+  el('new-cycle').textContent = confirmCycle ? '정말 기억을 내려놓기 · 몸체 조각·기억막·행동 기록이 사라집니다' : '새 회차 · 기억을 내려놓기';
   if (el('self-list').dataset.rows !== JSON.stringify(lines)) {
     el('self-list').replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
     el('self-list').dataset.rows = JSON.stringify(lines);
@@ -740,7 +756,15 @@ el('add-wagon').onclick = () => {
 };
 el('remove-wagon').onclick = () => write({type: 'remove-wagon'}, () => message('화물칸 분리 · 열차 ' + trainLength(save) + ' m'));
 el('ending-skip').onclick = closeEnding;
-el('ending-replay').onclick = () => playEnding(save.ending);
+el('new-cycle').onclick = () => {
+  if (!confirmCycle) { confirmCycle = true; hud(); return; }
+  confirmCycle = false;
+  write({type: 'new-cycle'}, () => {
+    el('memory-line').textContent = '기억이 다시 흩어진다. 이번이 몇 번째인지는 알 수 없다.';
+    memoryUntil = age + 10;
+    message('새 회차 · 작업 기록은 남아 있다');
+  });
+};
 el('sell-source').onchange = () => hud();
 el('research-source').onchange = () => hud();
 el('research-start').onclick = () => {

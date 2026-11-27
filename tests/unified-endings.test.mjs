@@ -80,3 +80,42 @@ test('a version-12 save opens with no counts and malformed ending state is rejec
     assert.throws(readSave, /원본을 보존/, JSON.stringify(bad));
   }
 });
+
+test('a new run lets memory go, keeps work records and the endings seen', async t => {
+  const data = mockStorage(t);
+  const all = selfParts.map(p => p.id);
+  const before = drilling({selfParts: all, memoryLog: [0, 1], actions: {research: 2, equip: 5, repair: 1}, ending: 'made',
+    endingsSeen: ['made'], rocks: 40, credits: 300, research: ['tilt_glass'], elements: {Fe: 2}, elementLog: ['Fe']});
+  data.set(saveKey, JSON.stringify(before));
+  const s = await commit(0, {type: 'new-cycle'});
+  assert.deepEqual([s.selfParts, s.memoryLog, s.actions, s.ending, s.endingsSeen, s.cycles],
+    [[], [], {research: 0, equip: 0, repair: 0}, null, ['made'], 1]);
+  assert.deepEqual([s.rocks, s.credits, s.research, s.elements], [40, 300, ['tilt_glass'], {Fe: 2}]);
+  await assert.rejects(commit(s.revision, {type: 'new-cycle'}), /엔딩을 본 뒤/);
+});
+
+test('a second run that reaches a different ending adds it to the endings seen', async t => {
+  const data = mockStorage(t);
+  const {chunk, index} = cellOwner(0, 0, 3);
+  let seed = 0;
+  while (!('self' in (blockDiscovery(seed, chunk.join(',') + ':0:cell' + index) ?? {}))) seed++;
+  data.set(saveKey, JSON.stringify(drilling({selfParts: selfParts.slice(0, 7).map(p => p.id), endingsSeen: ['made'], cycles: 1,
+    actions: {research: 9, equip: 0, repair: 0}})));
+  t.mock.method(Math, 'random', () => 0.5);
+  const world = createWorld(true, () => 0, undefined, undefined, undefined, undefined, seed);
+  world.dig(0, 0, 3);
+  const s = await commit(0, {type: 'drill', cell: [0, 0, 3]},
+    {pos: [0.5, 0.5, 0.5], velocity: [0, 0, 0], yaw: 0, pitch: 0, sensor: false, entered: -1, world: world.snapshot()});
+  assert.deepEqual([s.ending, s.endingsSeen], ['overwritten', ['made', 'overwritten']]);
+  const clean = readSave();
+  for (const bad of [{endingsSeen: ['made', 'made']}, {endingsSeen: ['ghost']}, {cycles: -1},
+    {ending: 'made', selfParts: selfParts.map(p => p.id), endingsSeen: []}]) {
+    data.set(saveKey, JSON.stringify({...clean, ...bad}));
+    assert.throws(readSave, /원본을 보존/, JSON.stringify(bad));
+  }
+  const old = {...clean, version: 15, ending: 'endless', selfParts: selfParts.map(p => p.id)};
+  delete old.endingsSeen;
+  delete old.cycles;
+  data.set(saveKey, JSON.stringify(old));
+  assert.deepEqual([readSave().endingsSeen, readSave().cycles], [['endless'], 0]);
+});
