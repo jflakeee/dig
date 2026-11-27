@@ -43,7 +43,8 @@ test('unlocks: cheaper ceramic, equipment maintenance and softer impacts', async
   let s = await commit(0, 'fire-ceramic');
   assert.deepEqual([s.ceramic, s.rocks], [1, 0]);
   s = await commit(s.revision, {type: 'maintain', id: 'lamp'});
-  assert.equal(s.finds[0].durability, 100);
+  assert.ok(s.finds[0].maxDurability >= 97 && s.finds[0].maxDurability <= 100);
+  assert.equal(s.finds[0].durability, s.finds[0].maxDurability);
   assert.deepEqual([s.minerals.iron ?? 0, s.minerals.copper_ore ?? 0], [0, 0]);
   assert.equal(s.actions.repair, 1);
   await assert.rejects(commit(s.revision, {type: 'maintain', id: 'lamp'}), /정비할 장비가 없습니다/);

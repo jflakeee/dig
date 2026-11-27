@@ -335,7 +335,9 @@ test('a completed drill stroke wears once, laser recovery consumes the displayed
   const fixed = await commit(ceramic.revision,'repair');
   assert.equal(fixed.rocks,0);
   assert.equal(fixed.ceramic,0);
-  assert.equal(fixed.drillCondition,100);
+  // A repair wears the maximum by 0-3 points and mends to the new maximum.
+  assert.ok(fixed.drillMax >= 97 && fixed.drillMax <= 100);
+  assert.equal(fixed.drillCondition,fixed.drillMax);
   await assert.rejects(commit(ceramic.revision,'repair'));
 });
 
