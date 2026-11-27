@@ -1,7 +1,8 @@
 import { intersectStone } from './rock-shapes.js';
 import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
-import { createWorld, forward, offset, portalRayDistance, radius } from './world.js';
+import { createWorld, forward, offset, portalRayDistance } from './world.js';
+import { upgrades, upgradeIds, upgradeCost, level, bodyRadius, cellsPerStroke, baseRadius } from './upgrades.js';
 import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice, captureRule, reservedCredits } from './save.js';
 import { massText } from './composition.js';
 import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate, lotsFor, lotById, visibleRival, minimumBid } from './trade.js';
@@ -476,6 +477,29 @@ function showCraft() {
     li.className = ok ? 'ready' : '';
     if (label.textContent !== text) label.textContent = text;
     make.textContent = ok ? '제작' : '재료 부족';
+    make.disabled = busy || !ok;
+  });  showUpgrades();
+}
+// Upgrade rows in fixed order, updated in place.
+function showUpgrades() {
+  const list = el('upgrade-list');
+  if (list.children.length !== upgradeIds.length) {
+    list.replaceChildren(...upgradeIds.map(id => {
+      const li = document.createElement('li');
+      const make = document.createElement('button');
+      make.onclick = () => write({type: 'upgrade', id}, () => message(upgrades[id].label + ' ' + level(save, id) + '단계'));
+      li.append(document.createElement('span'), ' ', make);
+      return li;
+    }));
+  }
+  upgradeIds.forEach((id, i) => {
+    const li = list.children[i], [label, make] = [li.firstChild, li.lastChild];
+    const cost = upgradeCost(save, id), ok = !!cost && affords(save, cost);
+    const text = upgrades[id].label + ' ' + level(save, id) + '/' + upgrades[id].max + ' · ' + upgrades[id].effect +
+      (cost ? ' · ' + Object.entries(cost).map(([k, n]) => mineralName(k) + ' ' + Math.min(owned(save, k), n) + '/' + n).join(' · ') : ' · 최대');
+    li.className = ok ? 'ready' : '';
+    if (label.textContent !== text) label.textContent = text;
+    make.textContent = !cost ? '최대' : ok ? '강화' : '재료 부족';
     make.disabled = busy || !ok;
   });
 }
@@ -970,7 +994,7 @@ function move(dt, speed = velocity) {
     if (before >= 0 || after < 0) continue;
     const t = -before / (after - before);
     const lateral = point.map((v, i) => i === axis ? 0 : pos[i] + (next[i] - pos[i]) * t - v);
-    if (Math.max(...lateral.map(Math.abs)) + radius <= portal.radius) entered = portal;
+    if (Math.max(...lateral.map(Math.abs)) + bodyRadius(save) <= portal.radius) entered = portal;
   }
   pos = next;
   // Crossing into another chunk lets the far one collapse; a train over 16 m
@@ -982,7 +1006,7 @@ function move(dt, speed = velocity) {
     lastChunk = chunkKey;
   }
   if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) < 0) entered = false;
-  if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) >= radius && !busy) {
+  if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) >= bodyRadius(save) && !busy) {
     velocity = [0, 0, 0];
     write({type: 'transit', radius: entered.radius, strength: entered.strength}, () => {
       loadWorld();
@@ -1095,7 +1119,10 @@ function tick(dt) {
   }
   const pull = entered ? [0, 0, 0] : world.gravity(pos);
   // The probe extends beyond one integration step so the entire body fits.
-  const blocks = world.blockers(offset(pos, d, 0.7));
+  world.setBody(bodyRadius(save));
+  const probe = offset(pos, d, 0.7 * bodyRadius(save) / baseRadius);
+  const blocks = world.blockers(probe).sort((a, b) =>
+    Math.hypot(...a.map((v, i) => v + 0.5 - probe[i])) - Math.hypot(...b.map((v, i) => v + 0.5 - probe[i])));
   if (blocks.length) {
     velocity = [0, 0, 0];
     if (save.drillCondition === 0) { anchors = []; return; }
@@ -1109,8 +1136,10 @@ function tick(dt) {
     timer += dt;
     if (timer >= drillInterval(save)) {
       timer = 0;
-      if (!world.dig(...target)) return;
-      write({type: 'drill', cell: target}, () => {
+      // Every drill, and every bore level, cuts one more of the nearest blocks.
+      const cut = blocks.slice(0, cellsPerStroke(save)).filter(cell => world.dig(...cell));
+      if (!cut.length) return;
+      write({type: 'drill', cell: cut[0], cells: cut}, () => {
         anchors = [];
         if (save.drillCondition === 0) message('드릴 파손 · 긴급 레이저 또는 메뉴에서 수리');
       });

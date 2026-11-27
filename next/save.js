@@ -10,13 +10,14 @@ import { slotOf, captureBonus } from './equipment.js';
 import { studies, fragments } from './research.js';
 import { selfParts, nextPart } from './self.js';
 import { chooseEnding, endingCounters, counterFor, endingById } from './endings.js';
-import { trainLength, capacity, load, canCouple, wagonsBeyondSafe, wagonCost, wagonCapacity, safeLength, wagonClearance } from './train.js';
+import { trainLength, capacity, load, canCouple, wagonsBeyondSafe, wagonCost, wagonRoom, safeLength, wagonClearance } from './train.js';
 import { craftRecipes, affords, hullRepairFor } from './craft.js';
+import { upgrades, upgradeCost, validUpgrades } from './upgrades.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 16;
+export const saveVersion = 17;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -57,6 +58,7 @@ export const migrations = {
   14: s => ({...s, bids: []}),
   // Endings seen across runs, and how many times memory was let go for a new run.
   15: s => ({...s, endingsSeen: s.ending ? [s.ending] : [], cycles: 0}),
+  16: s => ({...s, upgrades: {body: 0, wagon: 0, drills: 0, bore: 0}}),
 };
 export const reservedCredits = s => (s.bids ?? []).reduce((n, b) => n + b.amount, 0);
 // A lot closes once the market clock passes the end of its cycle: a bid at or
@@ -303,6 +305,7 @@ const fresh = () => ({
   leftBehind: 0,
   bids: [],
   endingsSeen: [],
+  upgrades: {body: 0, wagon: 0, drills: 0, bore: 0},
   cycles: 0,
   session: null,
   arrivalRadius: 1.64,
@@ -356,6 +359,7 @@ function validMinerals(s) {
     Number.isSafeInteger(s.leftBehind) && s.leftBehind >= 0 &&
     Array.isArray(s.bids) && s.bids.every(b => b && /^c\d+-\d+$/.test(b.lot) && Number.isSafeInteger(b.amount) && b.amount > 0) &&
     new Set(s.bids.map(b => b.lot)).size === s.bids.length && reservedCredits(s) <= s.credits &&
+    validUpgrades(s.upgrades) &&
     Array.isArray(s.endingsSeen) && s.endingsSeen.every(id => endingById(id)) && new Set(s.endingsSeen).size === s.endingsSeen.length &&
     (s.ending === null || s.endingsSeen.includes(s.ending)) && Number.isSafeInteger(s.cycles) && s.cycles >= 0 &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
@@ -475,6 +479,25 @@ export async function commit(revision, operation, session) {
     const s = readSave();
     if (s.revision !== revision)
       throw Error('다른 탭에서 진행이 바뀌었습니다. 다시 열어 주세요.');
+    // Several drills cut several cells in one stroke; each cell is still paid once.
+    const cells = operation?.type === 'drill' && operation.cells;
+    if (cells !== undefined && cells !== false && (!Array.isArray(cells) || !cells.length || cells.length > 64))
+      throw Error('채굴 기록이 바뀌었습니다.');
+    const ops = cells ? cells.map(cell => ({type: 'drill', cell})) : [operation];
+    let changed = false;
+    for (const op of ops) {
+      if (op.type === 'drill' && s.drillCondition === 0) break;
+      changed = step(s, op, session) || changed;
+    }
+    if (!changed) return s;
+    if (session) s.session = session;
+    s.revision++;
+    localStorage.setItem(saveKey, JSON.stringify(s));
+    return s;
+  });
+}
+// Applies one operation to the save; false when it changes nothing.
+function step(s, operation, session) {
     const type = operation?.type ?? operation;
     let found = null;
     if (['collect', 'drill', 'laser'].includes(type)) {
@@ -486,7 +509,7 @@ export async function commit(revision, operation, session) {
       const next = find(session.world);
       if (!next || !savedAir(next, index)) throw Error('채굴 기록이 바뀌었습니다.');
       const prior = find(s.session?.world);
-      if (prior && (prior.epoch ?? 0) === (next.epoch ?? 0) && savedAir(prior, index)) return s;
+      if (prior && (prior.epoch ?? 0) === (next.epoch ?? 0) && savedAir(prior, index)) return false;
       // Before the first drill the laser only gathers ordinary rock.
       const seed = session.world.seed, epoch = next.epoch ?? 0;
       found = !Number.isSafeInteger(seed) ? {base: 'rock', companion: null}
@@ -534,6 +557,15 @@ export async function commit(revision, operation, session) {
         if (!affords(s, cost)) throw Error('제작 재료가 부족합니다.');
         for (const [id, n] of Object.entries(cost)) spendMineral(s, id, n);
         s.finds.push({id: 'craft-' + s.revision, kind: operation.kind, variant: 'standard', durability: 100});
+        break;
+      }
+      case 'upgrade': {
+        // One level of an upgrade, paid with minerals at the level's price.
+        const cost = upgrades[operation?.id] && upgradeCost(s, operation.id);
+        if (!s.front || !cost) throw Error('더 강화할 수 없습니다.');
+        if (!affords(s, cost)) throw Error('강화 재료가 부족합니다.');
+        for (const [id, n] of Object.entries(cost)) spendMineral(s, id, n);
+        s.upgrades[operation.id]++;
         break;
       }
       case 'repair-hull': {
@@ -712,7 +744,7 @@ export async function commit(revision, operation, session) {
       }
       case 'remove-wagon': {
         if (!s.wagons.length) throw Error('분리할 화물칸이 없습니다.');
-        if (load(s) > capacity(s) - wagonCapacity) throw Error('마지막 화물칸에 실린 광물을 먼저 비워 주세요.');
+        if (load(s) > capacity(s) - wagonRoom(s)) throw Error('마지막 화물칸에 실린 광물을 먼저 비워 주세요.');
         s.wagons.pop();
         break;
       }
@@ -758,7 +790,7 @@ export async function commit(revision, operation, session) {
         break;
       }
       case 'reset':
-        Object.assign(s, fresh(), { revision });
+        Object.assign(s, fresh(), { revision: s.revision });
         break;
       default:
         throw Error('알 수 없는 저장 요청입니다.');
@@ -814,9 +846,5 @@ export async function commit(revision, operation, session) {
       settleBids(s);
       finishResearch(s);
     }
-    if (session) s.session = session;
-    s.revision++;
-    localStorage.setItem(saveKey, JSON.stringify(s));
-    return s;
-  });
+    return true;
 }
