@@ -16,6 +16,7 @@ const equipmentValue = {drill_head: 120, aux_drill: 150, focus_lamp: 80, chain_w
   cargo_coupler: 70, buffer_gripper: 100, seal_cartridge: 100};
 const householdValue = {desk_fan: 18, spoon: 6, lunch_box: 8, teacup: 5, brown_bottle: 4, desk_clock: 25,
   handkerchief: 3, earphones: 9};
+const alienValue = {alien_limb: 60, alien_eye: 45, alien_nerve: 50, alien_shell: 55, alien_heart: 80, alien_bone: 40};
 const settingValue = {생활: 20, 공장: 40, 의료: 60, 연구: 120};
 const unknownEstimate = {layered_foil: 90, afterglow_fiber: 110, sealing_ceramic: 120, echo_crystal: 100,
   tilt_glass: 150, pressure_capsule: 180, heat_crystal: 160, memory_film: 200};
@@ -43,6 +44,7 @@ export function valueOf(thing) {
   if (f.category === 'unknown') return {group: 'artifact', base: Math.round(unknownEstimate[f.id] * 0.35)};
   if (f.category === 'equipment') return {group: 'equipment', base: equipmentValue[f.id] * (thing.durability ?? 100) / 100};
   if (f.category === 'household') return {group: 'household', base: householdValue[f.id]};
+  if (f.category === 'alien') return {group: 'specimen', base: alienValue[f.id]};
   return {group: 'artifact', base: f.id === 'superheavy_vessel' ? 300 : settingValue[f.setting]};
 }
 // The offer the answering machine makes this cycle for selling one piece.

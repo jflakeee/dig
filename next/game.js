@@ -19,7 +19,7 @@ import { mineralIds, mineralName, variantName } from './minerals.js';
 import { craftRecipes, affords, owned, hullRepairBelow, hullRepairFor } from './craft.js';
 import { elementSymbols } from './elements.js';
 import { specimenById, specimenLabel } from './specimens.js';
-import { findById, findLabel, findPiece, clockText } from './finds.js';
+import { findById, findLabel, findPiece, clockText, alienNotes } from './finds.js';
 import { createView, portalMarker } from './view.js';
 const el = (id) => document.getElementById(id);
 const canvas = el('scene'),
@@ -369,7 +369,7 @@ function automate() {
     if (price) { write({type: 'sell', ...op, price}, () => message('자동 판매 · ' + variantName(id, v) + ' · ' + credit(price))); return true; }
   }
   if (isOn(save, 'decompose')) {
-    const p = save.finds.find(q => ['household', 'artifact'].includes(findById(q.kind).category) && findPiece(q.kind, q.variant));
+    const p = save.finds.find(q => ['household', 'artifact', 'alien'].includes(findById(q.kind).category) && findPiece(q.kind, q.variant));
     if (p) { write({type: 'decompose', find: p.kind, variant: p.variant}, () => message('자동 분해 · ' + pieceName(p))); return true; }
   }
   if (isOn(save, 'analyze') && !save.researchJob) {
@@ -907,6 +907,11 @@ async function write(op, after) {
       if (first) {
         discoveryNoticeUntil = age + 2;
         el('discovery-notice').textContent = '발견 도감에 기록됨 · ' + findById(first.kind).name;
+        // A first alien piece shows how it was put together, and that the maker is unknown.
+        if (alienNotes[first.kind]) {
+          el('memory-line').textContent = alienNotes[first.kind];
+          memoryUntil = age + 10;
+        }
       }
     }
     const fresh = (save.specimens ?? []).filter(p => !had.has(p.id));

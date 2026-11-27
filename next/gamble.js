@@ -10,7 +10,7 @@ export const winChance = 0.48;
 export const maxMultiple = 10000;
 export const maxPieces = 20;            // pieces paid out in kind; the rest as credits
 export const categories = {mineral: '광물', equipment: '장비', research: '연구', item: '아이템'};
-const items = finds.filter(f => ['household', 'artifact'].includes(f.category));
+const items = finds.filter(f => ['household', 'artifact', 'alien'].includes(f.category));
 // Targets of a category as [id, base value].
 export function targets(category, mineralIds = []) {
   if (category === 'mineral') return mineralIds.map(id => [id, valueOf({mineral: id}).base]);
