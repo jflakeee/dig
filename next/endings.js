@@ -34,7 +34,18 @@ export function chooseEnding(counts = {}) {
   for (const e of endings) if ((counts[e.counter] ?? 0) > top) { best = e; top = counts[e.counter]; }
   return best.id;
 }
-export const endingById = id => endings.find(e => e.id === id);
+// The portal ending is not chosen by habit: it plays when the machine builds a
+// portal at the end of research (lore section 7-6).
+export const portalEnding = {id: 'portal', title: '포탈 제작', hue: 150, motion: 'portal', lines: [
+  '연구를 끝까지 밀고 나갔다. 마지막으로 남은 설계도는 포탈이었다.',
+  '부품을 고르는 손이 망설이지 않았다. 처음 만드는 것이 아니었다.',
+  '입구와 출구를 잇는 순간, 세상의 모든 물건이 한곳으로 쏟아지기 시작했다.',
+  '그 더미에 사람이었던 내가 깔렸다. 그 더미를 기계인 내가 판다.',
+  '이 모든 것은 내가 포탈을 만들면서 시작되었다.',
+  '그리고 나는 방금, 또 하나의 포탈을 만들었다.',
+]};
+export const endingById = id => endings.find(e => e.id === id) ?? (id === portalEnding.id ? portalEnding : undefined);
+export const endingCount = endings.length + 1;
 // Played once all three endings have been seen (lore section 7-4): the three
 // accounts stand side by side and none cancels the others. Its motion runs
 // all three endings' motions together, each in its own colour.
@@ -50,7 +61,7 @@ export const allEndingsSeen = s => endings.every(e => s?.endingsSeen?.includes(e
 export const playable = id => id === epilogue.id ? epilogue : endingById(id);
 // Which counter a saved operation adds to, if any.
 export function counterFor(type, operation) {
-  if (type === 'research' || type === 'read-film' || type === 'automate') return 'research';
+  if (type === 'research' || type === 'read-film' || type === 'automate' || type === 'build-portal') return 'research';
   if (type === 'equip' || type === 'equip-head' || type === 'craft-equipment' || type === 'upgrade' || (type === 'buy' && operation?.item === 'drill_head')) return 'equip';
   if (type === 'repair') return 'repair';
   return null;

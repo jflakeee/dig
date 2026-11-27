@@ -14,7 +14,8 @@ import { valueCollapse, collapseNotes, showsEndless } from './value.js';
 import { stages as insightStages, insightStage, traceKey } from './insight.js';
 import { categories, targets, winChance, maxMultiple, maxPieces } from './gamble.js';
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
-import { endingById, endings, epilogue, allEndingsSeen, playable } from './endings.js';
+import { endingById, endings, epilogue, allEndingsSeen, playable, endingCount } from './endings.js';
+import { portalCost, researchProgress } from './portal.js';
 import { trainLength, capacity, load, canCouple, wagonCost, safeLength, wagonsBeyondSafe, speedFactor, carFill, machineLength, wagonLength, crossingCars } from './train.js';
 let crossing = null;
 import { mineralIds, mineralName, variantName } from './minerals.js';
@@ -168,7 +169,7 @@ function showDecomposer() {
   el('decompose-preview').textContent = result ? choice[1].replace(/ · \d+개$/, '') + ' 1개 · ' + massText(result.grams) +
     ' → 회수 ' + massText(result.kept) + ' · 손실 ' + massText(result.grams - result.kept) + ' (' + lossNote(recall(save)) + ')\n' + yieldText(result.out)
     : '분해할 원료가 없습니다.';
-  el('decompose').disabled = busy || !result;
+  el('decompose').disabled = !result;
   const book = el('element-book');
   const log = save.elementLog ?? [];
   book.hidden = !log.length;
@@ -263,7 +264,7 @@ function showTrade() {
   fillSelect(el('sell-source'), sells.map(([value, label, price]) => [value, label + ' → ' + credit(price)]));
   const sell = sells.find(([value]) => value === el('sell-source').value);
   el('sell').textContent = sell ? '1개 판매 · ' + credit(sell[2]) : '판매할 물품 없음';
-  el('sell').disabled = busy || !sell;
+  el('sell').disabled = !sell;
   const stock = marketStock(save.marketSeed, cycle, mineralIds, mineralName);
   const buttons = stock.map(o => '구매 · ' + o.name + (o.durability ? ' (내구도 ' + o.durability + '%)' : '') + ' · ' + credit(o.price) +
     traced(o.mineral ? {mineral: o.mineral} : o.item === 'ceramic' ? {ceramic: true} : {kind: o.item}));
@@ -280,7 +281,7 @@ function showTrade() {
     }));
     list.dataset.labels = JSON.stringify(buttons);
   }
-  for (const b of list.children) b.disabled = busy || save.credits - reserved < (stock.find(o => o.item === b.dataset.item)?.price ?? Infinity) ||
+  for (const b of list.children) b.disabled = save.credits - reserved < (stock.find(o => o.item === b.dataset.item)?.price ?? Infinity) ||
     (b.dataset.item.startsWith('m:') && load(save) >= capacity(save));
   // Lots other machines list this cycle: visible top bid, my bid, time left.
   const lots = lotsFor(save.marketSeed, cycle);
@@ -305,10 +306,10 @@ function showTrade() {
     }));
     lotList.dataset.rows = shape;
   }
-  for (const b of lotList.querySelectorAll('button')) b.disabled = busy || Number(b.dataset.free) < Number(b.dataset.amount);
+  for (const b of lotList.querySelectorAll('button')) b.disabled = Number(b.dataset.free) < Number(b.dataset.amount);
   const auctions = auctionChoices();
   fillSelect(el('auction-source'), auctions.map(([value, label, estimate]) => [value, label + ' · 추정 ' + credit(estimate)]));
-  el('auction').disabled = busy || !auctions.length;
+  el('auction').disabled = !auctions.length;
   el('auction').textContent = auctions.length ? '경매 등록 · ' + auctionSeconds + '초 뒤 결과' : '경매에 올릴 물품 없음';
   for (const a of save.auctions) tradeNames.set(a.id, pieceName(a.piece));
   const rows = save.auctions.map(a => [a.id, pieceName(a.piece) + ' · 추정 ' + credit(a.estimate) + ' · 마감까지 ' + Math.max(0, Math.ceil(a.endsAt - save.marketTime)) + '초']);
@@ -365,7 +366,7 @@ function showAutomation() {
     li.className = done || !short ? 'ready' : '';
     if (label.textContent !== text) label.textContent = text;
     act.textContent = done ? (isOn(save, id) ? '켜짐' : '꺼짐') : job?.id === id ? '연구 중' : short ? '재료 부족' : '연구';
-    act.disabled = busy || (!done && (!!job || short));
+    act.disabled = (!done && (!!job || short));
   });
 }
 // Presses one automated button when its condition holds; true when it wrote.
@@ -432,12 +433,26 @@ function showGamble() {
       pawn.minerals.map(([m, v, n]) => variantName(m, v) + ' ' + n).join(' · ') : '') : ' · 담보 부족') +
     '\n당첨 확률 ' + Math.round(winChance * 100) + '% · 당첨 시 ' + targetName(c.category, c.id) + ' × ' + c.multiple +
     (c.category === 'item' || c.category === 'equipment' ? ' (실물 최대 ' + maxPieces + '개, 나머지는 크레딧)' : '') + ' · 낙첨 시 담보 소실';
-  el('gamble-draw').disabled = busy || !pawn;
+  el('gamble-draw').disabled = !pawn;
   const lines = save.gambleLog.map(e => (e.win ? '당첨' : '낙첨') + ' · ' + targetName(e.category, e.id) + ' × ' + e.multiple + ' · 담보 ' + credit(e.stake));
   if (el('gamble-log').dataset.lines !== JSON.stringify(lines)) {
     el('gamble-log').replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
     el('gamble-log').dataset.lines = JSON.stringify(lines);
   }
+}
+// The portal design waits at the end of research.
+function showPortal() {
+  const p = researchProgress(save);
+  el('portal-status').textContent = save.portalBuilt ? '· 제작함' : p.done ? '· 제작 가능' : '· 잠김';
+  const short = Object.entries(portalCost.elements).filter(([e, g]) => (save.elements[e] ?? 0) < g);
+  const poor = save.credits - reservedCredits(save) < portalCost.credits;
+  el('portal-preview').textContent = !p.done
+    ? '연구의 끝에 열린다 · 분석 ' + p.analyses + ' / ' + Object.keys(studies).length + ' · 자동화 ' + p.automations + ' / ' + automationIds.length
+    : '필요 ' + credit(portalCost.credits) + ' · ' + Object.entries(portalCost.elements).map(([e, g]) => e + ' ' + g + ' g').join(' · ') +
+      (save.portalBuilt ? '\n이 모든 것은 내가 포탈을 만들면서 시작되었다.' : '');
+  el('build-portal').hidden = !p.done;
+  el('build-portal').disabled = poor || short.length > 0;
+  el('build-portal').textContent = short.length ? '원소 부족 · ' + short.map(([e]) => e).join(', ') : poor ? '크레딧 부족' : save.portalBuilt ? '포탈 다시 제작' : '포탈 제작';
 }
 function showResearch() {
   const box = el('research');
@@ -445,6 +460,7 @@ function showResearch() {
   box.hidden = !save?.front;
   if (!panel || box.hidden) return;
   showAutomation();
+  showPortal();
   const job = save.researchJob;
   el('research-status').textContent = job ? '· 분석 중' : save.research.length ? '· ' + save.research.length + '종 완료' : '';
   const open = owned.filter(k => !save.research.includes(k));
@@ -456,12 +472,12 @@ function showResearch() {
     : study ? '필요 원소 ' + Object.entries(study.cost).map(([e, g]) => e + ' ' + g + ' g (보유 ' + massText(save.elements[e] ?? 0, e) + ')').join(' · ') +
       '\n소요 ' + study.seconds + '초 · 완료하면 관측 특성과 안전 상태를 기록하고 경매 등록이 열립니다'
     : '분석할 미지 물질이 없습니다.';
-  el('research-start').disabled = busy || !!job || !study || short.length > 0;
+  el('research-start').disabled = !!job || !study || short.length > 0;
   el('research-start').textContent = short?.length ? '원소 부족 · ' + short.map(([e]) => e).join(', ') : '분석 시작';
   const films = save.finds.filter(p => p.kind === 'memory_film').length;
   el('read-film').hidden = !save.research.includes('memory_film') || !films || save.memoryLog.length >= fragments.length;
   el('read-film').textContent = '기억막 판독 · ' + films + '장';
-  el('read-film').disabled = busy;
+  el('read-film').disabled = false;
   const maker = makerNote(recall(save));
   const rows = save.research.map(k => findById(k).name + ' · ' + studies[k].safety + ' · ' + studies[k].traits + (maker ? ' ' + maker : ''));
   if (el('research-list').dataset.rows !== JSON.stringify(rows)) {
@@ -518,6 +534,14 @@ function playEnding(id) {
         const radius = far + (near - far) * p;
         x = w / 2 + Math.cos(d.a) * radius;
         y = h / 2 + Math.sin(d.a) * radius;
+      } else if (d.as.motion === 'portal') {
+        // Points gather into a square frame that opens wider: a portal being built.
+        const side = Math.min(w, h) * (0.15 + 0.3 * Math.min(1, k / 20));
+        const along = (d.a * 0.37 + k * 0.05 * d.s) % 4, edge = Math.floor(along), f = along - edge;
+        const pull = Math.min(1, k / 10 + d.r * 0.3);
+        const tx = [-1 + 2 * f, 1, 1 - 2 * f, -1][edge] * side, ty = [-1, -1 + 2 * f, 1, 1 - 2 * f][edge] * side;
+        x = w / 2 + (Math.cos(d.a) * w * 0.6) * (1 - pull) + tx * pull;
+        y = h / 2 + (Math.sin(d.a) * h * 0.6) * (1 - pull) + ty * pull;
       } else {
         // Time turning without end.
         const radius = Math.min(w, h) * (0.05 + 0.45 * d.r);
@@ -562,11 +586,11 @@ function showTrain() {
     (risk ? '\n16 m를 넘었습니다. 청크 경계를 지날 때 뒤쪽 화물칸 ' + wagonsBeyondSafe(save).length + '량과 그 화물을 잃을 수 있습니다.' : '') +
     (canCouple(save) ? '' : '\n화물칸을 연결하려면 화물 연결기를 장착해야 합니다.');
   const short = (save.minerals.iron ?? 0) < wagonCost.iron || save.rocks < wagonCost.rock;
-  el('add-wagon').disabled = busy || !canCouple(save) || short;
+  el('add-wagon').disabled = !canCouple(save) || short;
   el('add-wagon').textContent = confirmLong ? '위험 확인 · ' + next + ' m로 연결' :
     '화물칸 연결 · 철광 ' + wagonCost.iron + ' · 일반 암석 ' + wagonCost.rock + (next > safeLength ? ' · ' + next + ' m 경고' : '');
   el('remove-wagon').hidden = !save.wagons.length;
-  el('remove-wagon').disabled = busy;
+  el('remove-wagon').disabled = false;
   // Everything collected: minerals by sub-species, then items by name.
   const minerals = mineralIds.filter(id => owned(save, id)).map(id => {
     const parts = Object.entries(variantCounts(save, id)).filter(([, n]) => n > 0);
@@ -617,7 +641,7 @@ function showCraft() {
     li.className = ok ? 'ready' : '';
     if (label.textContent !== text) label.textContent = text;
     make.textContent = ok ? '제작' : '재료 부족';
-    make.disabled = busy || !ok;
+    make.disabled = !ok;
   });  showUpgrades();
 }
 // Upgrade rows in fixed order, updated in place.
@@ -640,7 +664,7 @@ function showUpgrades() {
     li.className = ok ? 'ready' : '';
     if (label.textContent !== text) label.textContent = text;
     make.textContent = !cost ? '최대' : ok ? '강화' : '재료 부족';
-    make.disabled = busy || !ok;
+    make.disabled = !ok;
   });
 }
 // A small diagram of the train at the bottom left: the spherical machine, then
@@ -693,7 +717,7 @@ function showSelf() {
   if (finalMemory(found.length)) lines.push('마지막 기억 · ' + finalMemory(found.length));
   // Endings seen in any run can be replayed; a new run lets memory go but keeps them.
   el('endings-seen').hidden = !seen.length;
-  el('endings-seen').textContent = '본 엔딩 ' + seen.length + ' / ' + endings.length;
+  el('endings-seen').textContent = '본 엔딩 ' + seen.length + ' / ' + endingCount;
   const replays = el('ending-replays');
   const shown = allEndingsSeen(save) ? [...seen, epilogue.id] : seen;
   if (replays.dataset.seen !== shown.join()) {
@@ -705,7 +729,7 @@ function showSelf() {
     replays.dataset.seen = shown.join();
   }
   el('new-cycle').hidden = !save.ending;
-  el('new-cycle').disabled = busy;
+  el('new-cycle').disabled = false;
   el('new-cycle').textContent = confirmCycle ? '정말 기억을 내려놓기 · 몸체 조각·기억막·행동 기록이 사라집니다' : '새 회차 · 기억을 내려놓기';
   if (el('self-list').dataset.rows !== JSON.stringify(lines)) {
     el('self-list').replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
@@ -750,10 +774,10 @@ function showStored() {
     }));
     list.dataset.rows = JSON.stringify(rows);
   }
-  for (const b of [...list.querySelectorAll('button'), ...fittedList.querySelectorAll('button')]) b.disabled = busy;
+  for (const b of [...list.querySelectorAll('button'), ...fittedList.querySelectorAll('button')]) b.disabled = false;
   const head = bestHead();
   el('equip-head').hidden = !head;
-  el('equip-head').disabled = busy;
+  el('equip-head').disabled = false;
   if (head) el('equip-head').textContent = '드릴 헤드 교체 · 내구도 ' + (save.drillCondition ?? 100) + '% → ' + head.durability + '%';
 }
 function bestHead() {
@@ -790,7 +814,7 @@ function hud() {
     el('reset-prompt').hidden = true;
     el('reset').hidden = false;
   }
-  el('confirm-reset').disabled = busy;
+  el('confirm-reset').disabled = false;
   if (panel) el('cargo').textContent = (save?.cargo ?? []).map((n,i) => n ? cargoNames[i] + ' × ' + n : '').filter(Boolean).join(' · ');
   if (panel && save.front) {
     const cargo = el('cargo');
@@ -799,11 +823,11 @@ function hud() {
   const condition = save?.drillCondition ?? 100;
   const ceramic = save?.ceramic ?? 0;
   el('fire-ceramic').hidden = !save?.front || save.rocks < rocksPerCeramic;
-  el('fire-ceramic').disabled = busy;
+  el('fire-ceramic').disabled = false;
   el('repair').hidden = !save?.front || condition === 100 || ceramic < ceramicPerRepair;
-  el('repair').disabled = busy;
+  el('repair').disabled = false;
   el('emergency').hidden = !save?.front || condition !== 0 || ceramic >= ceramicPerRepair || save.rocks >= rocksPerCeramic;
-  el('emergency').disabled = busy || !!laserJob || (!el('emergency').hidden && !laserHit());
+  el('emergency').disabled = !!laserJob || (!el('emergency').hidden && !laserHit());
   if (panel && save?.front) {
     el('materials').textContent = '세라믹 ' + ceramic + (condition < 100 && !ceramic ?
       ' · 수리용 세라믹 1개 필요 (암석 ' + save.rocks + '/' + rocksPerCeramic + ')' : '');
@@ -819,14 +843,14 @@ function hud() {
       (save.captures.length > 1 ? ' · 대기 ' + (save.captures.length - 1) : '');
     el('capture').textContent = rule.button;
   }
-  el('capture').disabled = busy;
+  el('capture').disabled = false;
   const hazard = world.hazard;
   const alerted = hazardVisible && hazard && !hazard.spent;
   el('hazard-alert').hidden = !alerted;
   el('hazard-alert').textContent = alerted ? (hazard.kind === 'lava' ? '고열 감지 · 방향 전환' :
     hazard.fuse === null ? '불안정 광물 감지' : '충격 경고 · ' + Math.ceil(hazard.fuse) + '초') : '';
   el('stabilize').hidden = !(alerted && hazard.kind === 'volatile' && hazard.fuse !== null && Math.hypot(...hazard.point.map((v,i) => v-pos[i])) <= 2.5);
-  el('stabilize').disabled = busy;
+  el('stabilize').disabled = false;
   const marker = el('sensor');
   const nearest = world.portals().reduce((best, portal) => {
     const distance = Math.hypot(...portal.point.map((v, i) => v - pos[i]));
@@ -870,8 +894,16 @@ try {
 }
 loadWorld();
 hud();
+// A press that arrives while a save is running waits for it instead of being
+// lost; the world's own saves (mining, checkpoints) simply retry next frame.
+const worldOps = ['collect', 'drill', 'laser', 'checkpoint', 'blast', 'pickup', 'collect-ejected', 'repair-hull', 'cross-chunk', 'transit', 'reboot'];
+let queued = null;
 async function write(op, after) {
-  if (busy || fatal) return;
+  if (fatal) return;
+  if (busy) {
+    if (!worldOps.includes(op?.type ?? op)) queued = [op, after];
+    return;
+  }
   busy = true;
   hud();
   const type = op?.type ?? op;
@@ -978,6 +1010,11 @@ async function write(op, after) {
   } finally {
     busy = false;
     hud();
+    if (queued) {
+      const [next, then] = queued;
+      queued = null;
+      write(next, then);
+    }
   }
 }
 window.addEventListener('storage', (e) => {
@@ -1056,6 +1093,10 @@ el('sell').onclick = () => {
   write({type: 'sell', ...tradeOperation(value), price}, () => message(label + ' 판매 · ' + credit(price)));
 };
 el('gamble-category').onchange = el('gamble-target').onchange = el('gamble-multiple').oninput = () => hud();
+el('build-portal').onclick = () => write({type: 'build-portal'}, () => {
+  message('포탈 제작 완료');
+  setTimeout(() => playEnding('portal'), 1200);
+});
 el('gamble-draw').onclick = () => {
   const c = gambleChoice();
   if (!c.ok) return;
