@@ -70,11 +70,11 @@ export function createView(canvas) {
       Math.cos(pitch),
       -Math.cos(yaw) * Math.sin(pitch),
     ];
-    // Third-person camera behind and a little above the machine, pulled in
-    // front of any rock between. Close in, it becomes the cockpit view.
+    // Third-person camera straight behind the machine, looking where it travels,
+    // pulled in front of any rock between. Close in, it becomes the cockpit view.
     let pos = center, outside = false;
     if (body && body.distance > 0) {
-      const back = d.map((n, i) => -n * body.distance + up[i] * body.distance * 0.18);
+      const back = d.map(n => -n * body.distance);
       const length = Math.hypot(...back);
       const wall = world.trace(center, ...back.map(n => n / length), length + 0.2);
       const reach = Math.max(0, Math.min(length, wall ? wall.t - 0.2 : length));
@@ -312,8 +312,10 @@ export function createView(canvas) {
       const depth = Math.hypot(...center.map((n, i) => n - pos[i]));
       const spin = working ? now * 12 : 0;
       for (let k = 0; k < body.drills; k++) {
-        const angle = (k / body.drills) * Math.PI * 2 + 0.6;
-        const ring = body.drills > 1 ? body.radius * 0.62 : 0;
+        // Drills sit off the centre on a ring and turn about the travel axis,
+        // faster while cutting, so none of them covers the middle of the view.
+        const angle = (k / body.drills) * Math.PI * 2 + 0.6 + now * (working ? 1.2 : 0.25);
+        const ring = body.radius * 0.62;
         const side = right.map((n, i) => n * Math.cos(angle) * ring + up[i] * Math.sin(angle) * ring);
         const base = center.map((n, i) => n + d[i] * body.radius * 0.75 + side[i]);
         const tip = base.map((n, i) => n + d[i] * 0.55 * body.size);

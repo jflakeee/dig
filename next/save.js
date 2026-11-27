@@ -26,7 +26,7 @@ export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 21;
+export const saveVersion = 22;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -72,6 +72,7 @@ export const migrations = {
   18: s => ({...s, energy: energyCap}),
   19: s => ({...s, topics: freshTopics()}),
   20: s => ({...s, parts: {}}),
+  21: s => ({...s, keep: []}),
 };
 export const reservedCredits = s => (s.bids ?? []).reduce((n, b) => n + b.amount, 0);
 // A lot closes once the market clock passes the end of its cycle: a bid at or
@@ -208,6 +209,37 @@ export function sellPrice(s, op) {
 }
 // What decomposing the piece named by `operation` would yield, without
 // changing the save: input grams, the share lost and element grams out.
+// One piece decomposed: it leaves, and its element grams less the decomposer's
+// loss arrive. False when there is no such piece.
+function decomposeOne(s, operation) {
+  const result = s.front && decompositionPreview(s, operation);
+  if (!result) return false;
+  if (operation.part) takeParts(s, [operation.part], 1);
+  else if (operation.find) s.finds.splice(s.finds.findIndex(q => q.kind === operation.find && q.variant === operation.variant), 1);
+  else if (operation.kind) s.specimens.splice(s.specimens.findIndex(q => q.kind === operation.kind &&
+    (q.kind === 'capsule' ? q.element === operation.element : q.variant === operation.variant)), 1);
+  else spendVariant(s, operation.mineral, operation.variant);
+  for (const [symbol, grams] of Object.entries(result.out)) {
+    s.elements[symbol] = (s.elements[symbol] ?? 0) + grams;
+    if (!s.elementLog.includes(symbol)) s.elementLog.push(symbol);
+  }
+  s.decomposeCount++;
+  return true;
+}
+// The storage key of a kind: m:mineral, f:find kind, s:specimen kind, p:part.
+export const keepKey = key => /^(m|f|s|p):[a-z_]+$/.test(key);
+export const keyOf = {mineral: id => 'm:' + id, find: kind => 'f:' + kind, specimen: kind => 's:' + kind, part: id => 'p:' + id};
+// What "decompose everything" would take, one operation a piece, kept kinds left out.
+export function decomposeQueue(s) {
+  const kept = new Set(s.keep ?? []), ops = [];
+  for (const [id, n] of Object.entries(s.parts ?? {})) if (!kept.has('p:' + id)) for (let i = 0; i < n; i++) ops.push({part: id});
+  for (const p of s.finds) if (!kept.has('f:' + p.kind) && findPiece(p.kind, p.variant)) ops.push({find: p.kind, variant: p.variant});
+  for (const p of s.specimens) if (!kept.has('s:' + p.kind))
+    ops.push(p.kind === 'capsule' ? {kind: 'capsule', element: p.element} : {kind: p.kind, variant: p.variant});
+  for (const id of mineralIds) if (!kept.has('m:' + id))
+    for (const [v, n] of Object.entries(variantCounts(s, id))) for (let i = 0; i < n; i++) ops.push({mineral: id, variant: v});
+  return ops;
+}
 export function decompositionPreview(s, operation) {
   let piece = null, key = null;
   if (operation?.part) {
@@ -357,6 +389,7 @@ const fresh = () => ({
   energy: energyCap,
   topics: freshTopics(),
   parts: {},
+  keep: [],
   cycles: 0,
   session: null,
   arrivalRadius: 1.64,
@@ -413,6 +446,7 @@ function validMinerals(s) {
     new Set(s.bids.map(b => b.lot)).size === s.bids.length && reservedCredits(s) <= s.credits &&
     validUpgrades(s.upgrades) && validAutomation(s.automation) &&
     Number.isSafeInteger(s.gambleCount) && s.gambleCount >= 0 && validGambleLog(s.gambleLog) && validInsight(s.insight) && typeof s.portalBuilt === 'boolean' && validEnergy(s.energy) && validTopics(s.topics) && validParts(s.parts) &&
+    Array.isArray(s.keep) && s.keep.length <= 200 && s.keep.every(k => typeof k === 'string' && k.length <= 60) && new Set(s.keep).size === s.keep.length &&
     Array.isArray(s.endingsSeen) && s.endingsSeen.every(id => endingById(id)) && new Set(s.endingsSeen).size === s.endingsSeen.length &&
     (s.ending === null || s.endingsSeen.includes(s.ending)) && Number.isSafeInteger(s.cycles) && s.cycles >= 0 &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
@@ -742,20 +776,28 @@ function step(s, operation, session) {
         addSpecimen(s, piece);
         break;
       }
-      case 'decompose': {
-        // One piece leaves and its element grams, less the decomposer's loss, arrive in the same save.
-        const result = s.front && decompositionPreview(s, operation);
-        if (!result) throw Error('분해할 원료가 없습니다.');
-        if (operation.part) takeParts(s, [operation.part], 1);
-        else if (operation.find) s.finds.splice(s.finds.findIndex(q => q.kind === operation.find && q.variant === operation.variant), 1);
-        else if (operation.kind) s.specimens.splice(s.specimens.findIndex(q => q.kind === operation.kind &&
-          (q.kind === 'capsule' ? q.element === operation.element : q.variant === operation.variant)), 1);
-        else spendVariant(s, operation.mineral, operation.variant);
-        for (const [symbol, grams] of Object.entries(result.out)) {
-          s.elements[symbol] = (s.elements[symbol] ?? 0) + grams;
-          if (!s.elementLog.includes(symbol)) s.elementLog.push(symbol);
+      case 'decompose':
+        if (!decomposeOne(s, operation)) throw Error('분해할 원료가 없습니다.');
+        break;
+      case 'decompose-all': {
+        // Everything not kept, as far as the energy buffer goes: parts, items,
+        // specimens, then minerals. Kept kinds are never touched.
+        let n = 0;
+        for (const op of decomposeQueue(s)) {
+          if (s.energy < energyCost.decompose) break;
+          if (!decomposeOne(s, op)) continue;
+          s.energy -= energyCost.decompose;
+          n++;
         }
-        s.decomposeCount++;
+        if (!s.front || !n) throw Error(s.energy < energyCost.decompose ? '에너지 부족 · 필요 ' + energyCost.decompose : '분해할 화물이 없습니다.');
+        break;
+      }
+      case 'keep': {
+        // Keeping a kind protects it from decomposing everything.
+        const key = operation?.key;
+        if (typeof key !== 'string' || !keepKey(key) || typeof operation.on !== 'boolean') throw Error('보관 설정 오류');
+        s.keep = s.keep.filter(k => k !== key);
+        if (operation.on) s.keep.push(key);
         break;
       }
       case 'sell': {
