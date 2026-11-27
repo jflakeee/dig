@@ -38,7 +38,7 @@ export const endingById = id => endings.find(e => e.id === id);
 // Which counter a saved operation adds to, if any.
 export function counterFor(type, operation) {
   if (type === 'research' || type === 'read-film') return 'research';
-  if (type === 'equip' || type === 'equip-head' || (type === 'buy' && operation?.item === 'drill_head')) return 'equip';
+  if (type === 'equip' || type === 'equip-head' || type === 'craft-equipment' || (type === 'buy' && operation?.item === 'drill_head')) return 'equip';
   if (type === 'repair') return 'repair';
   return null;
 }

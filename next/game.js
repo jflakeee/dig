@@ -11,6 +11,7 @@ import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathE
 import { endingById, endings } from './endings.js';
 import { trainLength, capacity, load, canCouple, wagonCost, safeLength, wagonsBeyondSafe, speedFactor, carFill, machineLength, wagonLength } from './train.js';
 import { mineralIds, mineralName, variantName } from './minerals.js';
+import { craftRecipes, affords, owned, hullRepairBelow, hullRepairFor } from './craft.js';
 import { elementSymbols } from './elements.js';
 import { specimenById, specimenLabel } from './specimens.js';
 import { findById, findLabel, findPiece, clockText } from './finds.js';
@@ -42,6 +43,7 @@ let age = 0,
   gain;
 let contact = null, fracture = null, installedUntil = 0;
 let lastRockGain = -Infinity;
+let nextHullRepair = 0;
 let checkpointAge = 0;
 let hull = 100;
 let hazardVisible = false;
@@ -424,6 +426,58 @@ function showTrain() {
     '화물칸 연결 · 철광 ' + wagonCost.iron + ' · 일반 암석 ' + wagonCost.rock + (next > safeLength ? ' · ' + next + ' m 경고' : '');
   el('remove-wagon').hidden = !save.wagons.length;
   el('remove-wagon').disabled = busy;
+  // Everything collected: minerals by sub-species, then items by name.
+  const minerals = mineralIds.filter(id => owned(save, id)).map(id => {
+    const parts = Object.entries(variantCounts(save, id)).filter(([, n]) => n > 0);
+    const detail = parts.length > 1 || (parts[0] && variantName(id, parts[0][0]) !== mineralName(id))
+      ? ' (' + parts.map(([v, n]) => variantName(id, v) + ' ' + n).join(' · ') + ')' : '';
+    return '광물 · ' + mineralName(id) + ' × ' + owned(save, id) + detail;
+  });
+  const items = new Map();
+  const add = (name, n = 1) => items.set(name, (items.get(name) ?? 0) + n);
+  for (const p of save.specimens) add('시료 · ' + pieceName(p));
+  for (const p of save.finds) add('물품 · ' + pieceName(p));
+  (save.cargo ?? []).forEach((n, i) => n && add('물품 · ' + cargoNames[i], n));
+  if (save.ceramic) add('물품 · 세라믹', save.ceramic);
+  const lines = [...minerals, ...Array.from(items, ([name, n]) => name + ' × ' + n)];
+  if (!lines.length) lines.push('수집한 광물과 물품이 없습니다.');
+  const list = el('cargo-list');
+  if (list.dataset.lines !== JSON.stringify(lines)) {
+    list.replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
+    list.dataset.lines = JSON.stringify(lines);
+  }
+}
+// Crafting: equipment from collected minerals, craftable recipes first.
+function showCraft() {
+  const box = el('workshop');
+  box.hidden = !save?.front;
+  if (!panel || box.hidden) return;
+  const recipes = Object.entries(craftRecipes).map(([kind, cost]) => ({kind, cost, ok: affords(save, cost)}))
+    .sort((a, b) => b.ok - a.ok);
+  const ready = recipes.filter(r => r.ok).length;
+  el('craft-summary').textContent = '· 제작 가능 ' + ready + ' / ' + recipes.length;
+  const rows = recipes.map(r => [r.kind, r.ok, (slots[r.kind]?.label ?? '드릴 끝') + ' · ' + findById(r.kind).name + ' · ' +
+    Object.entries(r.cost).map(([id, n]) => mineralName(id) + ' ' + Math.min(owned(save, id), n) + '/' + n).join(' · ')]);
+  // Rows are rebuilt only when the order changes, so a tap is not lost to a refresh.
+  const list = el('craft-list');
+  const order = rows.map(([kind]) => kind).join();
+  if (list.dataset.order !== order) {
+    list.replaceChildren(...rows.map(([kind]) => {
+      const li = document.createElement('li');
+      const make = document.createElement('button');
+      make.onclick = () => write({type: 'craft-equipment', kind}, () => message(findById(kind).name + ' 제작 · 보관 물품에 추가'));
+      li.append(document.createElement('span'), ' ', make);
+      return li;
+    }));
+    list.dataset.order = order;
+  }
+  rows.forEach(([, ok, text], i) => {
+    const li = list.children[i], [label, make] = [li.firstChild, li.lastChild];
+    li.className = ok ? 'ready' : '';
+    if (label.textContent !== text) label.textContent = text;
+    make.textContent = ok ? '제작' : '재료 부족';
+    make.disabled = busy || !ok;
+  });
 }
 // A small diagram of the train at the bottom left: the spherical machine, then
 // each spherical wagon with its fill, cars past the 16 m safe length marked.
@@ -543,6 +597,7 @@ function hud() {
   showResearch();
   showSelf();
   showTrain();
+  showCraft();
   showTrainStrip();
   if (!panel) {
     el('reset-prompt').hidden = true;
@@ -562,14 +617,6 @@ function hud() {
   el('repair').disabled = busy;
   el('emergency').hidden = !save?.front || condition !== 0 || ceramic >= ceramicPerRepair || save.rocks >= rocksPerCeramic;
   el('emergency').disabled = busy || !!laserJob || (!el('emergency').hidden && !laserHit());
-  if (panel) el('minerals').textContent = mineralIds.filter(id => id === 'rock' ? save?.rocks : save?.minerals?.[id])
-    .map(id => {
-      const parts = Object.entries(variantCounts(save, id)).filter(([, n]) => n > 0);
-      const total = id === 'rock' ? save.rocks : save.minerals[id];
-      const detail = parts.length > 1 || (parts[0] && variantName(id, parts[0][0]) !== mineralName(id))
-        ? ' (' + parts.map(([v, n]) => variantName(id, v) + ' ' + n).join(' · ') + ')' : '';
-      return mineralName(id) + ' × ' + total + detail;
-    }).join(' · ');
   if (panel && save?.front) {
     el('materials').textContent = '세라믹 ' + ceramic + (condition < 100 && !ceramic ?
       ' · 수리용 세라믹 1개 필요 (암석 ' + save.rocks + '/' + rocksPerCeramic + ')' : '');
@@ -642,7 +689,7 @@ async function write(op, after) {
   hud();
   const type = op?.type ?? op;
   try {
-    let session = ['collect','drill','laser','repair','fire-ceramic','checkpoint','blast','pickup','capture','collect-ejected'].includes(type)
+    let session = ['collect','drill','laser','repair','fire-ceramic','checkpoint','blast','pickup','capture','collect-ejected','repair-hull'].includes(type)
       ? {hull, pos, velocity, drift, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
       : null;
     if (op?.type === 'transit') {
@@ -1015,6 +1062,17 @@ function tick(dt) {
   if (crossPending) {
     crossPending = false;
     write({type: 'cross-chunk'});
+    return;
+  }
+  // The hull mends itself from collected minerals, about once a second.
+  const repair = hull > 0 && hull < hullRepairBelow && age >= nextHullRepair && hullRepairFor(save);
+  if (repair) {
+    nextHullRepair = age + 1;
+    write({type: 'repair-hull'}, () => {
+      hull = Math.min(100, hull + repair.gain);
+      message('기체 자동 수리 · ' + Object.entries(repair.cost).map(([id, n]) => mineralName(id) + ' ' + n).join(' · ') +
+        ' → 기체 ' + Math.ceil(hull) + '%');
+    });
     return;
   }
   checkpointAge += dt;

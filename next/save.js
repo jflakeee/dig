@@ -11,6 +11,7 @@ import { studies, fragments } from './research.js';
 import { selfParts, nextPart } from './self.js';
 import { chooseEnding, endingCounters, counterFor, endingById } from './endings.js';
 import { trainLength, capacity, load, canCouple, wagonsBeyondSafe, wagonCost, wagonCapacity, safeLength, wagonClearance } from './train.js';
+import { craftRecipes, affords, hullRepairFor } from './craft.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
@@ -245,6 +246,11 @@ function spendVariant(s, id, variant) {
   }
   if (id === 'rock') s.rocks--;
   else if (--s.minerals[id] === 0) delete s.minerals[id];
+}
+// Spends n of a mineral, default sub-species first, then in table order.
+function spendMineral(s, id, n) {
+  if (id === 'rock') return spendRocks(s, n);
+  for (let i = 0; i < n; i++) spendVariant(s, id, variants[id].map(e => e[0]).find(v => variantCounts(s, id)[v] > 0));
 }
 // Spends rocks from the default sub-species first, then in table order.
 function spendRocks(s, n) {
@@ -521,6 +527,23 @@ export async function commit(revision, operation, session) {
         s.ceramic -= ceramicPerRepair;
         s.drillCondition = 100;
         break;
+      case 'craft-equipment': {
+        // Equipment made from collected minerals goes to storage at full durability.
+        const cost = craftRecipes[operation?.kind];
+        if (!s.front || !cost) throw Error('제작할 수 없는 장비입니다.');
+        if (!affords(s, cost)) throw Error('제작 재료가 부족합니다.');
+        for (const [id, n] of Object.entries(cost)) spendMineral(s, id, n);
+        s.finds.push({id: 'craft-' + s.revision, kind: operation.kind, variant: 'standard', durability: 100});
+        break;
+      }
+      case 'repair-hull': {
+        // The hull mends from cargo; the save sets the repaired hull.
+        const repair = hullRepairFor(s);
+        if (!s.front || !session || !repair || (session.hull ?? 100) >= 100) throw Error('기체를 수리할 수 없습니다.');
+        for (const [id, n] of Object.entries(repair.cost)) spendMineral(s, id, n);
+        session.hull = Math.min(100, (session.hull ?? 100) + repair.gain);
+        break;
+      }
       case 'drill':
         if (!s.front || s.drillCondition === 0) throw Error('드릴을 사용할 수 없습니다.');
         if (Math.random() < 0.05) s.drillCondition = Math.max(0,(s.drillCondition ?? 100)-2);
@@ -682,10 +705,7 @@ export async function commit(revision, operation, session) {
         if (!s.front || !canCouple(s)) throw Error('화물 연결기를 장착해야 화물칸을 연결할 수 있습니다.');
         if ((s.minerals.iron ?? 0) < wagonCost.iron || s.rocks < wagonCost.rock) throw Error('화물칸 재료가 부족합니다.');
         if (trainLength({wagons: [...s.wagons, '']}) > safeLength && !operation.confirm) throw Error('열차가 16m를 넘습니다. 확인 후 다시 연결해 주세요.');
-        for (let i = 0; i < wagonCost.iron; i++) {
-          const v = variants.iron.map(e => e[0]).find(v => variantCounts(s, 'iron')[v] > 0);
-          spendVariant(s, 'iron', v);
-        }
+        spendMineral(s, 'iron', wagonCost.iron);
         spendRocks(s, wagonCost.rock);
         s.wagons.push('wagon-' + ++s.wagonCount);
         break;
