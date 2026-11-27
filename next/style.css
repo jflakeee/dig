@@ -178,7 +178,8 @@ section {
 #cargo-list,
 #craft-list,
 #upgrade-list,
-#automation-list {
+#automation-list,
+#gamble-log {
   margin: 4px 0 12px;
   padding-left: 20px;
 }

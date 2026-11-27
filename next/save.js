@@ -14,6 +14,8 @@ import { trainLength, capacity, load, canCouple, wagonsBeyondSafe, wagonCost, wa
 import { craftRecipes, affords, hullRepairFor } from './craft.js';
 import { upgrades, upgradeCost, validUpgrades } from './upgrades.js';
 import { automations, fresh as freshAutomation, validAutomation } from './automation.js';
+import { winChance, maxPieces, baseValue, validMultiple, validGambleLog } from './gamble.js';
+import { valueOf } from './trade.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
@@ -59,7 +61,7 @@ export const migrations = {
   14: s => ({...s, bids: []}),
   // Endings seen across runs, and how many times memory was let go for a new run.
   15: s => ({...s, endingsSeen: s.ending ? [s.ending] : [], cycles: 0}),
-  16: s => ({...s, upgrades: {body: 0, wagon: 0, drills: 0, bore: 0}, automation: freshAutomation()}),
+  16: s => ({...s, upgrades: {body: 0, wagon: 0, drills: 0, bore: 0}, automation: freshAutomation(), gambleCount: 0, gambleLog: []}),
 };
 export const reservedCredits = s => (s.bids ?? []).reduce((n, b) => n + b.amount, 0);
 // A lot closes once the market clock passes the end of its cycle: a bid at or
@@ -316,6 +318,8 @@ const fresh = () => ({
   endingsSeen: [],
   upgrades: {body: 0, wagon: 0, drills: 0, bore: 0},
   automation: freshAutomation(),
+  gambleCount: 0,
+  gambleLog: [],
   cycles: 0,
   session: null,
   arrivalRadius: 1.64,
@@ -371,6 +375,7 @@ function validMinerals(s) {
     Array.isArray(s.bids) && s.bids.every(b => b && /^c\d+-\d+$/.test(b.lot) && Number.isSafeInteger(b.amount) && b.amount > 0) &&
     new Set(s.bids.map(b => b.lot)).size === s.bids.length && reservedCredits(s) <= s.credits &&
     validUpgrades(s.upgrades) && validAutomation(s.automation) &&
+    Number.isSafeInteger(s.gambleCount) && s.gambleCount >= 0 && validGambleLog(s.gambleLog) &&
     Array.isArray(s.endingsSeen) && s.endingsSeen.every(id => endingById(id)) && new Set(s.endingsSeen).size === s.endingsSeen.length &&
     (s.ending === null || s.endingsSeen.includes(s.ending)) && Number.isSafeInteger(s.cycles) && s.cycles >= 0 &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
@@ -397,6 +402,22 @@ function unlist(s, a) {
   if (a.origin === 'minerals') {
     for (let i = 0; i < a.piece.count; i++) grant(s, a.piece.mineral, a.piece.variant);
   } else (a.origin === 'specimens' ? s.specimens : s.finds).push(a.piece);
+}
+// What a stake would pledge: free credits first, then minerals at base value,
+// the most plentiful sub-species first. Null when the save cannot cover it.
+export function pledge(s, stake) {
+  const credits = Math.min(stake, Math.max(0, s.credits - reservedCredits(s)));
+  let left = stake - credits;
+  const minerals = [];
+  const stock = mineralIds.flatMap(id => Object.entries(variantCounts(s, id)).filter(([, n]) => n > 0)
+    .map(([v, n]) => [id, v, n, valueOf({mineral: id}).base])).sort((a, b) => b[2] - a[2]);
+  for (const [id, v, n, value] of stock) {
+    if (left <= 0) break;
+    const take = Math.min(n, Math.ceil(left / value));
+    minerals.push([id, v, take]);
+    left -= take * value;
+  }
+  return left > 0 ? null : {credits, minerals};
 }
 function validFind(p) {
   const f = p && findById(p.kind);
@@ -769,6 +790,44 @@ function step(s, operation, session) {
           if (s.elements[e] <= 1e-12) delete s.elements[e];
         }
         s.automation.job = {id: a.id, endsAt: s.marketTime + a.seconds};
+        break;
+      }
+      case 'gamble': {
+        // One draw per gamble count from the market seed, so a reload cannot redraw it.
+        const {category, id, multiple} = operation ?? {};
+        const base = baseValue(category, id, mineralIds);
+        if (!s.front || !base || !validMultiple(multiple)) throw Error('걸 수 없는 대상입니다.');
+        const stake = base * multiple;
+        const pawn = pledge(s, stake);
+        if (!pawn) throw Error('담보가 부족합니다.');
+        const win = roll(s.marketSeed, 'gamble:' + s.gambleCount++) < winChance;
+        if (!win) {
+          s.credits -= pawn.credits;
+          for (const [m, v, n] of pawn.minerals) for (let i = 0; i < n; i++) spendVariant(s, m, v);
+        } else if (category === 'research') {
+          if (s.automation.unlocked.includes(id)) s.credits += stake;
+          else {
+            s.automation.unlocked.push(id);
+            if (s.automation.job?.id === id) s.automation.job = null;
+          }
+        } else if (category === 'mineral') {
+          const room = Math.max(0, Math.min(multiple, capacity(s) - load(s)));
+          for (let i = 0; i < room; i++) grant(s, id, defaultVariant(id));
+          if (room && !s.mineralLog.includes(id)) s.mineralLog.push(id);
+          s.credits += (multiple - room) * base;
+        } else {
+          const f = findById(id), kind = Math.min(multiple, maxPieces);
+          for (let i = 0; i < kind; i++) {
+            const piece = {id: 'gamble:' + s.gambleCount + ':' + i, kind: id, variant: f.variants[0].variant};
+            if (category === 'equipment') piece.durability = 100;
+            if (id === 'desk_clock') piece.stoppedAt = 0;
+            s.finds.push(piece);
+          }
+          if (!s.findLog.includes(id)) s.findLog.push(id);
+          s.credits += (multiple - kind) * base;
+        }
+        s.gambleLog.unshift({win, category, id, multiple, stake});
+        s.gambleLog.length = Math.min(s.gambleLog.length, 10);
         break;
       }
       case 'automation-switch': {

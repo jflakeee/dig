@@ -3,12 +3,13 @@ import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, portalRayDistance } from './world.js';
 import { upgrades, upgradeIds, upgradeCost, level, bodyRadius, cellsPerStroke, baseRadius, drillCount, drillSize } from './upgrades.js';
-import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice, captureRule, reservedCredits } from './save.js';
+import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice, captureRule, reservedCredits, pledge } from './save.js';
 import { massText } from './composition.js';
 import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate, lotsFor, lotById, visibleRival, minimumBid } from './trade.js';
 import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
 import { studies, fragments } from './research.js';
 import { automations, automationIds, isOn } from './automation.js';
+import { categories, targets, winChance, maxMultiple, maxPieces } from './gamble.js';
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
 import { endingById, endings } from './endings.js';
 import { trainLength, capacity, load, canCouple, wagonCost, safeLength, wagonsBeyondSafe, speedFactor, carFill, machineLength, wagonLength } from './train.js';
@@ -385,6 +386,36 @@ function automate() {
   }
   return false;
 }
+// Gambling: a target, a multiple, and the pledge it would take.
+const targetName = (category, id) => category === 'mineral' ? mineralName(id) : category === 'research' ? automations[id].label : findById(id).name;
+function gambleChoice() {
+  const category = el('gamble-category').value, id = el('gamble-target').value;
+  const base = targets(category, mineralIds).find(([t]) => t === id)?.[1];
+  const multiple = Math.round(Number(el('gamble-multiple').value));
+  return {category, id, base, multiple, ok: !!base && multiple >= 1 && multiple <= maxMultiple};
+}
+function showGamble() {
+  const box = el('gamble');
+  box.hidden = !save?.front;
+  if (!panel || box.hidden) return;
+  fillSelect(el('gamble-category'), Object.entries(categories));
+  fillSelect(el('gamble-target'), targets(el('gamble-category').value, mineralIds)
+    .map(([id, base]) => [id, targetName(el('gamble-category').value, id) + ' · 기준 ' + credit(base)]));
+  const c = gambleChoice();
+  const stake = c.ok ? c.base * c.multiple : 0;
+  const pawn = c.ok && pledge(save, stake);
+  el('gamble-preview').textContent = !c.ok ? '배수는 1부터 ' + maxMultiple + '까지입니다.' :
+    '담보 ' + credit(stake) + (pawn ? ' = 크레딧 ' + pawn.credits + (pawn.minerals.length ? ' + ' +
+      pawn.minerals.map(([m, v, n]) => variantName(m, v) + ' ' + n).join(' · ') : '') : ' · 담보 부족') +
+    '\n당첨 확률 ' + Math.round(winChance * 100) + '% · 당첨 시 ' + targetName(c.category, c.id) + ' × ' + c.multiple +
+    (c.category === 'item' || c.category === 'equipment' ? ' (실물 최대 ' + maxPieces + '개, 나머지는 크레딧)' : '') + ' · 낙첨 시 담보 소실';
+  el('gamble-draw').disabled = busy || !pawn;
+  const lines = save.gambleLog.map(e => (e.win ? '당첨' : '낙첨') + ' · ' + targetName(e.category, e.id) + ' × ' + e.multiple + ' · 담보 ' + credit(e.stake));
+  if (el('gamble-log').dataset.lines !== JSON.stringify(lines)) {
+    el('gamble-log').replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
+    el('gamble-log').dataset.lines = JSON.stringify(lines);
+  }
+}
 function showResearch() {
   const box = el('research');
   const owned = [...new Set(save?.finds?.filter(p => studies[p.kind]).map(p => p.kind) ?? [])];
@@ -702,6 +733,7 @@ function hud() {
   showDecomposer();
   showStored();
   showTrade();
+  showGamble();
   showResearch();
   showSelf();
   showTrain();
@@ -960,6 +992,15 @@ el('sell').onclick = () => {
   if (!price) return;
   const label = el('sell-source').selectedOptions[0]?.textContent.replace(/ · \d+개 → .*$/, '');
   write({type: 'sell', ...tradeOperation(value), price}, () => message(label + ' 판매 · ' + credit(price)));
+};
+el('gamble-category').onchange = el('gamble-target').onchange = el('gamble-multiple').oninput = () => hud();
+el('gamble-draw').onclick = () => {
+  const c = gambleChoice();
+  if (!c.ok) return;
+  write({type: 'gamble', category: c.category, id: c.id, multiple: c.multiple}, () => {
+    const e = save.gambleLog[0];
+    message((e.win ? '당첨 · ' + targetName(e.category, e.id) + ' × ' + e.multiple : '낙첨 · 담보 ' + credit(e.stake) + ' 소실'));
+  });
 };
 el('auction').onclick = () => {
   const value = el('auction-source').value;

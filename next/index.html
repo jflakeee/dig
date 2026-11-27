@@ -98,6 +98,18 @@
           <ul id="lot-list"></ul>
           <ul id="trade-log"></ul>
         </details>
+        <details id="gamble" hidden>
+          <summary>도박</summary>
+          <label for="gamble-category">종류</label>
+          <select id="gamble-category"></select>
+          <label for="gamble-target">대상</label>
+          <select id="gamble-target"></select>
+          <label for="gamble-multiple">배수 (1–10000)</label>
+          <input id="gamble-multiple" type="number" min="1" max="10000" step="1" value="1" inputmode="numeric" />
+          <output id="gamble-preview" for="gamble-target gamble-multiple"></output>
+          <button id="gamble-draw">추첨</button>
+          <ul id="gamble-log"></ul>
+        </details>
         <details id="stored" hidden>
           <summary>보관 물품 <span id="stored-count"></span></summary>
           <ul id="fitted-list"></ul>
