@@ -75,52 +75,31 @@ function clearFace(world, axis, sign, skipCorner = false) {
     }
 }
 
-test('only the last solid cell schedules a face and gravity begins on opening', () => {
+test('a new chunk rolls one random portal; it forms for a minute, then opens and pulls', () => {
   const w = createWorld(false, () => 0);
-  clearFace(w, 2, 1, true);
-  w.dig(0, 0, 16);
-  w.advance(500);
+  // random 0: the roll passes, face 0 (x, minus side), a 1-cell opening, opening 60 s after creation.
   assert.equal(w.portals().filter(p => !p.exit).length, 0);
-  w.dig(16, 16, 16);
-  w.advance(300);
-  assert.deepEqual(w.gravity([0,0,0], w.portals().filter(p => !p.exit)), [0,0,0]);
-  w.advance(1);
+  const shaping = w.forming([0.5, 0.5, 0.5]);
+  assert.ok(shaping.forming && shaping.dir[0] < 0 && shaping.seconds === 60);
+  w.advance(30);
+  const half = w.forming([0.5, 0.5, 0.5]);
+  assert.ok(Math.abs(half.strength - 0.8 * 0.2 * 0.5) < 1e-9, 'the pull grows toward a fifth of the strength');
+  assert.ok(w.gravity([0.5, 0.5, 0.5], [])[0] < 0, 'the forming pull is real');
+  w.advance(30);
   const gate = w.portals().find(p => !p.exit);
-  assert.equal(gate.radius, 0.5);
-  assert.equal(gate.point[2], 17);
-  assert.ok(w.gravity([-14,-14,-14], [gate])[2] > 0);
+  assert.deepEqual([gate.axis, gate.sign, gate.radius, gate.cause], [0, -1, 0.5, 'random']);
+  assert.equal(w.forming([0.5, 0.5, 0.5]), null);
   // Portal pull stops at its chunk; only that chunk's own microgravity, if any, remains.
   const micro = w.microgravity([0,0,18]);
   assert.deepEqual(w.gravity([0,0,18]).map(v => +v.toFixed(12)), (micro ? micro.dir.map(v => v * micro.strength) : [0,0,0]).map(v => +v.toFixed(12)));
 });
 
-test('six faces connect six neighbours within the inclusive deadline', () => {
-  for (const seconds of [299.999, 300, 300.001]) {
-    const w = createWorld(false, () => 0.999999, undefined, undefined, undefined, () => 0);
-    w.dig(0,0,18);
-    clearFace(w, 0, -1);
-    w.advance(seconds);
-    for (let axis = 0; axis < 3; axis++)
-      for (const sign of [-1,1])
-        if (axis !== 0 || sign !== -1) clearFace(w, axis, sign);
-    assert.equal(w.hasChunk(-1,0,0), seconds <= 300);
-    assert.equal(w.solid(0,0,18), false);
-    w.advance(361);
-    assert.equal(w.portals().filter(p => !p.exit).length, 6);
-    assert.ok(w.portals().filter(p => !p.exit).every(p => p.radius === 16));
-  }
-});
-
-test('a face emptied by portal debris does not start the six-face window', () => {
-  const w = createWorld(false, () => 0.999999, undefined, undefined, undefined, () => 0);
-  for (let a = -15; a <= 16; a++)
-    for (let b = -15; b <= 16; b++) w.dig(-15, a, b, false);
-  w.advance(400);
-  for (let axis = 0; axis < 3; axis++)
-    for (const sign of [-1,1])
-      if (axis !== 0 || sign !== -1) clearFace(w, axis, sign);
-  assert.equal(w.snapshot().chunks.find(c => c.x === 0 && c.y === 0 && c.z === 0).faces[0].cause, 'debris');
-  assert.equal(w.hasChunk(-1,0,0), true);
+test('clearing a face opens nothing, and a chunk that misses the roll never gets a portal', () => {
+  const w = createWorld(false, () => 0.999);
+  clearFace(w, 2, 1);
+  w.advance(1000);
+  assert.equal(w.portals().filter(p => !p.exit).length, 0);
+  assert.equal(w.forming([0.5, 0.5, 0.5]), null);
 });
 
 test('starter attraction is weak and ordinary portal strength is sampled once', () => {
@@ -130,12 +109,9 @@ test('starter attraction is weak and ordinary portal strength is sampled once', 
   assert.equal(first.exit, false);
   assert.equal(first.strength, 0.6);
   assert.ok(starter.gravity([0.5,0.5,6])[2] > 0);
-  for (const roll of [0, 0.9]) {
-    let sample = roll;
-    const world = createWorld(false, () => sample, undefined, undefined, undefined, () => 0);
-    clearFace(world, 2, 1);
+  for (const roll of [0, 0.3]) {
+    const world = createWorld(false, () => roll, undefined, undefined, undefined, () => 0);
     world.advance(361);
-    sample = 0.5;
     const gate = world.portals().find(p => !p.exit);
     assert.equal(gate.strength, 0.8 + roll * 4);
     const exit = createWorld(false, () => 0, gate.radius, gate.strength);
@@ -164,48 +140,38 @@ test('visual rays follow fractured silhouettes, while mining occupies full cells
 test('reset removes only the evicted chunk’s portals and pending openings', () => {
   for (const tutorial of [true, false]) {
     const world = createWorld(tutorial, () => 0);
-    clearFace(world, 2, 1);
-    for (let x = 17; x <= 48; x++)
-      for (let y = -15; y <= 16; y++) world.dig(x, y, 16);
-    world.advance(361);
-    clearFace(world, 2, -1);
+    world.stream([32, 0, 0]);
+    world.advance(61);
     const neighbour = world.portals().find(p => p.chunk[0] === 1);
     assert.ok(neighbour);
-    assert.equal(world.portals().length, 3);
-    world.stream([32, 0, 0]);
-    assert.equal(world.portals().length, 3);
     world.stream([64, 0, 0]);
     assert.equal(world.mouth, null);
-    assert.deepEqual(world.portals(), [neighbour]);
-    world.stream([0, 0, 0]);
-    world.dig(0, 0, 0);
-    world.advance(1000);
-    assert.deepEqual(world.portals(), [neighbour]);
-    assert.deepEqual(world.gravity([0, 0, 0]), [0, 0, 0]);
+    assert.ok(world.portals().includes(neighbour));
+    assert.ok(world.portals().every(p => p.chunk[0] !== 0), 'the origin and its portals are gone');
   }
 });
-
 test('save round trip preserves excavation, portal countdown and chunk resets', () => {
   const world = createWorld(true, () => 0);
-  clearFace(world, 2, 1);
-  world.advance(300);
-  const restore = w => createWorld(true, () => { throw Error('unexpected reroll'); },
+  world.dig(0, 0, 16);
+  world.stream([32, 0, 0]);
+  world.advance(30);
+  // Restoring must not roll again; only a reset coordinate's new generation may.
+  const restore = w => createWorld(true, key => { if (!/:portal:/.test(key)) throw Error('unexpected reroll'); return 0.999; },
     undefined, undefined, JSON.parse(JSON.stringify(w.snapshot())), () => 0);
   const loaded = restore(world);
   assert.equal(loaded.solid(0,0,16), false);
   assert.equal(loaded.solid(0,0,15), true);
-  assert.equal(loaded.portals().length, 1);
-  loaded.advance(1);
-  world.advance(1);
+  assert.deepEqual(loaded.forming([32.5, 0.5, 0.5]), world.forming([32.5, 0.5, 0.5]));
+  loaded.advance(31);
+  world.advance(31);
   assert.deepEqual(loaded.portals(), world.portals());
   assert.deepEqual(restore(loaded).portals(), world.portals());
-  loaded.stream([64,0,0]);
+  loaded.stream([96,0,0]);
   const reset = restore(loaded);
   reset.stream([0,0,0]);
   assert.equal(reset.solid(0,0,16), true);
-  assert.deepEqual(reset.portals(), []);
+  assert.ok(reset.portals().every(p => p.chunk[0] !== 0));
 });
-
 test('start, neighbours and portal arrivals use the same terrain weights', () => {
   for (let percent = 0; percent < 100; percent++) {
     const roll = () => percent / 100;
@@ -236,19 +202,6 @@ test('each starting terrain supplies three laser rocks and preserves excavation 
   }
 });
 
-test('empty faces start waiting on entry and never spawn neighbours on their own', () => {
-  let roll = 0;
-  const w = createWorld(true, () => roll);
-  roll = 0.93;
-  assert.equal(w.solid(32,8,2),false);
-  w.advance(500);
-  assert.equal(w.portals().length,1);
-  w.stream([32,0,0]);
-  w.advance(360);
-  assert.equal(w.portals().length,7);
-  assert.equal(w.hasChunk(2,0,0),false);
-});
-
 test('cave has connected passages, solid walls and accurate face counts', () => {
   const w = createWorld(false, () => 0.85);
   for (let z = -15; z <= 16; z++) assert.equal(w.solid(0,0,z),false);
@@ -256,9 +209,6 @@ test('cave has connected passages, solid walls and accurate face counts', () => 
   let count=0;
   for(let x=-15;x<=16;x++) for(let y=-15;y<=16;y++) count+=Number(w.solid(x,y,16));
   assert.equal(w.snapshot().chunks[0].remaining[5],count);
-  clearFace(w,2,1);
-  w.advance(361);
-  assert.ok(w.portals().some(p => !p.exit && p.axis===2 && p.sign===1));
 });
 
 test('warehouse pickups stay removed after reload', () => {
@@ -425,10 +375,8 @@ test('terrain and face rolls depend on coordinates, not on creation order', () =
   for (const x of [-40, 72, 40]) b.solid(x, 0, 0);
   const summary = w => w.snapshot().chunks.map(c => [c.x, c.y, c.z, c.kind, c.seed].join()).sort();
   assert.deepEqual(summary(a), summary(b));
-  for (const w of [a, b]) clearFace(w, 2, 1);
-  const face = w => w.snapshot().chunks.find(c => c.x === 0 && c.y === 0 && c.z === 0).faces.at(-1);
-  const {cleared: _a, ...fa} = face(a), {cleared: _b, ...fb} = face(b);
-  assert.deepEqual(fa, fb);
+  const faces = w => w.snapshot().chunks.map(c => [c.x, c.y, c.z, JSON.stringify(c.faces.map(({cleared, ready, ...f}) => f))].join()).sort();
+  assert.deepEqual(faces(a), faces(b));
 });
 
 test('a reset coordinate rolls a new generation that survives a reload', () => {
@@ -439,7 +387,7 @@ test('a reset coordinate rolls a new generation that survives a reload', () => {
   assert.equal(w.hasChunk(0, 0, 0), false);
   const saved = JSON.parse(JSON.stringify(w.snapshot()));
   assert.deepEqual(saved.generations.find(([k]) => k === '0,0,0'), ['0,0,0', 1]);
-  const restored = createWorld(false, () => { throw Error('unexpected reroll'); }, undefined, undefined, saved,
+  const restored = createWorld(false, key => { assert.match(key, /^0,0,0:1:portal:/); return 0.999; }, undefined, undefined, saved,
     key => { assert.match(key, /^0,0,0:1:/); return 0; });
   restored.stream([0.5, 0.5, 0.5]);
   assert.equal(restored.snapshot().chunks.find(c => c.x === 0 && c.y === 0 && c.z === 0).epoch, 1);

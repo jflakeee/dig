@@ -537,7 +537,7 @@ function validSession(s) {
       Array.isArray(c.faces) && c.faces.length <= 6 && c.faces.every(f =>
         f && vector(f.chunk, Number.isSafeInteger) && vector(f.point) && [0,1,2].includes(f.axis) &&
         [-1,1].includes(f.sign) && f.exit === false && Number.isFinite(f.ready) && Number.isFinite(f.cleared) &&
-        (f.cause === undefined || ['initial','mined','debris'].includes(f.cause)) &&
+        (f.cause === undefined || ['initial','mined','debris','random'].includes(f.cause)) &&
         Number.isFinite(f.radius) && f.radius > 0 && Number.isFinite(f.strength) && f.strength > 0));
 }
 export function readSave() {
