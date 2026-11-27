@@ -45,6 +45,8 @@
         <details id="workshop" hidden>
           <summary>제작 <span id="craft-summary"></span></summary>
           <ul id="craft-list"></ul>
+          <p>강화</p>
+          <ul id="upgrade-list"></ul>
           <button id="fire-ceramic" hidden>세라믹 가열 <small>암석 3개</small></button>
           <button id="repair" hidden>드릴 수리 <small>세라믹 1개</small></button>
         </details>
@@ -62,6 +64,8 @@
           <output id="research-preview" for="research-source"></output>
           <button id="research-start">분석 시작</button>
           <button id="read-film" hidden>기억막 판독</button>
+          <p>자동화 연구 <span id="automation-status"></span></p>
+          <ul id="automation-list"></ul>
           <ul id="research-list"></ul>
           <details id="memory-book" hidden>
             <summary>관측 기록</summary>
@@ -80,7 +84,7 @@
           <p id="element-list"></p>
         </details>
         <details id="trade" hidden>
-          <summary>거래 드론 <span id="credits"></span></summary>
+          <summary>거래 <span id="credits"></span></summary>
           <p id="trader"></p>
           <label for="sell-source">판매</label>
           <select id="sell-source"></select>
@@ -93,6 +97,18 @@
           <p id="lots-title">다른 기계의 경매</p>
           <ul id="lot-list"></ul>
           <ul id="trade-log"></ul>
+        </details>
+        <details id="gamble" hidden>
+          <summary>도박</summary>
+          <label for="gamble-category">종류</label>
+          <select id="gamble-category"></select>
+          <label for="gamble-target">대상</label>
+          <select id="gamble-target"></select>
+          <label for="gamble-multiple">배수 (1–10000)</label>
+          <input id="gamble-multiple" type="number" min="1" max="10000" step="1" value="1" inputmode="numeric" />
+          <output id="gamble-preview" for="gamble-target gamble-multiple"></output>
+          <button id="gamble-draw">추첨</button>
+          <ul id="gamble-log"></ul>
         </details>
         <details id="stored" hidden>
           <summary>보관 물품 <span id="stored-count"></span></summary>

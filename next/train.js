@@ -1,4 +1,5 @@
 import { working } from './equipment.js';
+import { level } from './upgrades.js';
 // Cargo train (docs/dig-4d-train-cargo-chunk-transition-detail-20261125.md).
 // Every wagon is a sealed spherical machine like the miner itself: cargo
 // never spills from it; once full, it simply takes nothing more.
@@ -12,7 +13,10 @@ export const wagonCapacity = 80;
 export const wagonCost = {iron: 3, rock: 10};
 export const wagonClearance = 1.2;   // smallest portal radius a wagon passes
 export const trainLength = s => machineLength + wagonLength * (s?.wagons?.length ?? 0);
-export const capacity = s => baseCapacity + wagonCapacity * (s?.wagons?.length ?? 0);
+// Upgrades widen the machine's hold and every wagon's.
+export const machineRoom = s => baseCapacity + 60 * level(s, 'body');
+export const wagonRoom = s => wagonCapacity + 40 * level(s, 'wagon');
+export const capacity = s => machineRoom(s) + wagonRoom(s) * (s?.wagons?.length ?? 0);
 export const load = s => (s?.rocks ?? 0) + Object.values(s?.minerals ?? {}).reduce((n, k) => n + k, 0);
 export const canCouple = s => !!working(s, 'coupler');
 // Driving speed falls with how full the hold is and how many wagons are towed.
@@ -23,7 +27,7 @@ export function speedFactor(s) {
 // How full each car is, front first: the machine's hold, then each wagon in order.
 export function carFill(s) {
   let left = load(s);
-  return [baseCapacity, ...(s?.wagons ?? []).map(() => wagonCapacity)].map(room => {
+  return [machineRoom(s), ...(s?.wagons ?? []).map(() => wagonRoom(s))].map(room => {
     const used = Math.min(room, left);
     left -= used;
     return used / room;

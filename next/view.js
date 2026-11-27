@@ -57,7 +57,7 @@ export function createView(canvas) {
   resize();
   new ResizeObserver(resize).observe(canvas);
   return function render(s, now) {
-    const { world, pos, yaw, pitch, light, working, anchors, contact, minerals, focus } = s;
+    const { world, pos: center, yaw, pitch, light, working, anchors, contact, minerals, focus, body } = s;
     // A focusing lamp narrows the central beam and carries it further.
     const spread = focus ? 30 : 16, beam = focus ? 0.55 : 0.28, falloff = focus ? 0.05 : 0.12;
     const w = canvas.width,
@@ -70,6 +70,17 @@ export function createView(canvas) {
       Math.cos(pitch),
       -Math.cos(yaw) * Math.sin(pitch),
     ];
+    // Third-person camera behind and a little above the machine, pulled in
+    // front of any rock between. Close in, it becomes the cockpit view.
+    let pos = center, outside = false;
+    if (body && body.distance > 0) {
+      const back = d.map((n, i) => -n * body.distance + up[i] * body.distance * 0.18);
+      const length = Math.hypot(...back);
+      const wall = world.trace(center, ...back.map(n => n / length), length + 0.2);
+      const reach = Math.max(0, Math.min(length, wall ? wall.t - 0.2 : length));
+      outside = reach > body.radius * 1.15;
+      if (outside) pos = center.map((n, i) => n + back[i] / length * reach);
+    }
     const source = pixels.data;
     const portals = world.portals();
     for (let j = 0; j < h; j++)
@@ -295,7 +306,44 @@ export function createView(canvas) {
         ctx.fillRect(...at,i%3+1,i%2+1);
       }
     }
-    if (s.mounted) {
+    // The machine and its drills, drawn see-through so every drill shows.
+    if (outside) {
+      const at = project(center);
+      const depth = Math.hypot(...center.map((n, i) => n - pos[i]));
+      const spin = working ? now * 12 : 0;
+      for (let k = 0; k < body.drills; k++) {
+        const angle = (k / body.drills) * Math.PI * 2 + 0.6;
+        const ring = body.drills > 1 ? body.radius * 0.62 : 0;
+        const side = right.map((n, i) => n * Math.cos(angle) * ring + up[i] * Math.sin(angle) * ring);
+        const base = center.map((n, i) => n + d[i] * body.radius * 0.75 + side[i]);
+        const tip = base.map((n, i) => n + d[i] * 0.55 * body.size);
+        const width = 0.24 * body.size;
+        const a = project(base.map((n, i) => n + right[i] * width)), b = project(base.map((n, i) => n - right[i] * width));
+        const c = project(base.map((n, i) => n + up[i] * width)), e = project(base.map((n, i) => n - up[i] * width));
+        const t = project(tip);
+        if (!a || !b || !c || !e || !t) continue;
+        ctx.fillStyle = s.mounted ? '#6d7069' : '#4a3b33';
+        ctx.beginPath();
+        ctx.moveTo(...a); ctx.lineTo(...c); ctx.lineTo(...b); ctx.lineTo(...e); ctx.closePath();
+        ctx.fill();
+        for (const edge of [a, b, c, e]) line(...edge, ...t, '#9a9b8d', 1.2);
+        line(...t, t[0] + Math.cos(spin + k) * 2, t[1] + Math.sin(spin + k) * 2, '#d8d1b8', 1);
+      }
+      if (at) {
+        const size = f * body.radius / Math.max(0.3, depth);
+        const shine = ctx.createRadialGradient(at[0] - size * 0.35, at[1] - size * 0.4, size * 0.1, at[0], at[1], size);
+        shine.addColorStop(0, 'rgba(190,198,190,0.42)');
+        shine.addColorStop(1, 'rgba(62,70,68,0.28)');
+        ctx.fillStyle = shine;
+        ctx.beginPath();
+        ctx.arc(at[0], at[1], size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(170,178,168,0.7)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+    if (s.mounted && !outside) {
       for (const [n, point] of anchors.entries()) {
         const end = project(point);
         if (end) {

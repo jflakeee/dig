@@ -4,6 +4,7 @@ import { auctionEstimate, auctionOutcome, auctionSeconds, cycleSeconds, marketCy
   unsoldChance, maxMultiple, auctionFee } from '../next/trade.js';
 import { commit, readSave, saveKey, saveVersion, sellPrice } from '../next/save.js';
 import { roll } from '../next/roll.js';
+const sellPriceOf = (s, op) => sellPrice(s, op);
 
 function mockStorage(t) {
   const data = new Map();
@@ -28,11 +29,13 @@ test('offers hold for a market cycle, differ between cycles and follow condition
   assert.deepEqual(traderOf(77, 3), traderOf(77, 3));
   const head = d => sellQuote(77, 0, {kind: 'drill_head', variant: 'standard', durability: d}, 'f:drill_head');
   assert.ok(head(90) > head(30));
-  assert.equal(sellQuote(77, 0, {kind: 'tilt_glass', variant: 'standard'}, 'f:tilt_glass'), null);
-  assert.equal(sellQuote(77, 0, {kind: 'capsule', element: 'Og'}, 's:capsule:Og'), null);
+  // Everything has a price now: unknowns and capsules at about a third of their estimate.
+  assert.ok(sellQuote(77, 0, {kind: 'tilt_glass', variant: 'standard'}, 'f:tilt_glass') > 0);
+  assert.ok(sellQuote(77, 0, {kind: 'capsule', element: 'Og'}, 's:capsule:Og') > 0);
   assert.equal(auctionEstimate({kind: 'capsule', element: 'Og'}), 150);
   assert.equal(auctionEstimate({kind: 'capsule', element: 'Fe'}), 40);
-  assert.equal(auctionEstimate({kind: 'drill_head'}), null);
+  assert.equal(auctionEstimate({kind: 'drill_head', durability: 50}), 60);
+  assert.equal(auctionEstimate({mineral: 'gold', count: 10}), 400);
   const stock = marketStock(77, 0);
   assert.deepEqual(stock, marketStock(77, 0));
   assert.ok(stock.find(o => o.item === 'drill_head').durability >= 70);
@@ -89,7 +92,7 @@ test('selling pays this cycle offer once and refuses a stale price', async t => 
 
 test('buying spends credits for a ceramic or a drill head with this cycle durability', async t => {
   const data = mockStorage(t);
-  const [ceramic, head] = marketStock(77, 0);
+  const ceramic = marketStock(77, 0).find(o => o.item === 'ceramic'), head = marketStock(77, 0).find(o => o.item === 'drill_head');
   data.set(saveKey, JSON.stringify(drilling({credits: ceramic.price + head.price})));
   let s = await commit(0, {type: 'buy', item: 'ceramic', price: ceramic.price});
   assert.equal(s.ceramic, 1);
@@ -211,4 +214,32 @@ test('a bid below the ceiling is released, and reserved credits cannot exceed th
   delete old.bids;
   data.set(saveKey, JSON.stringify(old));
   assert.deepEqual(readSave().bids, []);
+});
+
+test('every mineral can be bought, and ten or more go to auction as one bundle that returns unsold', async t => {
+  const data = mockStorage(t);
+  const iron = marketStock(77, 0).find(o => o.item === 'm:iron');
+  assert.ok(iron.price > 0);
+  data.set(saveKey, JSON.stringify(drilling({credits: iron.price, rocks: 12, variants: {}})));
+  let s = await commit(0, {type: 'buy', item: 'm:iron', price: iron.price});
+  assert.equal(s.minerals.iron, 1);
+  assert.ok(s.mineralLog.includes('iron'));
+  await assert.rejects(commit(s.revision, {type: 'auction', source: 'm', kind: 'rock', variant: 'granite', count: 9}), /올릴 수 없습니다/);
+  s = await commit(s.revision, {type: 'auction', source: 'm', kind: 'rock', variant: 'granite', count: 10});
+  assert.equal(s.rocks, 2);
+  const [a] = s.auctions;
+  assert.deepEqual([a.origin, a.piece.count, a.estimate], ['minerals', 10, 20]);
+  s = await commit(s.revision, {type: 'cancel-auction', id: a.id});
+  assert.equal(s.rocks, 12);
+  s = await commit(s.revision, {type: 'sell', source: 'm', kind: 'rock', variant: 'granite', price: sellPriceOf(s, {source: 'm', kind: 'rock', variant: 'granite'})});
+  assert.equal(s.rocks, 11);
+});
+
+test('ceramic sells like any other piece', async t => {
+  const data = mockStorage(t);
+  data.set(saveKey, JSON.stringify(drilling({ceramic: 2})));
+  const s0 = readSave();
+  const s = await commit(0, {type: 'sell', source: 'c', price: sellPriceOf(s0, {source: 'c'})});
+  assert.equal(s.ceramic, 1);
+  assert.ok(s.credits > 0);
 });

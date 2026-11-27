@@ -1,12 +1,15 @@
 import { intersectStone } from './rock-shapes.js';
 import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
-import { createWorld, forward, offset, portalRayDistance, radius } from './world.js';
-import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice, captureRule, reservedCredits } from './save.js';
+import { createWorld, forward, offset, portalRayDistance } from './world.js';
+import { upgrades, upgradeIds, upgradeCost, level, bodyRadius, cellsPerStroke, baseRadius, drillCount, drillSize } from './upgrades.js';
+import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice, captureRule, reservedCredits, pledge } from './save.js';
 import { massText } from './composition.js';
 import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate, lotsFor, lotById, visibleRival, minimumBid } from './trade.js';
 import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
 import { studies, fragments } from './research.js';
+import { automations, automationIds, isOn } from './automation.js';
+import { categories, targets, winChance, maxMultiple, maxPieces } from './gamble.js';
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
 import { endingById, endings } from './endings.js';
 import { trainLength, capacity, load, canCouple, wagonCost, safeLength, wagonsBeyondSafe, speedFactor, carFill, machineLength, wagonLength } from './train.js';
@@ -44,6 +47,7 @@ let age = 0,
 let contact = null, fracture = null, installedUntil = 0;
 let lastRockGain = -Infinity;
 let nextHullRepair = 0;
+let nextAutomation = 0;
 let checkpointAge = 0;
 let hull = 100;
 let hazardVisible = false;
@@ -169,7 +173,7 @@ function showDecomposer() {
 }
 // Drone trade with machines of other times. Prices hold for one market cycle.
 const credit = n => n.toLocaleString('ko-KR') + ' ' + currency;
-const pieceName = p => p.kind === 'capsule' || specimenById(p.kind) ? specimenLabel(p.kind, p.variant, p.element, p.form) : findLabel(p);
+const pieceName = p => p.mineral ? variantName(p.mineral, p.variant) + ' ' + (p.count ?? 1) + '개 묶음' : p.kind === 'capsule' || specimenById(p.kind) ? specimenLabel(p.kind, p.variant, p.element, p.form) : findLabel(p);
 function tradeOperation(value) {
   const [source, kind, variant, id] = value.split('|');
   return {source, kind, variant, element: kind === 'capsule' ? variant : undefined, id: id || undefined};
@@ -180,13 +184,13 @@ function sellChoices() {
     for (const [v, n] of Object.entries(variantCounts(save, id))) if (n > 0)
       choices.push(['m|' + id + '|' + v, (variantName(id, v) === mineralName(id) ? mineralName(id) : variantName(id, v) + ' (' + mineralName(id) + ')') + ' · ' + n + '개']);
   const groups = new Map();
-  for (const p of save.specimens) if (p.kind !== 'capsule') {
-    const value = 's|' + p.kind + '|' + p.variant;
+  for (const p of save.specimens) {
+    const value = 's|' + p.kind + '|' + (p.kind === 'capsule' ? p.element : p.variant);
     groups.set(value, [(groups.get(value)?.[0] ?? 0) + 1, p]);
   }
+  if (save.ceramic) choices.push(['c|ceramic|', '세라믹 · ' + save.ceramic + '개']);
   for (const p of save.finds) {
     const c = findById(p.kind).category;
-    if (c === 'unknown') continue;
     const value = 'f|' + p.kind + '|' + p.variant + (c === 'equipment' ? '|' + p.id : '');
     groups.set(value, [(groups.get(value)?.[0] ?? 0) + 1, p]);
   }
@@ -194,12 +198,16 @@ function sellChoices() {
     choices.push([value, pieceName(p) + (p.durability !== undefined ? ' · 내구도 ' + p.durability + '%' : '') + ' · ' + n + '개']);
   return choices.map(([value, label]) => [value, label, sellPrice(save, tradeOperation(value))]).filter(c => c[2]);
 }
+// Every piece can go to auction (unknowns once analysed); minerals as bundles of ten.
 function auctionChoices() {
   const out = [];
-  for (const p of save.specimens) if (p.kind === 'capsule') out.push(['s|capsule|' + p.element + '|' + p.id, pieceName(p), auctionEstimate(p)]);
-  for (const p of save.finds) if (findById(p.kind).category === 'unknown' && save.research.includes(p.kind))
-    out.push(['f|' + p.kind + '|' + p.variant + '|' + p.id, pieceName(p), auctionEstimate(p)]);
-  return out;
+  for (const id of mineralIds)
+    for (const [v, n] of Object.entries(variantCounts(save, id))) if (n >= 10)
+      out.push(['m|' + id + '|' + v + '|10', variantName(id, v) + ' 10개 묶음', auctionEstimate({mineral: id, count: 10})]);
+  for (const p of save.specimens) out.push(['s|' + p.kind + '|' + (p.kind === 'capsule' ? p.element : p.variant) + '|' + p.id, pieceName(p), auctionEstimate(p)]);
+  for (const p of save.finds) if (findById(p.kind).category !== 'unknown' || save.research.includes(p.kind))
+    out.push(['f|' + p.kind + '|' + p.variant + '|' + p.id, pieceName(p) + (p.durability !== undefined ? ' · 내구도 ' + p.durability + '%' : ''), auctionEstimate(p)]);
+  return out.filter(c => c[2]);
 }
 function fillSelect(select, options) {
   if (select.dataset.options === JSON.stringify(options)) return;
@@ -236,7 +244,7 @@ function showTrade() {
   const sell = sells.find(([value]) => value === el('sell-source').value);
   el('sell').textContent = sell ? '1개 판매 · ' + credit(sell[2]) : '판매할 물품 없음';
   el('sell').disabled = busy || !sell;
-  const stock = marketStock(save.marketSeed, cycle);
+  const stock = marketStock(save.marketSeed, cycle, mineralIds, mineralName);
   const buttons = stock.map(o => '구매 · ' + o.name + (o.durability ? ' (내구도 ' + o.durability + '%)' : '') + ' · ' + credit(o.price));
   const list = el('buy-list');
   if (list.dataset.labels !== JSON.stringify(buttons)) {
@@ -244,14 +252,15 @@ function showTrade() {
       const b = Object.assign(document.createElement('button'), {textContent: buttons[i]});
       b.dataset.item = o.item;
       b.onclick = () => {
-        const offer = marketStock(save.marketSeed, marketCycle(save.marketTime)).find(x => x.item === o.item);
+        const offer = marketStock(save.marketSeed, marketCycle(save.marketTime), mineralIds, mineralName).find(x => x.item === o.item);
         write({type: 'buy', item: o.item, price: offer.price}, () => message(offer.name + ' 구매 · ' + credit(offer.price)));
       };
       return b;
     }));
     list.dataset.labels = JSON.stringify(buttons);
   }
-  for (const b of list.children) b.disabled = busy || save.credits - reserved < (stock.find(o => o.item === b.dataset.item)?.price ?? Infinity);
+  for (const b of list.children) b.disabled = busy || save.credits - reserved < (stock.find(o => o.item === b.dataset.item)?.price ?? Infinity) ||
+    (b.dataset.item.startsWith('m:') && load(save) >= capacity(save));
   // Lots other machines list this cycle: visible top bid, my bid, time left.
   const lots = lotsFor(save.marketSeed, cycle);
   const lotRows = lots.map(lot => {
@@ -301,11 +310,118 @@ function showTrade() {
 }
 // Built-in analysis of unknown materials and reading of memory films.
 let memoryUntil = 0;
+// Automation studies and their switches, in fixed order, updated in place.
+function showAutomation() {
+  const auto = save.automation, job = auto.job;
+  el('automation-status').textContent = job ? '· ' + automations[job.id].label + ' 남은 ' +
+    Math.max(0, Math.ceil(job.endsAt - save.marketTime)) + '초' : '· ' + auto.unlocked.length + ' / ' + automationIds.length;
+  const list = el('automation-list');
+  if (list.children.length !== automationIds.length) {
+    list.replaceChildren(...automationIds.map(id => {
+      const li = document.createElement('li');
+      const act = document.createElement('button');
+      act.onclick = () => {
+        if (!save.automation.unlocked.includes(id))
+          write({type: 'automate', id}, () => message('자동화 연구 시작 · ' + automations[id].label));
+        else {
+          const on = !isOn(save, id);
+          write({type: 'automation-switch', id, on}, () => message(automations[id].label + (on ? ' 켬' : ' 끔')));
+        }
+      };
+      li.append(document.createElement('span'), ' ', act);
+      return li;
+    }));
+  }
+  const free = save.credits - reservedCredits(save);
+  automationIds.forEach((id, i) => {
+    const a = automations[id], li = list.children[i], [label, act] = [li.firstChild, li.lastChild];
+    const done = auto.unlocked.includes(id);
+    const short = !done && (free < a.credits || Object.entries(a.elements).some(([e, g]) => (save.elements[e] ?? 0) < g));
+    const text = a.label + ' · ' + a.effect + (done ? '' : ' · ' + credit(a.credits) + ' · ' +
+      Object.entries(a.elements).map(([e, g]) => e + ' ' + g + ' g').join(' · ') + ' · ' + a.seconds + '초');
+    li.className = done || !short ? 'ready' : '';
+    if (label.textContent !== text) label.textContent = text;
+    act.textContent = done ? (isOn(save, id) ? '켜짐' : '꺼짐') : job?.id === id ? '연구 중' : short ? '재료 부족' : '연구';
+    act.disabled = busy || (!done && (!!job || short));
+  });
+}
+// Presses one automated button when its condition holds; true when it wrote.
+function automate() {
+  if (isOn(save, 'capture') && save.captures?.length && !el('capture').hidden) { el('capture').click(); return true; }
+  if (isOn(save, 'repair') && (save.drillCondition ?? 100) < 50) {
+    if ((save.ceramic ?? 0) >= ceramicPerRepair) { write('repair', () => message('자동 드릴 수리')); return true; }
+    if (save.rocks >= rocksPerCeramic) { write('fire-ceramic', () => message('자동 세라믹 가열')); return true; }
+  }
+  const full = load(save) >= capacity(save) * 0.9;
+  if (isOn(save, 'wagon') && full && canCouple(save) && trainLength(save) + 3 <= safeLength &&
+    (save.minerals.iron ?? 0) >= wagonCost.iron && save.rocks >= wagonCost.rock) {
+    write({type: 'add-wagon'}, () => message('자동 화물칸 연결'));
+    return true;
+  }
+  if (isOn(save, 'sell') && full) {
+    const id = mineralIds.reduce((a, b) => owned(save, b) > owned(save, a) ? b : a);
+    const v = Object.entries(variantCounts(save, id)).find(([, n]) => n > 0)?.[0];
+    const op = v && {source: 'm', kind: id, variant: v};
+    const price = op && sellPrice(save, op);
+    if (price) { write({type: 'sell', ...op, price}, () => message('자동 판매 · ' + variantName(id, v) + ' · ' + credit(price))); return true; }
+  }
+  if (isOn(save, 'decompose')) {
+    const p = save.finds.find(q => ['household', 'artifact'].includes(findById(q.kind).category) && findPiece(q.kind, q.variant));
+    if (p) { write({type: 'decompose', find: p.kind, variant: p.variant}, () => message('자동 분해 · ' + pieceName(p))); return true; }
+  }
+  if (isOn(save, 'analyze') && !save.researchJob) {
+    const kind = save.finds.map(p => p.kind).find(k => studies[k] && !save.research.includes(k) &&
+      Object.entries(studies[k].cost).every(([e, g]) => (save.elements[e] ?? 0) >= g));
+    if (kind) { write({type: 'research', kind}, () => message('자동 분석 시작 · ' + findById(kind).name)); return true; }
+    if (!el('read-film').hidden) { el('read-film').click(); return true; }
+  }
+  if (isOn(save, 'equip')) {
+    const p = save.finds.find(q => slotOf(q.kind) && q.durability > 0 && !save.equipment[slotOf(q.kind)]);
+    if (p) { write({type: 'equip', id: p.id}, () => message('자동 장착 · ' + pieceName(p))); return true; }
+  }
+  if (isOn(save, 'upgrade')) {
+    const id = upgradeIds.map(k => [k, upgradeCost(save, k)]).filter(([, c]) => c && affords(save, c))
+      .sort((a, b) => Object.values(a[1]).reduce((n, x) => n + x, 0) - Object.values(b[1]).reduce((n, x) => n + x, 0))[0]?.[0];
+    if (id) { write({type: 'upgrade', id}, () => message('자동 강화 · ' + upgrades[id].label + ' ' + level(save, id) + '단계')); return true; }
+  }
+  return false;
+}
+// Gambling: a target, a multiple, and the pledge it would take.
+const targetName = (category, id) => category === 'mineral' ? mineralName(id) : category === 'research' ? automations[id].label : findById(id).name;
+function gambleChoice() {
+  const category = el('gamble-category').value, id = el('gamble-target').value;
+  const base = targets(category, mineralIds).find(([t]) => t === id)?.[1];
+  const multiple = Math.round(Number(el('gamble-multiple').value));
+  return {category, id, base, multiple, ok: !!base && multiple >= 1 && multiple <= maxMultiple};
+}
+function showGamble() {
+  const box = el('gamble');
+  box.hidden = !save?.front;
+  if (!panel || box.hidden) return;
+  fillSelect(el('gamble-category'), Object.entries(categories));
+  fillSelect(el('gamble-target'), targets(el('gamble-category').value, mineralIds)
+    .map(([id, base]) => [id, targetName(el('gamble-category').value, id) + ' · 기준 ' + credit(base)]));
+  const c = gambleChoice();
+  const stake = c.ok ? c.base * c.multiple : 0;
+  const pawn = c.ok && pledge(save, stake);
+  el('gamble-preview').textContent = !c.ok ? '배수는 1부터 ' + maxMultiple + '까지입니다.' :
+    '담보 ' + credit(stake) + (pawn ? ' = 크레딧 ' + pawn.credits + (pawn.minerals.length ? ' + ' +
+      pawn.minerals.map(([m, v, n]) => variantName(m, v) + ' ' + n).join(' · ') : '') : ' · 담보 부족') +
+    '\n당첨 확률 ' + Math.round(winChance * 100) + '% · 당첨 시 ' + targetName(c.category, c.id) + ' × ' + c.multiple +
+    (c.category === 'item' || c.category === 'equipment' ? ' (실물 최대 ' + maxPieces + '개, 나머지는 크레딧)' : '') + ' · 낙첨 시 담보 소실';
+  el('gamble-draw').disabled = busy || !pawn;
+  const lines = save.gambleLog.map(e => (e.win ? '당첨' : '낙첨') + ' · ' + targetName(e.category, e.id) + ' × ' + e.multiple + ' · 담보 ' + credit(e.stake));
+  if (el('gamble-log').dataset.lines !== JSON.stringify(lines)) {
+    el('gamble-log').replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
+    el('gamble-log').dataset.lines = JSON.stringify(lines);
+  }
+}
 function showResearch() {
   const box = el('research');
   const owned = [...new Set(save?.finds?.filter(p => studies[p.kind]).map(p => p.kind) ?? [])];
-  box.hidden = !save?.front || (!owned.length && !save.research.length && !save.researchJob);
+  box.hidden = !save?.front;
   if (!panel || box.hidden) return;
+  showAutomation();
   const job = save.researchJob;
   el('research-status').textContent = job ? '· 분석 중' : save.research.length ? '· ' + save.research.length + '종 완료' : '';
   const open = owned.filter(k => !save.research.includes(k));
@@ -477,6 +593,29 @@ function showCraft() {
     if (label.textContent !== text) label.textContent = text;
     make.textContent = ok ? '제작' : '재료 부족';
     make.disabled = busy || !ok;
+  });  showUpgrades();
+}
+// Upgrade rows in fixed order, updated in place.
+function showUpgrades() {
+  const list = el('upgrade-list');
+  if (list.children.length !== upgradeIds.length) {
+    list.replaceChildren(...upgradeIds.map(id => {
+      const li = document.createElement('li');
+      const make = document.createElement('button');
+      make.onclick = () => write({type: 'upgrade', id}, () => message(upgrades[id].label + ' ' + level(save, id) + '단계'));
+      li.append(document.createElement('span'), ' ', make);
+      return li;
+    }));
+  }
+  upgradeIds.forEach((id, i) => {
+    const li = list.children[i], [label, make] = [li.firstChild, li.lastChild];
+    const cost = upgradeCost(save, id), ok = !!cost && affords(save, cost);
+    const text = upgrades[id].label + ' ' + level(save, id) + '/' + upgrades[id].max + ' · ' + upgrades[id].effect +
+      (cost ? ' · ' + Object.entries(cost).map(([k, n]) => mineralName(k) + ' ' + Math.min(owned(save, k), n) + '/' + n).join(' · ') : ' · 최대');
+    li.className = ok ? 'ready' : '';
+    if (label.textContent !== text) label.textContent = text;
+    make.textContent = !cost ? '최대' : ok ? '강화' : '재료 부족';
+    make.disabled = busy || !ok;
   });
 }
 // A small diagram of the train at the bottom left: the spherical machine, then
@@ -594,6 +733,7 @@ function hud() {
   showDecomposer();
   showStored();
   showTrade();
+  showGamble();
   showResearch();
   showSelf();
   showTrain();
@@ -853,10 +993,21 @@ el('sell').onclick = () => {
   const label = el('sell-source').selectedOptions[0]?.textContent.replace(/ · \d+개 → .*$/, '');
   write({type: 'sell', ...tradeOperation(value), price}, () => message(label + ' 판매 · ' + credit(price)));
 };
+el('gamble-category').onchange = el('gamble-target').onchange = el('gamble-multiple').oninput = () => hud();
+el('gamble-draw').onclick = () => {
+  const c = gambleChoice();
+  if (!c.ok) return;
+  write({type: 'gamble', category: c.category, id: c.id, multiple: c.multiple}, () => {
+    const e = save.gambleLog[0];
+    message((e.win ? '당첨 · ' + targetName(e.category, e.id) + ' × ' + e.multiple : '낙첨 · 담보 ' + credit(e.stake) + ' 소실'));
+  });
+};
 el('auction').onclick = () => {
   const value = el('auction-source').value;
   if (!value) return;
-  write({type: 'auction', ...tradeOperation(value)}, () => message('경매 등록 · 다른 시간대 채굴기의 입찰을 기다립니다'));
+  const op = tradeOperation(value);
+  if (op.source === 'm') { op.count = Number(op.id); delete op.id; }
+  write({type: 'auction', ...op}, () => message('경매 등록 · 다른 시간대 채굴기의 입찰을 기다립니다'));
 };
 el('capture').onclick = () => {
   const pending = save?.captures?.[0];
@@ -919,11 +1070,39 @@ el('confirm-reset').onclick = () => {
     message('');
   });
 };
+// Camera distance: a factor of the default that shows the machine and every
+// drill. Mouse wheel on PC, two-finger pinch on touch. Kept on this device.
+const zoomKey = 'dig-camera-zoom';
+let zoom = 1;
+try { zoom = Math.min(3, Math.max(0.4, Number(localStorage.getItem(zoomKey)) || 1)); } catch { /* storage may be blocked */ }
+function setZoom(value) {
+  zoom = Math.min(3, Math.max(0.4, value));
+  try { localStorage.setItem(zoomKey, String(zoom)); } catch { /* storage may be blocked */ }
+}
+const touches = new Map();
+let pinch = 0;
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  setZoom(zoom * Math.exp(e.deltaY * 0.0015));
+}, {passive: false});
 canvas.onpointerdown = (e) => {
-  pointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  touches.set(e.pointerId, [e.clientX, e.clientY]);
   canvas.setPointerCapture(e.pointerId);
+  if (touches.size === 2) {
+    pointer = null;
+    pinch = Math.hypot(...[...touches.values()].reduce((a, b) => [a[0] - b[0], a[1] - b[1]]));
+    return;
+  }
+  if (touches.size === 1) pointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
 };
 canvas.onpointermove = (e) => {
+  if (touches.has(e.pointerId)) touches.set(e.pointerId, [e.clientX, e.clientY]);
+  if (touches.size === 2 && pinch) {
+    const spread = Math.hypot(...[...touches.values()].reduce((a, b) => [a[0] - b[0], a[1] - b[1]]));
+    if (spread > 0) setZoom(zoom * pinch / spread);
+    pinch = spread;
+    return;
+  }
   if (!pointer || pointer.id !== e.pointerId) return;
   yaw += (e.clientX - pointer.x) * 0.008;
   pitch = Math.max(
@@ -936,8 +1115,11 @@ canvas.onpointermove = (e) => {
 function releaseLook() {
   pointer = null;
 }
-canvas.onpointerup = releaseLook;
-canvas.onpointercancel = releaseLook;
+canvas.onpointerup = canvas.onpointercancel = (e) => {
+  touches.delete(e.pointerId);
+  if (touches.size < 2) pinch = 0;
+  releaseLook();
+};
 window.addEventListener('orientationchange', releaseLook);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
@@ -970,7 +1152,7 @@ function move(dt, speed = velocity) {
     if (before >= 0 || after < 0) continue;
     const t = -before / (after - before);
     const lateral = point.map((v, i) => i === axis ? 0 : pos[i] + (next[i] - pos[i]) * t - v);
-    if (Math.max(...lateral.map(Math.abs)) + radius <= portal.radius) entered = portal;
+    if (Math.max(...lateral.map(Math.abs)) + bodyRadius(save) <= portal.radius) entered = portal;
   }
   pos = next;
   // Crossing into another chunk lets the far one collapse; a train over 16 m
@@ -982,7 +1164,7 @@ function move(dt, speed = velocity) {
     lastChunk = chunkKey;
   }
   if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) < 0) entered = false;
-  if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) >= radius && !busy) {
+  if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) >= bodyRadius(save) && !busy) {
     velocity = [0, 0, 0];
     write({type: 'transit', radius: entered.radius, strength: entered.strength}, () => {
       loadWorld();
@@ -1064,6 +1246,11 @@ function tick(dt) {
     write({type: 'cross-chunk'});
     return;
   }
+  // Researched automations press their buttons, about once a second.
+  if (age >= nextAutomation) {
+    nextAutomation = age + 1;
+    if (automate()) return;
+  }
   // The hull mends itself from collected minerals, about once a second.
   const repair = hull > 0 && hull < hullRepairBelow && age >= nextHullRepair && hullRepairFor(save);
   if (repair) {
@@ -1095,7 +1282,10 @@ function tick(dt) {
   }
   const pull = entered ? [0, 0, 0] : world.gravity(pos);
   // The probe extends beyond one integration step so the entire body fits.
-  const blocks = world.blockers(offset(pos, d, 0.7));
+  world.setBody(bodyRadius(save));
+  const probe = offset(pos, d, 0.7 * bodyRadius(save) / baseRadius);
+  const blocks = world.blockers(probe).sort((a, b) =>
+    Math.hypot(...a.map((v, i) => v + 0.5 - probe[i])) - Math.hypot(...b.map((v, i) => v + 0.5 - probe[i])));
   if (blocks.length) {
     velocity = [0, 0, 0];
     if (save.drillCondition === 0) { anchors = []; return; }
@@ -1109,8 +1299,10 @@ function tick(dt) {
     timer += dt;
     if (timer >= drillInterval(save)) {
       timer = 0;
-      if (!world.dig(...target)) return;
-      write({type: 'drill', cell: target}, () => {
+      // Every drill, and every bore level, cuts one more of the nearest blocks.
+      const cut = blocks.slice(0, cellsPerStroke(save)).filter(cell => world.dig(...cell));
+      if (!cut.length) return;
+      write({type: 'drill', cell: cut[0], cells: cut}, () => {
         anchors = [];
         if (save.drillCondition === 0) message('드릴 파손 · 긴급 레이저 또는 메뉴에서 수리');
       });
@@ -1168,6 +1360,9 @@ function frame(time) {
         minerals: !!save?.front,
         focus: !!fittedAndWorking(save, 'lamp'),
         working,
+        // Once a drill is mounted the camera stands back far enough for all drills.
+        body: save?.front ? {radius: bodyRadius(save), drills: drillCount(save), size: drillSize(save),
+          distance: (bodyRadius(save) * 2.4 + drillSize(save) * 1.2) * zoom} : null,
       },
       time / 1000,
     );

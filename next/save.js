@@ -10,13 +10,17 @@ import { slotOf, captureBonus } from './equipment.js';
 import { studies, fragments } from './research.js';
 import { selfParts, nextPart } from './self.js';
 import { chooseEnding, endingCounters, counterFor, endingById } from './endings.js';
-import { trainLength, capacity, load, canCouple, wagonsBeyondSafe, wagonCost, wagonCapacity, safeLength, wagonClearance } from './train.js';
+import { trainLength, capacity, load, canCouple, wagonsBeyondSafe, wagonCost, wagonRoom, safeLength, wagonClearance } from './train.js';
 import { craftRecipes, affords, hullRepairFor } from './craft.js';
+import { upgrades, upgradeCost, validUpgrades } from './upgrades.js';
+import { automations, fresh as freshAutomation, validAutomation } from './automation.js';
+import { winChance, maxPieces, baseValue, validMultiple, validGambleLog } from './gamble.js';
+import { valueOf } from './trade.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 16;
+export const saveVersion = 17;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -57,6 +61,7 @@ export const migrations = {
   14: s => ({...s, bids: []}),
   // Endings seen across runs, and how many times memory was let go for a new run.
   15: s => ({...s, endingsSeen: s.ending ? [s.ending] : [], cycles: 0}),
+  16: s => ({...s, upgrades: {body: 0, wagon: 0, drills: 0, bore: 0}, automation: freshAutomation(), gambleCount: 0, gambleLog: []}),
 };
 export const reservedCredits = s => (s.bids ?? []).reduce((n, b) => n + b.amount, 0);
 // A lot closes once the market clock passes the end of its cycle: a bid at or
@@ -112,6 +117,13 @@ function dropWagons(s, lost) {
   return gone;
 }
 // An analysis finishes once the market clock passes its end; its kind is then known.
+// An automation study finishes on the market clock and unlocks its switch, on.
+function finishAutomation(s) {
+  const job = s.automation.job;
+  if (!job || s.marketTime < job.endsAt) return;
+  s.automation.unlocked.push(job.id);
+  s.automation.job = null;
+}
 function finishResearch(s) {
   const job = s.researchJob;
   if (!job || s.marketTime < job.endsAt) return;
@@ -142,7 +154,7 @@ function settleAuctions(s) {
       s.credits += result.net;
       logTrade(s, 'sold:' + a.id + ':' + result.price + ':' + result.fee);
     } else {
-      (a.origin === 'specimens' ? s.specimens : s.finds).push(a.piece);
+      unlist(s, a);
       logTrade(s, 'unsold:' + a.id);
     }
   }
@@ -152,6 +164,7 @@ function settleAuctions(s) {
 function tradeTarget(s, op) {
   if (op?.source === 'm' && variants[op.kind] && (variantCounts(s, op.kind)[op.variant] ?? 0) > 0)
     return {thing: {mineral: op.kind}, key: 'm:' + op.kind, take: () => spendVariant(s, op.kind, op.variant)};
+  if (op?.source === 'c' && (s.ceramic ?? 0) > 0) return {thing: {ceramic: true}, key: 'c', take: () => s.ceramic--};
   const list = op?.source === 's' ? s.specimens : op?.source === 'f' ? s.finds : null;
   const at = list ? list.findIndex(p => op.id ? p.id === op.id : p.kind === op.kind &&
     (p.kind === 'capsule' ? p.element === op.element : p.variant === op.variant)) : -1;
@@ -303,6 +316,10 @@ const fresh = () => ({
   leftBehind: 0,
   bids: [],
   endingsSeen: [],
+  upgrades: {body: 0, wagon: 0, drills: 0, bore: 0},
+  automation: freshAutomation(),
+  gambleCount: 0,
+  gambleLog: [],
   cycles: 0,
   session: null,
   arrivalRadius: 1.64,
@@ -336,7 +353,8 @@ function validMinerals(s) {
     Number.isFinite(s.marketTime) && s.marketTime >= 0 &&
     (s.marketClock === null || (Number.isFinite(s.marketClock?.seed) && Number.isFinite(s.marketClock.elapsed))) &&
     Array.isArray(s.auctions) && s.auctions.every(a => a && typeof a.id === 'string' && a.piece?.id === a.id &&
-      ['specimens', 'finds'].includes(a.origin) && (a.origin === 'specimens' ? validPiece(a.piece) : validFind(a.piece)) &&
+      ['specimens', 'finds', 'minerals'].includes(a.origin) && (a.origin === 'specimens' ? validPiece(a.piece) :
+        a.origin === 'minerals' ? validBundle(a.piece) : validFind(a.piece)) &&
       Number.isSafeInteger(a.estimate) && a.estimate > 0 && Number.isFinite(a.endsAt)) &&
     Array.isArray(s.tradeLog) && s.tradeLog.length <= 20 && s.tradeLog.every(t => typeof t === 'string') &&
     Number.isSafeInteger(s.purchaseCount) && s.purchaseCount >= 0 &&
@@ -356,6 +374,8 @@ function validMinerals(s) {
     Number.isSafeInteger(s.leftBehind) && s.leftBehind >= 0 &&
     Array.isArray(s.bids) && s.bids.every(b => b && /^c\d+-\d+$/.test(b.lot) && Number.isSafeInteger(b.amount) && b.amount > 0) &&
     new Set(s.bids.map(b => b.lot)).size === s.bids.length && reservedCredits(s) <= s.credits &&
+    validUpgrades(s.upgrades) && validAutomation(s.automation) &&
+    Number.isSafeInteger(s.gambleCount) && s.gambleCount >= 0 && validGambleLog(s.gambleLog) &&
     Array.isArray(s.endingsSeen) && s.endingsSeen.every(id => endingById(id)) && new Set(s.endingsSeen).size === s.endingsSeen.length &&
     (s.ending === null || s.endingsSeen.includes(s.ending)) && Number.isSafeInteger(s.cycles) && s.cycles >= 0 &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
@@ -372,6 +392,32 @@ function validMinerals(s) {
     Array.isArray(s.specimenLog) && s.specimenLog.every(kind => kind === 'capsule' || specimenById(kind)) &&
     new Set(s.specimenLog).size === s.specimenLog.length &&
     Number.isSafeInteger(s.capsuleMisses) && s.capsuleMisses >= 0;
+}
+// Ten or more pieces of one mineral sub-species listed together.
+const validBundle = p => typeof p?.id === 'string' && p.id.length <= 80 && !!variants[p.mineral] &&
+  variants[p.mineral].some(([v]) => v === p.variant) && Number.isSafeInteger(p.count) && p.count >= 1 && p.count <= 1000 &&
+  Object.keys(p).length === 4;
+// Returns a listed piece to where it came from.
+function unlist(s, a) {
+  if (a.origin === 'minerals') {
+    for (let i = 0; i < a.piece.count; i++) grant(s, a.piece.mineral, a.piece.variant);
+  } else (a.origin === 'specimens' ? s.specimens : s.finds).push(a.piece);
+}
+// What a stake would pledge: free credits first, then minerals at base value,
+// the most plentiful sub-species first. Null when the save cannot cover it.
+export function pledge(s, stake) {
+  const credits = Math.min(stake, Math.max(0, s.credits - reservedCredits(s)));
+  let left = stake - credits;
+  const minerals = [];
+  const stock = mineralIds.flatMap(id => Object.entries(variantCounts(s, id)).filter(([, n]) => n > 0)
+    .map(([v, n]) => [id, v, n, valueOf({mineral: id}).base])).sort((a, b) => b[2] - a[2]);
+  for (const [id, v, n, value] of stock) {
+    if (left <= 0) break;
+    const take = Math.min(n, Math.ceil(left / value));
+    minerals.push([id, v, take]);
+    left -= take * value;
+  }
+  return left > 0 ? null : {credits, minerals};
 }
 function validFind(p) {
   const f = p && findById(p.kind);
@@ -475,6 +521,25 @@ export async function commit(revision, operation, session) {
     const s = readSave();
     if (s.revision !== revision)
       throw Error('다른 탭에서 진행이 바뀌었습니다. 다시 열어 주세요.');
+    // Several drills cut several cells in one stroke; each cell is still paid once.
+    const cells = operation?.type === 'drill' && operation.cells;
+    if (cells !== undefined && cells !== false && (!Array.isArray(cells) || !cells.length || cells.length > 64))
+      throw Error('채굴 기록이 바뀌었습니다.');
+    const ops = cells ? cells.map(cell => ({type: 'drill', cell})) : [operation];
+    let changed = false;
+    for (const op of ops) {
+      if (op.type === 'drill' && s.drillCondition === 0) break;
+      changed = step(s, op, session) || changed;
+    }
+    if (!changed) return s;
+    if (session) s.session = session;
+    s.revision++;
+    localStorage.setItem(saveKey, JSON.stringify(s));
+    return s;
+  });
+}
+// Applies one operation to the save; false when it changes nothing.
+function step(s, operation, session) {
     const type = operation?.type ?? operation;
     let found = null;
     if (['collect', 'drill', 'laser'].includes(type)) {
@@ -486,7 +551,7 @@ export async function commit(revision, operation, session) {
       const next = find(session.world);
       if (!next || !savedAir(next, index)) throw Error('채굴 기록이 바뀌었습니다.');
       const prior = find(s.session?.world);
-      if (prior && (prior.epoch ?? 0) === (next.epoch ?? 0) && savedAir(prior, index)) return s;
+      if (prior && (prior.epoch ?? 0) === (next.epoch ?? 0) && savedAir(prior, index)) return false;
       // Before the first drill the laser only gathers ordinary rock.
       const seed = session.world.seed, epoch = next.epoch ?? 0;
       found = !Number.isSafeInteger(seed) ? {base: 'rock', companion: null}
@@ -534,6 +599,15 @@ export async function commit(revision, operation, session) {
         if (!affords(s, cost)) throw Error('제작 재료가 부족합니다.');
         for (const [id, n] of Object.entries(cost)) spendMineral(s, id, n);
         s.finds.push({id: 'craft-' + s.revision, kind: operation.kind, variant: 'standard', durability: 100});
+        break;
+      }
+      case 'upgrade': {
+        // One level of an upgrade, paid with minerals at the level's price.
+        const cost = upgrades[operation?.id] && upgradeCost(s, operation.id);
+        if (!s.front || !cost) throw Error('더 강화할 수 없습니다.');
+        if (!affords(s, cost)) throw Error('강화 재료가 부족합니다.');
+        for (const [id, n] of Object.entries(cost)) spendMineral(s, id, n);
+        s.upgrades[operation.id]++;
         break;
       }
       case 'repair-hull': {
@@ -650,17 +724,31 @@ export async function commit(revision, operation, session) {
         break;
       }
       case 'buy': {
-        const offer = s.front && marketStock(s.marketSeed, marketCycle(s.marketTime)).find(o => o.item === operation?.item);
+        const offer = s.front && marketStock(s.marketSeed, marketCycle(s.marketTime), mineralIds).find(o => o.item === operation?.item);
         if (!offer) throw Error('구매할 수 없습니다.');
         if (offer.price !== operation.price) throw Error('시세가 바뀌었습니다. 새 가격을 확인해 주세요.');
         if (s.credits - reservedCredits(s) < offer.price) throw Error('크레딧이 부족합니다.');
         s.credits -= offer.price;
-        if (offer.item === 'ceramic') s.ceramic = (s.ceramic ?? 0) + 1;
+        if (offer.mineral) {
+          if (load(s) >= capacity(s)) throw Error('화물칸이 가득 찼습니다.');
+          grant(s, offer.mineral, defaultVariant(offer.mineral));
+          if (!s.mineralLog.includes(offer.mineral)) s.mineralLog.push(offer.mineral);
+        } else if (offer.item === 'ceramic') s.ceramic = (s.ceramic ?? 0) + 1;
         else s.finds.push({id: 'buy:' + s.purchaseCount, kind: 'drill_head', variant: 'standard', durability: offer.durability});
         s.purchaseCount++;
         break;
       }
       case 'auction': {
+        // Minerals go up as a bundle of `count` (10 or more) of one sub-species.
+        if (operation?.source === 'm') {
+          const n = operation.count;
+          if (!s.front || !variants[operation.kind] || !Number.isSafeInteger(n) || n < 10 || n > 1000 ||
+            (variantCounts(s, operation.kind)[operation.variant] ?? 0) < n) throw Error('경매에 올릴 수 없습니다.');
+          for (let i = 0; i < n; i++) spendVariant(s, operation.kind, operation.variant);
+          const piece = {id: 'bundle:' + s.revision, mineral: operation.kind, variant: operation.variant, count: n};
+          s.auctions.push({id: piece.id, piece, origin: 'minerals', estimate: auctionEstimate(piece), endsAt: s.marketTime + auctionSeconds});
+          break;
+        }
         const t = s.front && tradeTarget(s, operation);
         // An unknown material can be listed only once its kind has been analysed.
         if (t?.piece && studies[t.piece.kind] && !s.research.includes(t.piece.kind)) throw Error('분석을 마친 물질만 경매에 올릴 수 있습니다.');
@@ -674,7 +762,7 @@ export async function commit(revision, operation, session) {
         const at = s.auctions.findIndex(a => a.id === operation?.id);
         if (at < 0) throw Error('이미 끝난 경매입니다.');
         const [a] = s.auctions.splice(at, 1);
-        (a.origin === 'specimens' ? s.specimens : s.finds).push(a.piece);
+        unlist(s, a);
         break;
       }
       case 'research': {
@@ -688,6 +776,64 @@ export async function commit(revision, operation, session) {
           if (s.elements[e] <= 1e-12) delete s.elements[e];
         }
         s.researchJob = {kind: study.kind, endsAt: s.marketTime + study.seconds};
+        break;
+      }
+      case 'automate': {
+        // Credits and element grams are spent at the start; one study at a time.
+        const a = automations[operation?.id];
+        if (!s.front || !a || s.automation.unlocked.includes(a.id) || s.automation.job) throw Error('연구할 수 없습니다.');
+        if (s.credits - reservedCredits(s) < a.credits) throw Error('크레딧이 부족합니다.');
+        for (const [e, g] of Object.entries(a.elements)) if ((s.elements[e] ?? 0) < g) throw Error('연구에 필요한 원소가 부족합니다.');
+        s.credits -= a.credits;
+        for (const [e, g] of Object.entries(a.elements)) {
+          s.elements[e] -= g;
+          if (s.elements[e] <= 1e-12) delete s.elements[e];
+        }
+        s.automation.job = {id: a.id, endsAt: s.marketTime + a.seconds};
+        break;
+      }
+      case 'gamble': {
+        // One draw per gamble count from the market seed, so a reload cannot redraw it.
+        const {category, id, multiple} = operation ?? {};
+        const base = baseValue(category, id, mineralIds);
+        if (!s.front || !base || !validMultiple(multiple)) throw Error('걸 수 없는 대상입니다.');
+        const stake = base * multiple;
+        const pawn = pledge(s, stake);
+        if (!pawn) throw Error('담보가 부족합니다.');
+        const win = roll(s.marketSeed, 'gamble:' + s.gambleCount++) < winChance;
+        if (!win) {
+          s.credits -= pawn.credits;
+          for (const [m, v, n] of pawn.minerals) for (let i = 0; i < n; i++) spendVariant(s, m, v);
+        } else if (category === 'research') {
+          if (s.automation.unlocked.includes(id)) s.credits += stake;
+          else {
+            s.automation.unlocked.push(id);
+            if (s.automation.job?.id === id) s.automation.job = null;
+          }
+        } else if (category === 'mineral') {
+          const room = Math.max(0, Math.min(multiple, capacity(s) - load(s)));
+          for (let i = 0; i < room; i++) grant(s, id, defaultVariant(id));
+          if (room && !s.mineralLog.includes(id)) s.mineralLog.push(id);
+          s.credits += (multiple - room) * base;
+        } else {
+          const f = findById(id), kind = Math.min(multiple, maxPieces);
+          for (let i = 0; i < kind; i++) {
+            const piece = {id: 'gamble:' + s.gambleCount + ':' + i, kind: id, variant: f.variants[0].variant};
+            if (category === 'equipment') piece.durability = 100;
+            if (id === 'desk_clock') piece.stoppedAt = 0;
+            s.finds.push(piece);
+          }
+          if (!s.findLog.includes(id)) s.findLog.push(id);
+          s.credits += (multiple - kind) * base;
+        }
+        s.gambleLog.unshift({win, category, id, multiple, stake});
+        s.gambleLog.length = Math.min(s.gambleLog.length, 10);
+        break;
+      }
+      case 'automation-switch': {
+        if (!s.automation.unlocked.includes(operation?.id) || typeof operation.on !== 'boolean') throw Error('자동화 설정 오류');
+        s.automation.off = s.automation.off.filter(id => id !== operation.id);
+        if (!operation.on) s.automation.off.push(operation.id);
         break;
       }
       case 'read-film': {
@@ -712,7 +858,7 @@ export async function commit(revision, operation, session) {
       }
       case 'remove-wagon': {
         if (!s.wagons.length) throw Error('분리할 화물칸이 없습니다.');
-        if (load(s) > capacity(s) - wagonCapacity) throw Error('마지막 화물칸에 실린 광물을 먼저 비워 주세요.');
+        if (load(s) > capacity(s) - wagonRoom(s)) throw Error('마지막 화물칸에 실린 광물을 먼저 비워 주세요.');
         s.wagons.pop();
         break;
       }
@@ -758,7 +904,7 @@ export async function commit(revision, operation, session) {
         break;
       }
       case 'reset':
-        Object.assign(s, fresh(), { revision });
+        Object.assign(s, fresh(), { revision: s.revision });
         break;
       default:
         throw Error('알 수 없는 저장 요청입니다.');
@@ -813,10 +959,7 @@ export async function commit(revision, operation, session) {
       settleAuctions(s);
       settleBids(s);
       finishResearch(s);
+      finishAutomation(s);
     }
-    if (session) s.session = session;
-    s.revision++;
-    localStorage.setItem(saveKey, JSON.stringify(s));
-    return s;
-  });
+    return true;
 }

@@ -276,12 +276,16 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
     }
     return null;
   }
+  // The machine's radius grows with the body upgrade; contacts reach with it.
+  let body = radius;
+  const reach = () => 1.3 * body / radius;
+  function setBody(r) { body = r; }
   let cargoTime = saved?.cargoTime ?? 0;
   function hullContacts(dt,pos,speed,anchored) {
     let damage = 0, impactPoint = null, largest = 0;
     const blocked = point => blockers(point).length > 0;
     function contact(body,relativeTo,field,time) {
-      const loss = contactDamage(body,pos,relativeTo,field,time,blocked);
+      const loss = contactDamage(body,pos,relativeTo,field,time,blocked,reach());
       damage += loss;
       if (loss > largest) { largest = loss; impactPoint = body.point.slice(); }
       return loss;
@@ -306,7 +310,7 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
         const body = {point:item.point,speed:item.speed,mass};
         const relativeTo = speed.map((v,i) => v+push[i]);
         if (contact(body,relativeTo,field,0.05) > 0) item.cooldown = 0.5;
-        const hit = hitHull(body,pos,relativeTo,anchored);
+        const hit = hitHull(body,pos,relativeTo,anchored,reach());
         item.speed = body.speed;
         for (let i=0; i<3; i++) push[i] += hit[i];
       }
@@ -325,7 +329,7 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
     }
     return {push,damage,impactPoint};
   }
-  function blockers(p) {
+  function blockers(p, radius = body) {
     const found = [];
     for (let x = Math.floor(p[0] - radius); x <= p[0] + radius; x++)
       for (let y = Math.floor(p[1] - radius); y <= p[1] + radius; y++)
@@ -399,7 +403,7 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
     sense(pos,dt,shock) { return senseHazard(this.hazard,pos,dt,trace,shock); },
     advance(dt) { elapsed += dt; },
     hullContacts, debrisStep, fragments, snapshot, portals, gravity, warehouseItems, takeNearby,
-    ejected, syncEjected, takeEjected,
+    ejected, syncEjected, takeEjected, setBody,
     hasChunk(x, y, z) { return chunks.has([x, y, z].join(',')); },
     tutorial,
     solid,

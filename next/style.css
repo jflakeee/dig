@@ -176,15 +176,21 @@ section {
   touch-action: pan-y;
 }
 #cargo-list,
-#craft-list {
+#craft-list,
+#upgrade-list,
+#automation-list,
+#gamble-log {
   margin: 4px 0 12px;
   padding-left: 20px;
 }
-#craft-list li {
+#craft-list li,
+#upgrade-list li,
+#automation-list li {
   margin-bottom: 6px;
   color: #9aa6a2;
 }
-#craft-list li.ready {
+#craft-list li.ready,
+#upgrade-list li.ready {
   color: #e4e9e5;
 }
 #discoveries summary {

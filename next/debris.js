@@ -6,10 +6,10 @@ function sample(cell, tick) {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-export function hitHull(part, pos, speed, anchored) {
+export function hitHull(part, pos, speed, anchored, reach = 1.3) {
   const gap = pos.map((v,i) => v-part.point[i]);
   const distance = Math.hypot(...gap);
-  if (!distance || distance > 1.3) return [0,0,0];
+  if (!distance || distance > reach) return [0,0,0];
   const normal = gap.map(v => v/distance);
   const approach = normal.reduce((sum,n,i) => sum+n*(part.speed[i]-speed[i]),0);
   if (approach <= 0) return [0,0,0];
@@ -20,10 +20,10 @@ export function hitHull(part, pos, speed, anchored) {
   return normal.map(n => n*impulse/hullMass);
 }
 
-export function contactDamage(body, pos, speed, field, dt, blocked) {
+export function contactDamage(body, pos, speed, field, dt, blocked, reach = 1.3) {
   const gap = pos.map((v,i) => v-body.point[i]);
   const distance = Math.hypot(...gap);
-  if (distance < 0.0001 || distance > 1.3) return 0;
+  if (distance < 0.0001 || distance > reach) return 0;
   const normal = gap.map(v => v/distance);
   const closing = normal.reduce((sum,n,i) => sum+n*(body.speed[i]-speed[i]),0);
   const impact = Math.max(0, closing-2.5)**2 * body.mass;
