@@ -26,7 +26,7 @@ export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 22;
+export const saveVersion = 23;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -73,6 +73,7 @@ export const migrations = {
   19: s => ({...s, topics: freshTopics()}),
   20: s => ({...s, parts: {}}),
   21: s => ({...s, keep: []}),
+  22: s => ({...s, drillMax: 100, repairCount: 0}),
 };
 export const reservedCredits = s => (s.bids ?? []).reduce((n, b) => n + b.amount, 0);
 // A lot closes once the market clock passes the end of its cycle: a bid at or
@@ -211,6 +212,12 @@ export function sellPrice(s, op) {
 // changing the save: input grams, the share lost and element grams out.
 // One piece decomposed: it leaves, and its element grams less the decomposer's
 // loss arrive. False when there is no such piece.
+// How much a repair wears the maximum durability: 0 to 3 points, fixed by the
+// market seed and the repair count so a reload cannot redraw it. Trial value.
+export const maxWear = 3;
+function repairWear(s) {
+  return Math.floor(roll(s.marketSeed, 'repair-wear:' + s.repairCount++) * (maxWear + 1));
+}
 function decomposeOne(s, operation) {
   const result = s.front && decompositionPreview(s, operation);
   if (!result) return false;
@@ -351,6 +358,8 @@ const fresh = () => ({
   craftReadyAt: null,
   ceramic: 0,
   drillCondition: 100,
+  drillMax: 100,
+  repairCount: 0,
   cargo: [0,0,0],
   discoveries: [],
   minerals: {},
@@ -494,6 +503,7 @@ function validFind(p) {
   const f = p && findById(p.kind);
   return !!f && typeof p.id === 'string' && p.id.length <= 80 && f.variants.some(v => v.variant === p.variant) &&
     (f.category !== 'equipment' || (Number.isInteger(p.durability) && p.durability >= 0 && p.durability <= 100)) &&
+    (p.maxDurability === undefined || (Number.isInteger(p.maxDurability) && p.maxDurability >= 0 && p.maxDurability <= 100)) &&
     (p.kind !== 'desk_clock' || (Number.isInteger(p.stoppedAt) && p.stoppedAt >= 0 && p.stoppedAt < 720));
 }
 function validPiece(p) {
@@ -566,6 +576,8 @@ export function readSave() {
     !validMinerals(s) ||
     (s.cargo !== undefined && !vector(s.cargo, n => Number.isSafeInteger(n) && n >= 0)) ||
     (s.drillCondition !== undefined && !(Number.isInteger(s.drillCondition) && s.drillCondition >= 0 && s.drillCondition <= 100)) ||
+    !(Number.isInteger(s.drillMax) && s.drillMax >= 0 && s.drillMax <= 100 && (s.drillCondition ?? 100) <= s.drillMax) ||
+    !(Number.isSafeInteger(s.repairCount) && s.repairCount >= 0) ||
     (s.craftReadyAt != null && (!Number.isSafeInteger(s.craftReadyAt) || s.craftReadyAt <= 0 || s.front || s.rocks < 3)) ||
     (s.ceramic !== undefined && !(Number.isSafeInteger(s.ceramic) && s.ceramic >= 0)) ||
     (s.session != null && !validSession(s.session)) ||
@@ -664,10 +676,13 @@ function step(s, operation, session) {
         s.ceramic = (s.ceramic ?? 0) + 1;
         break;
       case 'repair':
-        if (!s.front || (s.drillCondition ?? 100) >= 100 || (s.ceramic ?? 0) < ceramicPerRepair)
+        // Each repair wears the drill's maximum down by 0-3%; it mends only to the new maximum.
+        if (s.front && s.drillMax <= 0) throw Error('드릴 수명이 다했습니다 · 새 드릴 헤드로 교체해 주세요.');
+        if (!s.front || (s.drillCondition ?? 100) >= s.drillMax || (s.ceramic ?? 0) < ceramicPerRepair)
           throw Error('수리 조건을 다시 확인해 주세요.');
         s.ceramic -= ceramicPerRepair;
-        s.drillCondition = 100;
+        s.drillMax = Math.max(0, s.drillMax - repairWear(s));
+        s.drillCondition = s.drillMax;
         break;
       case 'craft-equipment': {
         // Equipment made from collected minerals goes to storage at full durability.
@@ -761,8 +776,10 @@ function step(s, operation, session) {
         const at = s.finds.findIndex(p => p.id === operation?.id && p.kind === 'drill_head');
         if (!s.front || at < 0 || s.finds[at].durability <= (s.drillCondition ?? 100))
           throw Error('교체할 드릴 헤드가 없습니다.');
-        // The worn cutting head is discarded and the found one takes its place.
-        s.drillCondition = s.finds.splice(at, 1)[0].durability;
+        // The worn cutting head is discarded and the found one takes its place, with its own maximum.
+        const head = s.finds.splice(at, 1)[0];
+        s.drillCondition = head.durability;
+        s.drillMax = head.maxDurability ?? 100;
         break;
       }
       case 'capture': {
@@ -975,7 +992,9 @@ function step(s, operation, session) {
       case 'maintain': {
         // Equipment maintenance, unlocked by studying part structure.
         const piece = s.finds.find(p => p.id === operation?.id) ?? Object.values(s.equipment).find(p => p.id === operation?.id);
-        if (!s.front || !studied(s, 'part_structure') || piece?.durability === undefined || piece.durability >= 100)
+        const max = piece?.maxDurability ?? 100;
+        if (s.front && piece && max <= 0) throw Error('장비 수명이 다했습니다 · 새로 제작해 주세요.');
+        if (!s.front || !studied(s, 'part_structure') || piece?.durability === undefined || piece.durability >= max)
           throw Error('정비할 장비가 없습니다.');
         // Two salvaged mechanical parts can stand in for the minerals.
         if (operation.parts) {
@@ -985,7 +1004,9 @@ function step(s, operation, session) {
           if (!affords(s, maintainCost)) throw Error('정비 재료가 부족합니다.');
           for (const [id, n] of Object.entries(maintainCost)) spendMineral(s, id, n);
         }
-        piece.durability = Math.min(100, piece.durability + maintainGain);
+        // Maintenance wears the piece's maximum down by 0-3% as a repair does.
+        piece.maxDurability = Math.max(0, max - repairWear(s));
+        piece.durability = Math.min(piece.maxDurability, piece.durability + maintainGain);
         break;
       }
       case 'automation-switch': {

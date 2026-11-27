@@ -3,7 +3,7 @@ import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, portalRayDistance } from './world.js';
 import { upgrades, upgradeIds, upgradeCost, level, bodyRadius, cellsPerStroke, baseRadius, drillCount, drillSize } from './upgrades.js';
-import { readSave, commit, saveKey, decomposeQueue, fabricationMs, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice, captureRule, reservedCredits, pledge } from './save.js';
+import { readSave, commit, saveKey, decomposeQueue, maxWear, fabricationMs, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice, captureRule, reservedCredits, pledge } from './save.js';
 import { massText } from './composition.js';
 import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate, lotsFor, lotById, visibleRival, minimumBid } from './trade.js';
 import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
@@ -424,8 +424,9 @@ function showMaintain() {
   showParts();
   const on = studied(save, 'part_structure');
   el('maintain-title').hidden = !on;
-  const pieces = on ? [...Object.values(save.equipment), ...save.finds].filter(p => p.durability !== undefined && p.durability < 100) : [];
-  const rows = pieces.map(p => [p.id, pieceName(p) + ' · 내구도 ' + p.durability + '% → ' + Math.min(100, p.durability + maintainGain) + '% · ' +
+  const pieces = on ? [...Object.values(save.equipment), ...save.finds].filter(p => p.durability !== undefined && p.durability < (p.maxDurability ?? 100)) : [];
+  // Each maintenance also wears the maximum by up to 3%.
+  const rows = pieces.map(p => [p.id, pieceName(p) + ' · 내구도 ' + p.durability + '% / 최대 ' + (p.maxDurability ?? 100) + '% → 최대 ' + maxWear + '% 감소 후 +' + maintainGain + '% · ' +
     Object.entries(maintainCost).map(([id, n]) => mineralName(id) + ' ' + Math.min(owned(save, id), n) + '/' + n).join(' · ') + ' · 에너지 ' + energyCost.maintain]);
   const list = el('maintain-list');
   if (list.dataset.ids !== rows.map(r => r[0]).join()) {
@@ -736,11 +737,12 @@ function showQuick() {
   const box = el('quick');
   box.hidden = !save?.front || panel;
   if (box.hidden) return;
-  const text = '화물 ' + load(save) + ' / ' + capacity(save) + ' · 에너지 ' + save.energy + ' · 드릴 ' + (save.drillCondition ?? 100) + '%';
+  const text = '화물 ' + load(save) + ' / ' + capacity(save) + ' · 에너지 ' + save.energy + ' · 드릴 ' + (save.drillCondition ?? 100) + '%' +
+    (save.drillMax <= 0 ? ' · 수명 다함, 드릴 헤드 교체 필요' : save.drillMax < 100 ? ' / 최대 ' + save.drillMax + '%' : '');
   if (el('quick-cargo').textContent !== text) el('quick-cargo').textContent = text;
   const condition = save.drillCondition ?? 100, ceramic = save.ceramic ?? 0;
   const canFire = save.rocks >= ceramicRocks(save) && powered('fire-ceramic');
-  el('quick-repair').hidden = condition >= 100;
+  el('quick-repair').hidden = condition >= save.drillMax || save.drillMax <= 0;
   el('quick-repair').textContent = ceramic >= ceramicPerRepair ? '드릴 수리 · 세라믹 1' : canFire ? '드릴 수리 · 세라믹 가열부터' : '드릴 수리 · 재료 부족';
   el('quick-repair').disabled = ceramic < ceramicPerRepair && !canFire;
   const n = Math.min(decomposeQueue(save).length, Math.floor(save.energy / energyCost.decompose));
@@ -748,7 +750,10 @@ function showQuick() {
   el('quick-decompose').disabled = !n;
 }
 el('quick-repair').onclick = () => {
-  if ((save.ceramic ?? 0) >= ceramicPerRepair) write('repair', () => message('드릴 수리 완료 · 드릴 100%'));
+  if ((save.ceramic ?? 0) >= ceramicPerRepair) {
+    const before = save.drillMax;
+    write('repair', () => message('드릴 수리 완료 · 드릴 ' + save.drillMax + '% · 최대 내구도 -' + (before - save.drillMax) + '%'));
+  }
   else write('fire-ceramic', () => message('세라믹 가열 완료 · 한 번 더 누르면 드릴을 수리합니다'));
 };
 el('quick-decompose').onclick = () => {
@@ -1025,7 +1030,7 @@ function hud() {
   if (panel) el('cargo').textContent = (save?.cargo ?? []).map((n,i) => n ? cargoNames[i] + ' × ' + n : '').filter(Boolean).join(' · ');
   if (panel && save.front) {
     const cargo = el('cargo');
-    cargo.textContent = [cargo.textContent, '기체 ' + Math.ceil(hull) + '% · 드릴 ' + (save.drillCondition ?? 100) + '% · 에너지 ' + save.energy + ' / ' + energyCap].filter(Boolean).join(' | ');
+    cargo.textContent = [cargo.textContent, '기체 ' + Math.ceil(hull) + '% · 드릴 ' + (save.drillCondition ?? 100) + '%' + (save.drillMax < 100 ? ' (최대 ' + save.drillMax + '%)' : '') + ' · 에너지 ' + save.energy + ' / ' + energyCap].filter(Boolean).join(' | ');
   }
   const condition = save?.drillCondition ?? 100;
   const ceramic = save?.ceramic ?? 0;
@@ -1033,7 +1038,7 @@ function hud() {
   el('fire-ceramic').disabled = !powered('fire-ceramic');
   el('fire-ceramic').firstChild.textContent = powered('fire-ceramic') ? '세라믹 가열 ' : lowPower('fire-ceramic') + ' ';
   el('fire-ceramic').lastElementChild.textContent = '암석 ' + ceramicRocks(save) + '개 · 에너지 ' + energyCost['fire-ceramic'];
-  el('repair').hidden = !save?.front || condition === 100 || ceramic < ceramicPerRepair;
+  el('repair').hidden = !save?.front || condition >= save.drillMax || save.drillMax <= 0 || ceramic < ceramicPerRepair;
   el('repair').disabled = false;
   el('emergency').hidden = !save?.front || condition !== 0 || ceramic >= ceramicPerRepair || save.rocks >= ceramicRocks(save);
   el('emergency').disabled = !!laserJob || (!el('emergency').hidden && !laserHit());
@@ -1370,12 +1375,12 @@ el('decompose').onclick = () => {
   });
 };
 el('fire-ceramic').onclick = () => write('fire-ceramic', () => message('암석 가열 완료 · 세라믹 1개'));
-el('repair').onclick = () => write('repair', () => {
+el('repair').onclick = () => { const before = save.drillMax; write('repair', () => {
   laserJob = null;
   contact = null;
   timer = 0;
-  message('드릴 수리 완료');
-});
+  message('드릴 수리 완료 · 드릴 ' + save.drillMax + '% · 최대 내구도 -' + (before - save.drillMax) + '%');
+}); };
 el('emergency').onclick = () => {
   if (busy || laserJob || save?.drillCondition !== 0) return;
   const hit = laserHit();
