@@ -143,3 +143,72 @@ test('a version-8 save opens with an empty wallet and malformed trade state is r
     assert.throws(readSave, /원본을 보존/, JSON.stringify(bad));
   }
 });
+
+test('other machines list two lots a cycle whose visible top bid climbs to a hidden ceiling', async () => {
+  const { lotsFor, visibleRival, minimumBid, lotById, cycleSeconds: cycle } = await import('../next/trade.js');
+  const lots = lotsFor(77, 3);
+  assert.equal(lots.length, 2);
+  assert.deepEqual(lots, lotsFor(77, 3));
+  assert.notDeepEqual(lots, lotsFor(77, 4));
+  assert.deepEqual(lotById(77, lots[1].id), lots[1]);
+  for (const lot of lots) {
+    assert.equal(lot.endsAt, 4 * cycle);
+    let last = -1;
+    for (let t = 3 * cycle; t <= 4 * cycle; t += 30) {
+      const top = visibleRival(lot, t);
+      assert.ok(top >= last && top <= lot.rival);
+      last = top;
+    }
+    assert.equal(visibleRival(lot, 4 * cycle), lot.rival);
+    assert.ok(minimumBid(lot, 3 * cycle + 60, 0) > visibleRival(lot, 3 * cycle + 60));
+  }
+});
+
+test('a bid reserves credits until its lot closes, then wins and pays or is released', async t => {
+  const { lotsFor, minimumBid, cycleSeconds: cycle } = await import('../next/trade.js');
+  const data = mockStorage(t);
+  // Find a seed whose first lot of cycle 0 has a ceiling the test can beat and another it cannot.
+  let seed = 1;
+  while (!(lotsFor(seed, 0)[0].rival > 0 && lotsFor(seed, 0)[0].rival < 900)) seed++;
+  const lot = lotsFor(seed, 0)[0], other = lotsFor(seed, 0)[1];
+  data.set(saveKey, JSON.stringify(drilling({marketSeed: seed, credits: 1000})));
+  let s = await commit(0, 'checkpoint', at(0));
+  const min = minimumBid(lot, s.marketTime);
+  await assert.rejects(commit(s.revision, {type: 'bid', lot: lot.id, amount: min - 1}, at(0)), /더 높은 금액/);
+  s = await commit(s.revision, {type: 'bid', lot: lot.id, amount: min}, at(0));
+  assert.deepEqual(s.bids, [{lot: lot.id, amount: min}]);
+  const raise = minimumBid(lot, s.marketTime, min);
+  assert.equal(raise, min + Math.max(1, Math.round(lot.estimate * 0.05)));
+  await assert.rejects(commit(s.revision, {type: 'bid', lot: lot.id, amount: raise - 1}, at(0)), /더 높은 금액/);
+  s = await commit(s.revision, {type: 'bid', lot: lot.id, amount: Math.max(lot.rival, raise)}, at(0));
+  assert.equal(s.bids[0].amount, Math.max(lot.rival, raise));
+  const reserved = s.bids[0].amount;
+  await assert.rejects(commit(s.revision, {type: 'bid', lot: other.id, amount: 1000 - reserved + 1}, at(0)), /크레딧이 부족|더 높은 금액/);
+  // Run the market clock past the close of cycle 0.
+  for (let time = 30; time <= cycle + 30; time += 30) s = await commit(s.revision, 'checkpoint', at(time));
+  assert.deepEqual(s.bids, []);
+  assert.equal(s.credits, 1000 - reserved);
+  assert.equal(s.tradeLog.find(e => e.startsWith('won:')), 'won:' + lot.id + ':' + reserved);
+  assert.ok([...s.specimens, ...s.finds].some(p => p.id === lot.piece.id));
+  await assert.rejects(commit(s.revision, {type: 'bid', lot: lot.id, amount: 5000}, at(cycle + 30)), /입찰할 수 없는/);
+});
+
+test('a bid below the ceiling is released, and reserved credits cannot exceed the wallet', async t => {
+  const { lotsFor, minimumBid, cycleSeconds: cycle } = await import('../next/trade.js');
+  const data = mockStorage(t);
+  let seed = 1;
+  while (!(lotsFor(seed, 0)[0].rival > minimumBid(lotsFor(seed, 0)[0], 0) + 10)) seed++;
+  const lot = lotsFor(seed, 0)[0];
+  data.set(saveKey, JSON.stringify(drilling({marketSeed: seed, credits: 2000})));
+  let s = await commit(0, 'checkpoint', at(0));
+  s = await commit(s.revision, {type: 'bid', lot: lot.id, amount: minimumBid(lot, 0)}, at(0));
+  for (let time = 30; time <= cycle + 30; time += 30) s = await commit(s.revision, 'checkpoint', at(time));
+  assert.deepEqual([s.credits, s.bids, s.tradeLog.find(e => e.startsWith('outbid:'))], [2000, [], 'outbid:' + lot.id]);
+  const clean = readSave();
+  data.set(saveKey, JSON.stringify({...clean, credits: 10, bids: [{lot: 'c0-0', amount: 11}]}));
+  assert.throws(readSave, /원본을 보존/);
+  const old = {...clean, version: 14};
+  delete old.bids;
+  data.set(saveKey, JSON.stringify(old));
+  assert.deepEqual(readSave().bids, []);
+});

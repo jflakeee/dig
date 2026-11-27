@@ -2,9 +2,9 @@ import { intersectStone } from './rock-shapes.js';
 import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, portalRayDistance, radius } from './world.js';
-import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice, captureRule } from './save.js';
+import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice, captureRule, reservedCredits } from './save.js';
 import { massText } from './composition.js';
-import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate } from './trade.js';
+import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate, lotsFor, lotById, visibleRival, minimumBid } from './trade.js';
 import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
 import { studies, fragments } from './research.js';
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
@@ -207,6 +207,9 @@ function fillSelect(select, options) {
 // Log entries are "sold:<id>:<price>:<fee>" or "unsold:<id>"; ids may contain colons.
 function tradeLogText(entry) {
   const parts = entry.split(':');
+  const lotName = id => { const lot = lotById(save.marketSeed, id); return lot ? pieceName(lot.piece) : '경매품'; };
+  if (parts[0] === 'won') return '경매 낙찰 · ' + lotName(parts[1]) + ' · ' + credit(Number(parts[2]));
+  if (parts[0] === 'outbid') return '입찰 실패 · ' + lotName(parts[1]) + ' · 예약 해제';
   if (parts[0] === 'research') return '분석 완료 · ' + (findById(parts[1])?.name ?? parts[1]);
   if (parts[0] === 'unsold') return '유찰 · ' + (tradeNames.get(parts.slice(1).join(':')) ?? '경매품') + ' 반환';
   const fee = Number(parts.pop()), price = Number(parts.pop());
@@ -219,7 +222,8 @@ function showTrade() {
   if (!panel || box.hidden) return;
   const cycle = marketCycle(save.marketTime);
   const trader = traderOf(save.marketSeed, cycle);
-  el('credits').textContent = credit(save.credits);
+  const reserved = reservedCredits(save);
+  el('credits').textContent = credit(save.credits) + (reserved ? ' (예약 ' + credit(reserved) + ')' : '');
   const left = Math.ceil((cycle + 1) * cycleSeconds - save.marketTime);
   el('trader').textContent = '신호 #' + trader.signal + ' · ' + trader.name + ' · 시세 갱신까지 ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') +
     '\n' + traderLook(trader.id, recall(save));
@@ -243,7 +247,31 @@ function showTrade() {
     }));
     list.dataset.labels = JSON.stringify(buttons);
   }
-  for (const b of list.children) b.disabled = busy || save.credits < (stock.find(o => o.item === b.dataset.item)?.price ?? Infinity);
+  for (const b of list.children) b.disabled = busy || save.credits - reserved < (stock.find(o => o.item === b.dataset.item)?.price ?? Infinity);
+  // Lots other machines list this cycle: visible top bid, my bid, time left.
+  const lots = lotsFor(save.marketSeed, cycle);
+  const lotRows = lots.map(lot => {
+    const own = save.bids.find(b => b.lot === lot.id)?.amount ?? 0, top = visibleRival(lot, save.marketTime);
+    const next = minimumBid(lot, save.marketTime, own);
+    return [lot.id, next, pieceName(lot.piece) + (lot.piece.durability ? ' · 내구도 ' + lot.piece.durability + '%' : '') +
+      ' · 추정 ' + credit(lot.estimate) + ' · 최고 ' + credit(Math.max(top, own)) + (own > top ? ' (나)' : '') +
+      ' · 마감까지 ' + Math.max(0, Math.ceil(lot.endsAt - save.marketTime)) + '초', own];
+  });
+  const lotList = el('lot-list');
+  const shape = JSON.stringify(lotRows.map(([id, next, text]) => [id, next, text]));
+  if (lotList.dataset.rows !== shape) {
+    lotList.replaceChildren(...lotRows.map(([id, next, text, own]) => {
+      const li = Object.assign(document.createElement('li'), {textContent: text + ' '});
+      const bid = Object.assign(document.createElement('button'), {textContent: (own ? '올려 입찰 · ' : '입찰 · ') + credit(next)});
+      bid.dataset.amount = next;
+      bid.dataset.free = save.credits - reserved + own;
+      bid.onclick = () => write({type: 'bid', lot: id, amount: next}, () => message('입찰 · ' + credit(next) + ' 예약'));
+      li.append(bid);
+      return li;
+    }));
+    lotList.dataset.rows = shape;
+  }
+  for (const b of lotList.querySelectorAll('button')) b.disabled = busy || Number(b.dataset.free) < Number(b.dataset.amount);
   const auctions = auctionChoices();
   fillSelect(el('auction-source'), auctions.map(([value, label, estimate]) => [value, label + ' · 추정 ' + credit(estimate)]));
   el('auction').disabled = busy || !auctions.length;

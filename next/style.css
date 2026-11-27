@@ -186,6 +186,22 @@ section {
   color: #9fd8d1;
   white-space: pre-line;
 }
+#lots-title {
+  margin: 10px 0 2px;
+  font-size: 0.9em;
+  color: #b9c4c2;
+}
+#lot-list {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+#lot-list li button {
+  display: inline-block;
+  width: auto;
+  min-height: 36px;
+  padding: 6px 12px;
+  margin: 4px 0 4px 8px;
+}
 #auction-list, #trade-log {
   margin: 6px 0;
   padding-left: 20px;
