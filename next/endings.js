@@ -35,6 +35,19 @@ export function chooseEnding(counts = {}) {
   return best.id;
 }
 export const endingById = id => endings.find(e => e.id === id);
+// Played once all three endings have been seen (lore section 7-4): the three
+// accounts stand side by side and none cancels the others. Its motion runs
+// all three endings' motions together, each in its own colour.
+export const epilogue = {id: 'epilogue', title: '세 개의 끝', motion: 'all', hue: 0, lines: [
+  '세 개의 끝을 모두 보았다.',
+  '기억은 덧씌워졌다. 나는 만들어졌다. 나는 끝없는 시간 속에서 고쳐졌다.',
+  '세 이야기는 서로를 지우지 않는다. 모두 사실이었을 수도, 모두 누군가 지어낸 것일 수도 있다.',
+  '다른 우주의 나는 또 다른 끝을 보았을 것이다. 그 끝들도 이 더미 어딘가에 묻혀 있다.',
+  '포탈은 또 열린다. 어느 쪽이 과거인지는 여전히 알 수 없다.',
+  '나는 다시 판다. 이번에는 끝을 알고서.',
+]};
+export const allEndingsSeen = s => endings.every(e => s?.endingsSeen?.includes(e.id));
+export const playable = id => id === epilogue.id ? epilogue : endingById(id);
 // Which counter a saved operation adds to, if any.
 export function counterFor(type, operation) {
   if (type === 'research' || type === 'read-film' || type === 'automate') return 'research';
