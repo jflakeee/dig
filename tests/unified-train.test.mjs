@@ -94,3 +94,13 @@ test('a version-13 save opens without wagons and malformed train state is reject
     assert.throws(readSave, /원본을 보존/, JSON.stringify(bad));
   }
 });
+
+test('driving slows with a fuller hold and more wagons, never below 60%', async () => {
+  const { speedFactor, carFill } = await import('../next/train.js');
+  assert.equal(speedFactor({rocks: 0, minerals: {}, wagons: []}), 1);
+  assert.equal(speedFactor({rocks: baseCapacity, minerals: {}, wagons: []}), 0.75);
+  assert.ok(Math.abs(speedFactor({rocks: 0, minerals: {}, wagons: wagons(2)}) - 0.94) < 1e-9);
+  assert.equal(speedFactor({rocks: 10000, minerals: {}, wagons: wagons(8)}), 0.6);
+  assert.deepEqual(carFill({rocks: baseCapacity + 40, minerals: {}, wagons: wagons(2)}), [1, 0.5, 0]);
+  assert.deepEqual(carFill({rocks: 60, minerals: {}, wagons: []}), [0.5]);
+});
