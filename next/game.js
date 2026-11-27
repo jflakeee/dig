@@ -30,9 +30,26 @@ import { elementSymbols } from './elements.js';
 import { specimenById, specimenLabel } from './specimens.js';
 import { findById, findLabel, findPiece, clockText, alienNotes } from './finds.js';
 import { createView, portalMarker } from './view.js';
+import { createView3d } from './view3d.js';
 const el = (id) => document.getElementById(id);
-const canvas = el('scene'),
-  render = createView(canvas);
+// The three.js renderer by default; the Canvas 2D ray tracer with ?renderer=2d
+// or when WebGL is unavailable.
+function makeRenderer(canvas) {
+  if (new URLSearchParams(location.search).get('renderer') !== '2d') {
+    try {
+      return createView3d(canvas);
+    } catch (e) {
+      console.warn('WebGL renderer unavailable, using the 2D view', e);
+      const fresh = canvas.cloneNode(false);
+      canvas.replaceWith(fresh);
+      return createView(fresh);
+    }
+  }
+  return createView(canvas);
+}
+let canvas = el('scene');
+const render = makeRenderer(canvas);
+canvas = el('scene');
 let save,
   fatal = false,
   busy = false,
