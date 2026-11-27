@@ -172,7 +172,7 @@ function showDecomposer() {
 }
 // Drone trade with machines of other times. Prices hold for one market cycle.
 const credit = n => n.toLocaleString('ko-KR') + ' ' + currency;
-const pieceName = p => p.kind === 'capsule' || specimenById(p.kind) ? specimenLabel(p.kind, p.variant, p.element, p.form) : findLabel(p);
+const pieceName = p => p.mineral ? variantName(p.mineral, p.variant) + ' ' + (p.count ?? 1) + '개 묶음' : p.kind === 'capsule' || specimenById(p.kind) ? specimenLabel(p.kind, p.variant, p.element, p.form) : findLabel(p);
 function tradeOperation(value) {
   const [source, kind, variant, id] = value.split('|');
   return {source, kind, variant, element: kind === 'capsule' ? variant : undefined, id: id || undefined};
@@ -183,13 +183,13 @@ function sellChoices() {
     for (const [v, n] of Object.entries(variantCounts(save, id))) if (n > 0)
       choices.push(['m|' + id + '|' + v, (variantName(id, v) === mineralName(id) ? mineralName(id) : variantName(id, v) + ' (' + mineralName(id) + ')') + ' · ' + n + '개']);
   const groups = new Map();
-  for (const p of save.specimens) if (p.kind !== 'capsule') {
-    const value = 's|' + p.kind + '|' + p.variant;
+  for (const p of save.specimens) {
+    const value = 's|' + p.kind + '|' + (p.kind === 'capsule' ? p.element : p.variant);
     groups.set(value, [(groups.get(value)?.[0] ?? 0) + 1, p]);
   }
+  if (save.ceramic) choices.push(['c|ceramic|', '세라믹 · ' + save.ceramic + '개']);
   for (const p of save.finds) {
     const c = findById(p.kind).category;
-    if (c === 'unknown') continue;
     const value = 'f|' + p.kind + '|' + p.variant + (c === 'equipment' ? '|' + p.id : '');
     groups.set(value, [(groups.get(value)?.[0] ?? 0) + 1, p]);
   }
@@ -197,12 +197,16 @@ function sellChoices() {
     choices.push([value, pieceName(p) + (p.durability !== undefined ? ' · 내구도 ' + p.durability + '%' : '') + ' · ' + n + '개']);
   return choices.map(([value, label]) => [value, label, sellPrice(save, tradeOperation(value))]).filter(c => c[2]);
 }
+// Every piece can go to auction (unknowns once analysed); minerals as bundles of ten.
 function auctionChoices() {
   const out = [];
-  for (const p of save.specimens) if (p.kind === 'capsule') out.push(['s|capsule|' + p.element + '|' + p.id, pieceName(p), auctionEstimate(p)]);
-  for (const p of save.finds) if (findById(p.kind).category === 'unknown' && save.research.includes(p.kind))
-    out.push(['f|' + p.kind + '|' + p.variant + '|' + p.id, pieceName(p), auctionEstimate(p)]);
-  return out;
+  for (const id of mineralIds)
+    for (const [v, n] of Object.entries(variantCounts(save, id))) if (n >= 10)
+      out.push(['m|' + id + '|' + v + '|10', variantName(id, v) + ' 10개 묶음', auctionEstimate({mineral: id, count: 10})]);
+  for (const p of save.specimens) out.push(['s|' + p.kind + '|' + (p.kind === 'capsule' ? p.element : p.variant) + '|' + p.id, pieceName(p), auctionEstimate(p)]);
+  for (const p of save.finds) if (findById(p.kind).category !== 'unknown' || save.research.includes(p.kind))
+    out.push(['f|' + p.kind + '|' + p.variant + '|' + p.id, pieceName(p) + (p.durability !== undefined ? ' · 내구도 ' + p.durability + '%' : ''), auctionEstimate(p)]);
+  return out.filter(c => c[2]);
 }
 function fillSelect(select, options) {
   if (select.dataset.options === JSON.stringify(options)) return;
@@ -239,7 +243,7 @@ function showTrade() {
   const sell = sells.find(([value]) => value === el('sell-source').value);
   el('sell').textContent = sell ? '1개 판매 · ' + credit(sell[2]) : '판매할 물품 없음';
   el('sell').disabled = busy || !sell;
-  const stock = marketStock(save.marketSeed, cycle);
+  const stock = marketStock(save.marketSeed, cycle, mineralIds, mineralName);
   const buttons = stock.map(o => '구매 · ' + o.name + (o.durability ? ' (내구도 ' + o.durability + '%)' : '') + ' · ' + credit(o.price));
   const list = el('buy-list');
   if (list.dataset.labels !== JSON.stringify(buttons)) {
@@ -247,14 +251,15 @@ function showTrade() {
       const b = Object.assign(document.createElement('button'), {textContent: buttons[i]});
       b.dataset.item = o.item;
       b.onclick = () => {
-        const offer = marketStock(save.marketSeed, marketCycle(save.marketTime)).find(x => x.item === o.item);
+        const offer = marketStock(save.marketSeed, marketCycle(save.marketTime), mineralIds, mineralName).find(x => x.item === o.item);
         write({type: 'buy', item: o.item, price: offer.price}, () => message(offer.name + ' 구매 · ' + credit(offer.price)));
       };
       return b;
     }));
     list.dataset.labels = JSON.stringify(buttons);
   }
-  for (const b of list.children) b.disabled = busy || save.credits - reserved < (stock.find(o => o.item === b.dataset.item)?.price ?? Infinity);
+  for (const b of list.children) b.disabled = busy || save.credits - reserved < (stock.find(o => o.item === b.dataset.item)?.price ?? Infinity) ||
+    (b.dataset.item.startsWith('m:') && load(save) >= capacity(save));
   // Lots other machines list this cycle: visible top bid, my bid, time left.
   const lots = lotsFor(save.marketSeed, cycle);
   const lotRows = lots.map(lot => {
@@ -959,7 +964,9 @@ el('sell').onclick = () => {
 el('auction').onclick = () => {
   const value = el('auction-source').value;
   if (!value) return;
-  write({type: 'auction', ...tradeOperation(value)}, () => message('경매 등록 · 다른 시간대 채굴기의 입찰을 기다립니다'));
+  const op = tradeOperation(value);
+  if (op.source === 'm') { op.count = Number(op.id); delete op.id; }
+  write({type: 'auction', ...op}, () => message('경매 등록 · 다른 시간대 채굴기의 입찰을 기다립니다'));
 };
 el('capture').onclick = () => {
   const pending = save?.captures?.[0];

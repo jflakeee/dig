@@ -152,7 +152,7 @@ function settleAuctions(s) {
       s.credits += result.net;
       logTrade(s, 'sold:' + a.id + ':' + result.price + ':' + result.fee);
     } else {
-      (a.origin === 'specimens' ? s.specimens : s.finds).push(a.piece);
+      unlist(s, a);
       logTrade(s, 'unsold:' + a.id);
     }
   }
@@ -162,6 +162,7 @@ function settleAuctions(s) {
 function tradeTarget(s, op) {
   if (op?.source === 'm' && variants[op.kind] && (variantCounts(s, op.kind)[op.variant] ?? 0) > 0)
     return {thing: {mineral: op.kind}, key: 'm:' + op.kind, take: () => spendVariant(s, op.kind, op.variant)};
+  if (op?.source === 'c' && (s.ceramic ?? 0) > 0) return {thing: {ceramic: true}, key: 'c', take: () => s.ceramic--};
   const list = op?.source === 's' ? s.specimens : op?.source === 'f' ? s.finds : null;
   const at = list ? list.findIndex(p => op.id ? p.id === op.id : p.kind === op.kind &&
     (p.kind === 'capsule' ? p.element === op.element : p.variant === op.variant)) : -1;
@@ -348,7 +349,8 @@ function validMinerals(s) {
     Number.isFinite(s.marketTime) && s.marketTime >= 0 &&
     (s.marketClock === null || (Number.isFinite(s.marketClock?.seed) && Number.isFinite(s.marketClock.elapsed))) &&
     Array.isArray(s.auctions) && s.auctions.every(a => a && typeof a.id === 'string' && a.piece?.id === a.id &&
-      ['specimens', 'finds'].includes(a.origin) && (a.origin === 'specimens' ? validPiece(a.piece) : validFind(a.piece)) &&
+      ['specimens', 'finds', 'minerals'].includes(a.origin) && (a.origin === 'specimens' ? validPiece(a.piece) :
+        a.origin === 'minerals' ? validBundle(a.piece) : validFind(a.piece)) &&
       Number.isSafeInteger(a.estimate) && a.estimate > 0 && Number.isFinite(a.endsAt)) &&
     Array.isArray(s.tradeLog) && s.tradeLog.length <= 20 && s.tradeLog.every(t => typeof t === 'string') &&
     Number.isSafeInteger(s.purchaseCount) && s.purchaseCount >= 0 &&
@@ -385,6 +387,16 @@ function validMinerals(s) {
     Array.isArray(s.specimenLog) && s.specimenLog.every(kind => kind === 'capsule' || specimenById(kind)) &&
     new Set(s.specimenLog).size === s.specimenLog.length &&
     Number.isSafeInteger(s.capsuleMisses) && s.capsuleMisses >= 0;
+}
+// Ten or more pieces of one mineral sub-species listed together.
+const validBundle = p => typeof p?.id === 'string' && p.id.length <= 80 && !!variants[p.mineral] &&
+  variants[p.mineral].some(([v]) => v === p.variant) && Number.isSafeInteger(p.count) && p.count >= 1 && p.count <= 1000 &&
+  Object.keys(p).length === 4;
+// Returns a listed piece to where it came from.
+function unlist(s, a) {
+  if (a.origin === 'minerals') {
+    for (let i = 0; i < a.piece.count; i++) grant(s, a.piece.mineral, a.piece.variant);
+  } else (a.origin === 'specimens' ? s.specimens : s.finds).push(a.piece);
 }
 function validFind(p) {
   const f = p && findById(p.kind);
@@ -691,17 +703,31 @@ function step(s, operation, session) {
         break;
       }
       case 'buy': {
-        const offer = s.front && marketStock(s.marketSeed, marketCycle(s.marketTime)).find(o => o.item === operation?.item);
+        const offer = s.front && marketStock(s.marketSeed, marketCycle(s.marketTime), mineralIds).find(o => o.item === operation?.item);
         if (!offer) throw Error('구매할 수 없습니다.');
         if (offer.price !== operation.price) throw Error('시세가 바뀌었습니다. 새 가격을 확인해 주세요.');
         if (s.credits - reservedCredits(s) < offer.price) throw Error('크레딧이 부족합니다.');
         s.credits -= offer.price;
-        if (offer.item === 'ceramic') s.ceramic = (s.ceramic ?? 0) + 1;
+        if (offer.mineral) {
+          if (load(s) >= capacity(s)) throw Error('화물칸이 가득 찼습니다.');
+          grant(s, offer.mineral, defaultVariant(offer.mineral));
+          if (!s.mineralLog.includes(offer.mineral)) s.mineralLog.push(offer.mineral);
+        } else if (offer.item === 'ceramic') s.ceramic = (s.ceramic ?? 0) + 1;
         else s.finds.push({id: 'buy:' + s.purchaseCount, kind: 'drill_head', variant: 'standard', durability: offer.durability});
         s.purchaseCount++;
         break;
       }
       case 'auction': {
+        // Minerals go up as a bundle of `count` (10 or more) of one sub-species.
+        if (operation?.source === 'm') {
+          const n = operation.count;
+          if (!s.front || !variants[operation.kind] || !Number.isSafeInteger(n) || n < 10 || n > 1000 ||
+            (variantCounts(s, operation.kind)[operation.variant] ?? 0) < n) throw Error('경매에 올릴 수 없습니다.');
+          for (let i = 0; i < n; i++) spendVariant(s, operation.kind, operation.variant);
+          const piece = {id: 'bundle:' + s.revision, mineral: operation.kind, variant: operation.variant, count: n};
+          s.auctions.push({id: piece.id, piece, origin: 'minerals', estimate: auctionEstimate(piece), endsAt: s.marketTime + auctionSeconds});
+          break;
+        }
         const t = s.front && tradeTarget(s, operation);
         // An unknown material can be listed only once its kind has been analysed.
         if (t?.piece && studies[t.piece.kind] && !s.research.includes(t.piece.kind)) throw Error('분석을 마친 물질만 경매에 올릴 수 있습니다.');
@@ -715,7 +741,7 @@ function step(s, operation, session) {
         const at = s.auctions.findIndex(a => a.id === operation?.id);
         if (at < 0) throw Error('이미 끝난 경매입니다.');
         const [a] = s.auctions.splice(at, 1);
-        (a.origin === 'specimens' ? s.specimens : s.finds).push(a.piece);
+        unlist(s, a);
         break;
       }
       case 'research': {

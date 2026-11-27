@@ -33,11 +33,14 @@ export function traderOf(seed, cycle) {
 // What a sellable thing is: its value class and base value, or null when it
 // has no price and can only go to auction.
 export function valueOf(thing) {
-  if (thing.mineral) return {group: 'mineral', base: mineralValue[thing.mineral]};
-  if (thing.kind === 'capsule') return null;
+  if (thing.mineral) return {group: 'mineral', base: mineralValue[thing.mineral] * (thing.count ?? 1)};
+  if (thing.ceramic) return {group: 'equipment', base: 12};
+  // Capsules and unknown materials sell at a little over a third of their auction estimate.
+  if (thing.kind === 'capsule') return {group: 'specimen', base: Math.round(auctionEstimate(thing) * 0.35)};
   if (specimenById(thing.kind)) return {group: 'specimen', base: tierValue[specimenById(thing.kind).tier]};
   const f = findById(thing.kind);
-  if (!f || f.category === 'unknown') return null;
+  if (!f) return null;
+  if (f.category === 'unknown') return {group: 'artifact', base: Math.round(unknownEstimate[f.id] * 0.35)};
   if (f.category === 'equipment') return {group: 'equipment', base: equipmentValue[f.id] * (thing.durability ?? 100) / 100};
   if (f.category === 'household') return {group: 'household', base: householdValue[f.id]};
   return {group: 'artifact', base: f.id === 'superheavy_vessel' ? 300 : settingValue[f.setting]};
@@ -51,17 +54,23 @@ export function sellQuote(seed, cycle, thing, key) {
   return Math.max(1, Math.round(v.base * (t.likes[v.group] ?? 1) * swing));
 }
 // Goods the drone can bring in this cycle.
-export function marketStock(seed, cycle) {
+export const mineralPrice = (seed, cycle, id) => Math.max(2, Math.round(mineralValue[id] * 1.25 * (1.15 + 0.3 * roll(seed, 'buy:' + cycle + ':' + id))));
+export function marketStock(seed, cycle, mineralIds = Object.keys(mineralValue), name = id => id) {
   return [
+    ...mineralIds.map(id => ({item: 'm:' + id, mineral: id, name: name(id), price: mineralPrice(seed, cycle, id)})),
     {item: 'ceramic', name: '세라믹 부품', price: Math.round(18 * (1.15 + 0.3 * roll(seed, 'buy:' + cycle + ':ceramic')))},
     {item: 'drill_head', name: '교체형 드릴 헤드', durability: 70 + Math.floor(roll(seed, 'buy-head:' + cycle) * 26),
       price: Math.round(160 * (1.15 + 0.3 * roll(seed, 'buy:' + cycle + ':drill_head')))},
   ];
 }
 // Starting estimate the drone shows for something without a price.
+// Any piece goes to auction: unknowns and capsules at their fixed estimates,
+// everything else (mineral bundles included) at its base value.
 export function auctionEstimate(piece) {
   if (piece.kind === 'capsule') return capsuleOnly.includes(piece.element) ? 150 : 40;
-  return unknownEstimate[piece.kind] ?? null;
+  if (unknownEstimate[piece.kind]) return unknownEstimate[piece.kind];
+  const v = valueOf(piece);
+  return v?.base ? Math.max(1, Math.round(v.base)) : null;
 }
 // Fixed when the auction ends from the seed stored at listing: unsold, or a
 // winning price between one and ten times the listed estimate.
