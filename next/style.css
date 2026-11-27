@@ -319,6 +319,20 @@ section {
   font-size: 13px;
   text-shadow: 0 1px 3px #000;
 }
+/* Story clues: low on the screen, clear of the aim and buttons, never taking taps. */
+#story-line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: max(150px, calc(env(safe-area-inset-bottom) + 130px));
+  text-align: center;
+  color: #b9c7d9;
+  font-size: 14px;
+  font-style: italic;
+  text-shadow: 0 1px 3px #000;
+  pointer-events: none;
+  transition: opacity 0.8s;
+}
 #memory-line {
   display: block;
   margin-top: 6px;
