@@ -10,6 +10,7 @@ import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange,
 import { studies, fragments } from './research.js';
 import { automations, automationIds, isOn } from './automation.js';
 import { arrivalReading } from './arrival.js';
+import { valueCollapse, collapseNotes, showsEndless } from './value.js';
 import { categories, targets, winChance, maxMultiple, maxPieces } from './gamble.js';
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
 import { endingById, endings } from './endings.js';
@@ -231,6 +232,13 @@ function tradeLogText(entry) {
   return '낙찰 · ' + (tradeNames.get(parts.slice(1).join(':')) ?? '경매품') + ' · ' + credit(price) + ' (수수료 ' + credit(fee) + ')';
 }
 const tradeNames = new Map();
+// The balance; when value has fully collapsed it reads as endless now and then.
+function showCredits() {
+  const reserved = reservedCredits(save);
+  const text = showsEndless(valueCollapse(save), age) ? '∞ ' + currency
+    : credit(save.credits) + (reserved ? ' (예약 ' + credit(reserved) + ')' : '');
+  if (el('credits').textContent !== text) el('credits').textContent = text;
+}
 function showTrade() {
   const box = el('trade');
   box.hidden = !save?.front;
@@ -238,10 +246,11 @@ function showTrade() {
   const cycle = marketCycle(save.marketTime);
   const trader = traderOf(save.marketSeed, cycle);
   const reserved = reservedCredits(save);
-  el('credits').textContent = credit(save.credits) + (reserved ? ' (예약 ' + credit(reserved) + ')' : '');
+  showCredits();
+  const collapse = valueCollapse(save);
   const left = Math.ceil((cycle + 1) * cycleSeconds - save.marketTime);
   el('trader').textContent = '신호 #' + trader.signal + ' · ' + trader.name + ' · 시세 갱신까지 ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') +
-    '\n' + traderLook(trader.id, recall(save));
+    '\n' + traderLook(trader.id, recall(save)) + (collapse ? '\n' + collapseNotes[collapse] : '');
   const sells = sellChoices();
   fillSelect(el('sell-source'), sells.map(([value, label, price]) => [value, label + ' → ' + credit(price)]));
   const sell = sells.find(([value]) => value === el('sell-source').value);
@@ -305,7 +314,9 @@ function showTrade() {
     }));
     auctionList.dataset.rows = JSON.stringify(rows);
   }
-  const log = save.tradeLog.slice(0, 5).map(tradeLogText);
+  // Once value has collapsed, a settled price is noted as deciding nothing.
+  const log = save.tradeLog.slice(0, 5).map(tradeLogText)
+    .map(text => collapse && /^(경매 )?낙찰/.test(text) ? text + ' · 아무것도 정해지지 않음' : text);
   if (el('trade-log').dataset.lines !== JSON.stringify(log)) {
     el('trade-log').replaceChildren(...log.map(text => Object.assign(document.createElement('li'), {textContent: text})));
     el('trade-log').dataset.lines = JSON.stringify(log);
@@ -1380,6 +1391,7 @@ function frame(time) {
   if (time - lastDraw >= 33) {
     lastDraw = time;
     if (crossing) showTrainStrip();
+    if (panel && save?.front && valueCollapse(save) >= 2) showCredits();
     el('discovery-notice').hidden = age >= discoveryNoticeUntil;
     el('memory-line').hidden = age >= memoryUntil;
     const light = [0, 0.5, 1].map((delay) =>
