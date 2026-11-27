@@ -18,6 +18,11 @@ const shapes = Array.from({ length: 64 }, (_, variant) => {
   return planes;
 });
 
+// The stone a cell holds: its variant index and the corner planes that cut it.
+// Shared with the WebGL renderer so drawn stones match what rays and lasers hit.
+export const stoneCount = shapes.length;
+export const stoneVariant = (x, y, z) => Math.floor(hash(Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) * shapes.length);
+export const stonePlanes = variant => shapes[variant];
 export function intersectStone(p, dx, dy, dz, x, y, z, near, far, axis) {
   const key = Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791);
   const planes = shapes[Math.floor(hash(key) * shapes.length)];

@@ -67,6 +67,8 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
     point: tutorial ? [0.5, 0.5, 7] : exitMouth, axis: 2, sign: tutorial ? 1 : -1,
     radius: tutorial ? 1.64 : arrivalRadius, strength: tutorial ? 0.6 : arrivalStrength, exit: !tutorial, chunk: [0, 0, 0],
   };
+  // Bumped whenever a cell is opened or a chunk is dropped, so a renderer knows to rebuild.
+  let version = 0;
   let cached,
     center = [0, 0, 0],
     hasMouth = true;
@@ -124,6 +126,7 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
     const index = localIndex(x, y, z);
     if (!naturalSolid(chunk,x,y,z) || chunk.air.has(index)) return;
     chunk.air.add(index);
+    version++;
     // Face counts are still kept for saves, but clearing a face no longer opens anything.
     const coords = [x, y, z];
     for (let axis = 0; axis < 3; axis++) {
@@ -249,6 +252,7 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
       )
         continue;
       chunks.delete(key);
+      version++;
       generations.set(key, (chunk.epoch ?? 0) + 1);
       if (chunk === cached) cached = undefined;
       if (chunk.x === 0 && chunk.y === 0 && chunk.z === 0) hasMouth = false;
@@ -472,6 +476,7 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
     hullContacts, debrisStep, fragments, snapshot, portals, gravity, warehouseItems, takeNearby,
     ejected, syncEjected, takeEjected, setBody, microgravity, forming,
     hasChunk(x, y, z) { return chunks.has([x, y, z].join(',')); },
+    get version() { return version; },
     tutorial,
     solid,
     dig,

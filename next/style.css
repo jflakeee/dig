@@ -24,6 +24,12 @@ canvas {
   image-rendering: pixelated;
   touch-action: none;
 }
+/* The WebGL view's 2D layer: dust, laser, chains and the cockpit drill. */
+.scene-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
 header,
 aside,
 footer,
