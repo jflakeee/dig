@@ -16,6 +16,7 @@ import { categories, targets, winChance, maxMultiple, maxPieces } from './gamble
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
 import { endingById, endings, epilogue, allEndingsSeen, playable, endingCount } from './endings.js';
 import { portalCost, researchProgress } from './portal.js';
+import { createDirector, settings as storySettings } from './story.js';
 import { trainLength, capacity, load, canCouple, wagonCost, safeLength, wagonsBeyondSafe, speedFactor, carFill, machineLength, wagonLength, crossingCars } from './train.js';
 let crossing = null;
 import { mineralIds, mineralName, variantName } from './minerals.js';
@@ -56,6 +57,10 @@ let nextAutomation = 0;
 let snagged = null;
 let chainShots = [];
 let safeStopUntil = 0, saveFailures = 0;
+// Story clues keep their own seen list apart from the save and their own clock,
+// which runs only while the page is visible.
+const story = createDirector({get: k => localStorage.getItem(k), set: (k, v) => localStorage.setItem(k, v)});
+let storyClock = 0, storyUntil = 0, tradeSeenSince = null;
 let checkpointAge = 0;
 let hull = 100;
 let hazardVisible = false;
@@ -473,6 +478,30 @@ function showMicro() {
   const out = el('micro');
   if (out.textContent !== text) out.textContent = text;
   out.hidden = !text;
+}
+// The trade screen counts as observed once it has been open and readable for
+// three seconds; then the signal and this cycle's quotes may raise a clue.
+// Clues show only when nothing else is speaking: not in the intro, with the
+// menu open, during an ending, or while a memory line is up.
+function showStory(dt) {
+  if (!document.hidden) storyClock += dt;
+  const trading = panel && save?.front && el('trade').open;
+  if (!trading) tradeSeenSince = null;
+  else if (tradeSeenSince === null) tradeSeenSince = storyClock;
+  else if (storyClock - tradeSeenSince >= 3) {
+    const cycle = marketCycle(save.marketTime), trader = traderOf(save.marketSeed, cycle);
+    story.emit('trader_signal', trader.id + ':' + trader.signal);
+    story.emit('quote_observed', save.marketSeed + ':' + cycle);
+  }
+  const canShow = !!save?.front && !panel && !document.hidden && age >= memoryUntil && el('ending').hidden;
+  const line = story.next(storyClock, canShow);
+  const out = el('story-line');
+  if (line) {
+    out.textContent = line;
+    storyUntil = storyClock + storySettings.showSeconds;
+  }
+  const visible = storyClock < storyUntil;
+  if (out.hidden === visible) out.hidden = !visible;
 }
 function showResearch() {
   const box = el('research');
@@ -982,6 +1011,12 @@ async function write(op, after) {
       el('memory-line').textContent = insightStages[insightStage(save)].text;
       memoryUntil = age + 10;
     }
+    // Finished events that may raise a story clue; the director decides whether one shows.
+    if (type === 'transit') story.emit('arrival', save.trips);
+    for (const kind of save.research.filter(k => !before.research?.includes(k))) story.emit('material_identified', kind);
+    if ((save.memoryLog?.length ?? 0) > (before.memoryLog?.length ?? 0)) story.emit('memory_recognized', 'film' + save.memoryLog.length);
+    for (const id of (save.selfParts ?? []).filter(id => !before.selfParts?.includes(id))) story.emit('memory_recognized', 'part:' + id);
+    for (const p of (save.finds ?? []).filter(p => findById(p.kind)?.category === 'alien' && !before.findLog?.includes(p.kind))) story.emit('life_found', p.kind);
     const had = new Set([...(before.specimens ?? []), ...(before.finds ?? [])].map(p => p.id));
     const freshFinds = (save.finds ?? []).filter(p => !had.has(p.id));
     if (freshFinds.length && type !== 'capture') {
@@ -1197,6 +1232,7 @@ el('reset').onclick = () => {
 };
 el('confirm-reset').onclick = () => {
   write('reset', () => {
+    story.reset();
     loadWorld();
     releaseLook();
     panel = false;
@@ -1516,9 +1552,11 @@ function frame(time) {
   previous = time;
   tick(dt);
   if (time - lastDraw >= 33) {
+    const drawDt = Math.min(0.1, (time - lastDraw) / 1000);
     lastDraw = time;
     if (crossing) showTrainStrip();
     showMicro();
+    showStory(drawDt);
     if (panel && save?.front && valueCollapse(save) >= 2) showCredits();
     el('discovery-notice').hidden = age >= discoveryNoticeUntil;
     el('memory-line').hidden = age >= memoryUntil;
