@@ -5,7 +5,7 @@ import { elementSymbols } from './elements.js';
 import { blockDiscovery, capsuleElement, specimenById, specimenUnits, specimenPiece, captureSeconds, capsuleForms } from './specimens.js';
 import { findById, findPiece } from './finds.js';
 import { decompose, decompositionFee } from './composition.js';
-import { marketCycle, sellQuote, marketStock, auctionEstimate, auctionOutcome, auctionSeconds, lotById, minimumBid, cycleSeconds as cycleSecondsOf } from './trade.js';
+import { marketCycle, sellQuote, marketStock, auctionEstimate, auctionOutcome, auctionSeconds, lotById, lotsFor, minimumBid, cycleSeconds as cycleSecondsOf } from './trade.js';
 import { slotOf, captureBonus } from './equipment.js';
 import { studies, fragments } from './research.js';
 import { selfParts, nextPart } from './self.js';
@@ -16,11 +16,12 @@ import { upgrades, upgradeCost, validUpgrades } from './upgrades.js';
 import { automations, fresh as freshAutomation, validAutomation } from './automation.js';
 import { winChance, maxPieces, baseValue, validMultiple, validGambleLog } from './gamble.js';
 import { valueOf } from './trade.js';
+import { fresh as freshInsight, validInsight, addTrace, traceKey, urgentRatio } from './insight.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 17;
+export const saveVersion = 18;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -62,6 +63,7 @@ export const migrations = {
   // Endings seen across runs, and how many times memory was let go for a new run.
   15: s => ({...s, endingsSeen: s.ending ? [s.ending] : [], cycles: 0}),
   16: s => ({...s, upgrades: {body: 0, wagon: 0, drills: 0, bore: 0}, automation: freshAutomation(), gambleCount: 0, gambleLog: []}),
+  17: s => ({...s, insight: freshInsight()}),
 };
 export const reservedCredits = s => (s.bids ?? []).reduce((n, b) => n + b.amount, 0);
 // A lot closes once the market clock passes the end of its cycle: a bid at or
@@ -72,6 +74,7 @@ function settleBids(s) {
     if (lot && bid.amount >= lot.rival) {
       s.credits -= bid.amount;
       addSpecimen(s, lot.piece);
+      s.insight.trades++;
       logTrade(s, 'won:' + bid.lot + ':' + bid.amount);
     } else logTrade(s, 'outbid:' + bid.lot);
   }
@@ -118,6 +121,14 @@ function dropWagons(s, lost) {
 }
 // An analysis finishes once the market clock passes its end; its kind is then known.
 // An automation study finishes on the market clock and unlocks its switch, on.
+// An offer this cycle that carries the trace of something I sold.
+function noticeTraces(s) {
+  if (s.insight.traceSeen || !s.insight.traces.length) return;
+  const cycle = marketCycle(s.marketTime);
+  const offered = [...marketStock(s.marketSeed, cycle, mineralIds).map(o => o.mineral ? {mineral: o.mineral} : o.item === 'ceramic' ? {ceramic: true} : {kind: o.item}),
+    ...lotsFor(s.marketSeed, cycle).map(l => l.piece)];
+  if (offered.some(t => s.insight.traces.includes(traceKey(t)))) s.insight.traceSeen = true;
+}
 function finishAutomation(s) {
   const job = s.automation.job;
   if (!job || s.marketTime < job.endsAt) return;
@@ -152,6 +163,8 @@ function settleAuctions(s) {
     const result = auctionOutcome(s.marketSeed, a.id, a.estimate);
     if (result.sold) {
       s.credits += result.net;
+      addTrace(s, a.piece);
+      s.insight.trades++;
       logTrade(s, 'sold:' + a.id + ':' + result.price + ':' + result.fee);
     } else {
       unlist(s, a);
@@ -320,6 +333,7 @@ const fresh = () => ({
   automation: freshAutomation(),
   gambleCount: 0,
   gambleLog: [],
+  insight: freshInsight(),
   cycles: 0,
   session: null,
   arrivalRadius: 1.64,
@@ -375,7 +389,7 @@ function validMinerals(s) {
     Array.isArray(s.bids) && s.bids.every(b => b && /^c\d+-\d+$/.test(b.lot) && Number.isSafeInteger(b.amount) && b.amount > 0) &&
     new Set(s.bids.map(b => b.lot)).size === s.bids.length && reservedCredits(s) <= s.credits &&
     validUpgrades(s.upgrades) && validAutomation(s.automation) &&
-    Number.isSafeInteger(s.gambleCount) && s.gambleCount >= 0 && validGambleLog(s.gambleLog) &&
+    Number.isSafeInteger(s.gambleCount) && s.gambleCount >= 0 && validGambleLog(s.gambleLog) && validInsight(s.insight) &&
     Array.isArray(s.endingsSeen) && s.endingsSeen.every(id => endingById(id)) && new Set(s.endingsSeen).size === s.endingsSeen.length &&
     (s.ending === null || s.endingsSeen.includes(s.ending)) && Number.isSafeInteger(s.cycles) && s.cycles >= 0 &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
@@ -653,6 +667,7 @@ function step(s, operation, session) {
         s.session = null;
         break;
       case 'reboot':
+        s.insight.rebirth = true;
         if (operation.loss) {
           if (!vector(operation.loss,n => n === 0 || n === 1)) throw Error('화물 기록 오류');
           s.cargo = (s.cargo ?? [0,0,0]).map((n,i) => Math.max(0,n-operation.loss[i]));
@@ -721,6 +736,8 @@ function step(s, operation, session) {
         if (price !== operation.price) throw Error('시세가 바뀌었습니다. 새 가격을 확인해 주세요.');
         t.take();
         s.credits += price;
+        addTrace(s, t.thing);
+        s.insight.trades++;
         break;
       }
       case 'buy': {
@@ -729,6 +746,10 @@ function step(s, operation, session) {
         if (offer.price !== operation.price) throw Error('시세가 바뀌었습니다. 새 가격을 확인해 주세요.');
         if (s.credits - reservedCredits(s) < offer.price) throw Error('크레딧이 부족합니다.');
         s.credits -= offer.price;
+        // Paying well over the base value is an urgent purchase.
+        const thing = offer.mineral ? {mineral: offer.mineral} : offer.item === 'ceramic' ? {ceramic: true} : {kind: offer.item, durability: offer.durability};
+        if (offer.price >= urgentRatio * valueOf(thing).base) s.insight.urgentBuy = true;
+        s.insight.trades++;
         if (offer.mineral) {
           if (load(s) >= capacity(s)) throw Error('화물칸이 가득 찼습니다.');
           grant(s, offer.mineral, defaultVariant(offer.mineral));
@@ -877,12 +898,15 @@ function step(s, operation, session) {
         if (s.credits - reservedCredits(s) + (own?.amount ?? 0) < amount) throw Error('크레딧이 부족합니다.');
         if (own) own.amount = amount;
         else s.bids.push({lot: lot.id, amount});
+        // Calling no more than the estimate is a cheap bid made at leisure.
+        if (amount <= lot.estimate) s.insight.lowBid = true;
         break;
       }
       case 'new-cycle':
         // Only memory starts over: body parts, read films, habits and this run's
         // ending. Work records -- inventory, equipment, research, credits -- remain.
         if (!s.ending) throw Error('엔딩을 본 뒤에 새 회차를 시작할 수 있습니다.');
+        s.insight.rebirth = true;
         s.selfParts = [];
         s.memoryLog = [];
         s.actions = {research: 0, equip: 0, repair: 0};
@@ -960,6 +984,7 @@ function step(s, operation, session) {
       settleBids(s);
       finishResearch(s);
       finishAutomation(s);
+      noticeTraces(s);
     }
     return true;
 }

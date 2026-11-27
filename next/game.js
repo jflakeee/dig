@@ -11,6 +11,7 @@ import { studies, fragments } from './research.js';
 import { automations, automationIds, isOn } from './automation.js';
 import { arrivalReading } from './arrival.js';
 import { valueCollapse, collapseNotes, showsEndless } from './value.js';
+import { stages as insightStages, insightStage, traceKey } from './insight.js';
 import { categories, targets, winChance, maxMultiple, maxPieces } from './gamble.js';
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
 import { endingById, endings, epilogue, allEndingsSeen, playable } from './endings.js';
@@ -249,15 +250,23 @@ function showTrade() {
   showCredits();
   const collapse = valueCollapse(save);
   const left = Math.ceil((cycle + 1) * cycleSeconds - save.marketTime);
-  el('trader').textContent = '신호 #' + trader.signal + ' · ' + trader.name + ' · 시세 갱신까지 ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') +
+  el('trader').textContent = '거래 상대 · 알 수 없음 · 신호 #' + trader.signal + ' · 시세 갱신까지 ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') +
     '\n' + traderLook(trader.id, recall(save)) + (collapse ? '\n' + collapseNotes[collapse] : '');
+  // What the machine has come to suspect about the other side, step by step.
+  const guesses = insightStages.slice(0, insightStage(save) + 1).map(st => st.text);
+  if (el('insight-list').dataset.lines !== JSON.stringify(guesses)) {
+    el('insight-list').replaceChildren(...guesses.map(text => Object.assign(document.createElement('li'), {textContent: text})));
+    el('insight-list').dataset.lines = JSON.stringify(guesses);
+  }
+  const traced = t => save.insight.traces.includes(traceKey(t)) ? ' · 내 판매 흔적' : '';
   const sells = sellChoices();
   fillSelect(el('sell-source'), sells.map(([value, label, price]) => [value, label + ' → ' + credit(price)]));
   const sell = sells.find(([value]) => value === el('sell-source').value);
   el('sell').textContent = sell ? '1개 판매 · ' + credit(sell[2]) : '판매할 물품 없음';
   el('sell').disabled = busy || !sell;
   const stock = marketStock(save.marketSeed, cycle, mineralIds, mineralName);
-  const buttons = stock.map(o => '구매 · ' + o.name + (o.durability ? ' (내구도 ' + o.durability + '%)' : '') + ' · ' + credit(o.price));
+  const buttons = stock.map(o => '구매 · ' + o.name + (o.durability ? ' (내구도 ' + o.durability + '%)' : '') + ' · ' + credit(o.price) +
+    traced(o.mineral ? {mineral: o.mineral} : o.item === 'ceramic' ? {ceramic: true} : {kind: o.item}));
   const list = el('buy-list');
   if (list.dataset.labels !== JSON.stringify(buttons)) {
     list.replaceChildren(...stock.map((o, i) => {
@@ -278,7 +287,7 @@ function showTrade() {
   const lotRows = lots.map(lot => {
     const own = save.bids.find(b => b.lot === lot.id)?.amount ?? 0, top = visibleRival(lot, save.marketTime);
     const next = minimumBid(lot, save.marketTime, own);
-    return [lot.id, next, pieceName(lot.piece) + (lot.piece.durability ? ' · 내구도 ' + lot.piece.durability + '%' : '') +
+    return [lot.id, next, pieceName(lot.piece) + traced(lot.piece) + (lot.piece.durability ? ' · 내구도 ' + lot.piece.durability + '%' : '') +
       ' · 추정 ' + credit(lot.estimate) + ' · 최고 ' + credit(Math.max(top, own)) + (own > top ? ' (나)' : '') +
       ' · 마감까지 ' + Math.max(0, Math.ceil(lot.endsAt - save.marketTime)) + '초', own];
   });
@@ -916,6 +925,11 @@ async function write(op, after) {
     }
     if ((save.leftBehind ?? 0) > (before.leftBehind ?? 0) && !(before.leftBehind > 0 && load(before) >= capacity(before)))
       message('화물칸 가득 · 채굴한 광물과 아이템을 기계 밖으로 튕겨냅니다');
+    // A new step of realisation about the trade counterpart shows like a memory.
+    if (insightStage(save) > insightStage(before)) {
+      el('memory-line').textContent = insightStages[insightStage(save)].text;
+      memoryUntil = age + 10;
+    }
     const had = new Set([...(before.specimens ?? []), ...(before.finds ?? [])].map(p => p.id));
     const freshFinds = (save.finds ?? []).filter(p => !had.has(p.id));
     if (freshFinds.length && type !== 'capture') {
