@@ -25,6 +25,7 @@ export function portalRayDistance(portal, pos, ray, limit) {
 // Chunks are 16 m wide. Their voxel coordinates share one world frame.
 const side = 32;
 const chunkOf = (cell) => Math.floor((cell + 15) / side);
+export const microgravityChance = 0.25;
 const pourInterval = 0.25; // seconds between minerals pouring out after arrival
 // The chunk coordinate and bit index that own a voxel.
 export function cellOwner(x, y, z) {
@@ -159,8 +160,40 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
     return result;
   }
 
+  // Microgravity (docs/dig-4d-chunk-microgravity-sensor-detail-20261125.md):
+  // some chunks hold a weak field of their own, fixed by the world seed, the
+  // chunk and its generation, apart from portal gravity. The origin, where the
+  // machine starts and arrives, has none. Chance and strengths are trial values.
+  const fields = new Map();
+  function field(cx, cy, cz) {
+    if (!cx && !cy && !cz) return null;
+    const key = [cx, cy, cz].join(','), id = key + ':' + (generations.get(key) ?? 0) + ':microgravity:';
+    if (fields.has(id)) return fields.get(id);
+    let f = null;
+    if (roll(seed, id + 'exists') < microgravityChance) {
+      const z = 2 * roll(seed, id + 'z') - 1, a = 2 * Math.PI * roll(seed, id + 'a'), r = Math.sqrt(1 - z * z);
+      f = {dir: [r * Math.cos(a), z, r * Math.sin(a)], strength: 0.15 + 0.45 * roll(seed, id + 'strength'),
+        varied: roll(seed, id + 'varied') < 0.4};
+    }
+    fields.set(id, f);
+    return f;
+  }
+  // The field at a point: a varied field bends its direction smoothly with position.
+  function microgravity(p) {
+    const f = field(...p.map(v => chunkOf(Math.floor(v))));
+    if (!f) return null;
+    let dir = f.dir;
+    if (f.varied) {
+      dir = dir.map((v, i) => v + 0.5 * Math.sin(p[(i + 1) % 3] / 5));
+      const n = Math.hypot(...dir);
+      dir = dir.map(v => v / n);
+    }
+    return {dir, strength: f.strength, varied: f.varied};
+  }
   function gravity(p, active = portals()) {
     const pull = [0, 0, 0];
+    const micro = microgravity(p);
+    if (micro) for (let i = 0; i < 3; i++) pull[i] += micro.dir[i] * micro.strength;
     for (const portal of active) {
       if (!portal.chunk.every((n, i) => chunkOf(Math.floor(p[i])) === n)) continue;
       const gap = portal.point.map((v, i) => v - p[i]);
@@ -403,7 +436,7 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
     sense(pos,dt,shock) { return senseHazard(this.hazard,pos,dt,trace,shock); },
     advance(dt) { elapsed += dt; },
     hullContacts, debrisStep, fragments, snapshot, portals, gravity, warehouseItems, takeNearby,
-    ejected, syncEjected, takeEjected, setBody,
+    ejected, syncEjected, takeEjected, setBody, microgravity,
     hasChunk(x, y, z) { return chunks.has([x, y, z].join(',')); },
     tutorial,
     solid,

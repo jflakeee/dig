@@ -311,6 +311,14 @@ section {
   font-style: italic;
   color: #c9b8e8;
 }
+/* The gravity sensor's reading of the chunk's own microgravity. */
+#micro {
+  display: block;
+  margin-top: 6px;
+  color: #9fd0e0;
+  font-size: 13px;
+  text-shadow: 0 1px 3px #000;
+}
 #memory-line {
   display: block;
   margin-top: 6px;
