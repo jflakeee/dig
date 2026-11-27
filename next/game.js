@@ -53,6 +53,7 @@ let contact = null, fracture = null, installedUntil = 0;
 let lastRockGain = -Infinity;
 let nextHullRepair = 0;
 let nextAutomation = 0;
+let snagged = null;
 let checkpointAge = 0;
 let hull = 100;
 let hazardVisible = false;
@@ -1412,7 +1413,10 @@ function tick(dt) {
   // The probe extends beyond one integration step so the entire body fits.
   world.setBody(bodyRadius(save));
   const probe = offset(pos, d, 0.7 * bodyRadius(save) / baseRadius);
-  const blocks = world.blockers(probe).sort((a, b) =>
+  // A body snagged on a side wall (pulled sideways by portal or micro gravity)
+  // has nothing in the forward probe; then the drills cut what holds the body.
+  const ahead = world.blockers(probe);
+  const blocks = (ahead.length || !snagged ? ahead : world.blockers(snagged)).sort((a, b) =>
     Math.hypot(...a.map((v, i) => v + 0.5 - probe[i])) - Math.hypot(...b.map((v, i) => v + 0.5 - probe[i])));
   if (blocks.length) {
     velocity = [0, 0, 0];
@@ -1447,7 +1451,10 @@ function tick(dt) {
   // sideways, but never translate it behind its current heading.
   const along = velocity.reduce((sum, v, i) => sum + v * d[i], 0);
   if (along < 0) velocity = velocity.map((v, i) => v - along * d[i]);
+  const tried = offset(pos, velocity, dt);
   const moved = move(dt);
+  // Where the body tried to go when a wall stopped it.
+  snagged = moved ? null : tried;
   if (moved && !busy) {
     const type = world.takeNearby(pos,velocity.map((v,i) => v+drift[i]));
     if (type !== null) recoverCargo(type, cargoNames[type] + ' 회수');

@@ -165,10 +165,17 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
   // chunk and its generation, apart from portal gravity. The origin, where the
   // machine starts and arrives, has none. Chance and strengths are trial values.
   const fields = new Map();
+  // Gravity is asked for every mote and part each tick, mostly in one chunk:
+  // remember the last chunk asked so the common case builds no key.
+  let last = null;
   function field(cx, cy, cz) {
     if (!cx && !cy && !cz) return null;
-    const key = [cx, cy, cz].join(','), id = key + ':' + (generations.get(key) ?? 0) + ':microgravity:';
-    if (fields.has(id)) return fields.get(id);
+    if (last && last.x === cx && last.y === cy && last.z === cz && last.epoch === (generations.get(last.key) ?? 0)) return last.f;
+    const key = [cx, cy, cz].join(','), epoch = generations.get(key) ?? 0, id = key + ':' + epoch + ':microgravity:';
+    if (fields.has(id)) {
+      last = {x: cx, y: cy, z: cz, key, epoch, f: fields.get(id)};
+      return last.f;
+    }
     let f = null;
     if (roll(seed, id + 'exists') < microgravityChance) {
       const z = 2 * roll(seed, id + 'z') - 1, a = 2 * Math.PI * roll(seed, id + 'a'), r = Math.sqrt(1 - z * z);
@@ -176,6 +183,7 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
         varied: roll(seed, id + 'varied') < 0.4};
     }
     fields.set(id, f);
+    last = {x: cx, y: cy, z: cz, key, epoch, f};
     return f;
   }
   // The field at a point: a varied field bends its direction smoothly with position.
