@@ -8,6 +8,7 @@ import { massText } from './composition.js';
 import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate, lotsFor, lotById, visibleRival, minimumBid } from './trade.js';
 import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
 import { studies, fragments } from './research.js';
+import { automations, automationIds, isOn } from './automation.js';
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
 import { endingById, endings } from './endings.js';
 import { trainLength, capacity, load, canCouple, wagonCost, safeLength, wagonsBeyondSafe, speedFactor, carFill, machineLength, wagonLength } from './train.js';
@@ -45,6 +46,7 @@ let age = 0,
 let contact = null, fracture = null, installedUntil = 0;
 let lastRockGain = -Infinity;
 let nextHullRepair = 0;
+let nextAutomation = 0;
 let checkpointAge = 0;
 let hull = 100;
 let hazardVisible = false;
@@ -302,11 +304,88 @@ function showTrade() {
 }
 // Built-in analysis of unknown materials and reading of memory films.
 let memoryUntil = 0;
+// Automation studies and their switches, in fixed order, updated in place.
+function showAutomation() {
+  const auto = save.automation, job = auto.job;
+  el('automation-status').textContent = job ? '· ' + automations[job.id].label + ' 남은 ' +
+    Math.max(0, Math.ceil(job.endsAt - save.marketTime)) + '초' : '· ' + auto.unlocked.length + ' / ' + automationIds.length;
+  const list = el('automation-list');
+  if (list.children.length !== automationIds.length) {
+    list.replaceChildren(...automationIds.map(id => {
+      const li = document.createElement('li');
+      const act = document.createElement('button');
+      act.onclick = () => {
+        if (!save.automation.unlocked.includes(id))
+          write({type: 'automate', id}, () => message('자동화 연구 시작 · ' + automations[id].label));
+        else {
+          const on = !isOn(save, id);
+          write({type: 'automation-switch', id, on}, () => message(automations[id].label + (on ? ' 켬' : ' 끔')));
+        }
+      };
+      li.append(document.createElement('span'), ' ', act);
+      return li;
+    }));
+  }
+  const free = save.credits - reservedCredits(save);
+  automationIds.forEach((id, i) => {
+    const a = automations[id], li = list.children[i], [label, act] = [li.firstChild, li.lastChild];
+    const done = auto.unlocked.includes(id);
+    const short = !done && (free < a.credits || Object.entries(a.elements).some(([e, g]) => (save.elements[e] ?? 0) < g));
+    const text = a.label + ' · ' + a.effect + (done ? '' : ' · ' + credit(a.credits) + ' · ' +
+      Object.entries(a.elements).map(([e, g]) => e + ' ' + g + ' g').join(' · ') + ' · ' + a.seconds + '초');
+    li.className = done || !short ? 'ready' : '';
+    if (label.textContent !== text) label.textContent = text;
+    act.textContent = done ? (isOn(save, id) ? '켜짐' : '꺼짐') : job?.id === id ? '연구 중' : short ? '재료 부족' : '연구';
+    act.disabled = busy || (!done && (!!job || short));
+  });
+}
+// Presses one automated button when its condition holds; true when it wrote.
+function automate() {
+  if (isOn(save, 'capture') && save.captures?.length && !el('capture').hidden) { el('capture').click(); return true; }
+  if (isOn(save, 'repair') && (save.drillCondition ?? 100) < 50) {
+    if ((save.ceramic ?? 0) >= ceramicPerRepair) { write('repair', () => message('자동 드릴 수리')); return true; }
+    if (save.rocks >= rocksPerCeramic) { write('fire-ceramic', () => message('자동 세라믹 가열')); return true; }
+  }
+  const full = load(save) >= capacity(save) * 0.9;
+  if (isOn(save, 'wagon') && full && canCouple(save) && trainLength(save) + 3 <= safeLength &&
+    (save.minerals.iron ?? 0) >= wagonCost.iron && save.rocks >= wagonCost.rock) {
+    write({type: 'add-wagon'}, () => message('자동 화물칸 연결'));
+    return true;
+  }
+  if (isOn(save, 'sell') && full) {
+    const id = mineralIds.reduce((a, b) => owned(save, b) > owned(save, a) ? b : a);
+    const v = Object.entries(variantCounts(save, id)).find(([, n]) => n > 0)?.[0];
+    const op = v && {source: 'm', kind: id, variant: v};
+    const price = op && sellPrice(save, op);
+    if (price) { write({type: 'sell', ...op, price}, () => message('자동 판매 · ' + variantName(id, v) + ' · ' + credit(price))); return true; }
+  }
+  if (isOn(save, 'decompose')) {
+    const p = save.finds.find(q => ['household', 'artifact'].includes(findById(q.kind).category) && findPiece(q.kind, q.variant));
+    if (p) { write({type: 'decompose', find: p.kind, variant: p.variant}, () => message('자동 분해 · ' + pieceName(p))); return true; }
+  }
+  if (isOn(save, 'analyze') && !save.researchJob) {
+    const kind = save.finds.map(p => p.kind).find(k => studies[k] && !save.research.includes(k) &&
+      Object.entries(studies[k].cost).every(([e, g]) => (save.elements[e] ?? 0) >= g));
+    if (kind) { write({type: 'research', kind}, () => message('자동 분석 시작 · ' + findById(kind).name)); return true; }
+    if (!el('read-film').hidden) { el('read-film').click(); return true; }
+  }
+  if (isOn(save, 'equip')) {
+    const p = save.finds.find(q => slotOf(q.kind) && q.durability > 0 && !save.equipment[slotOf(q.kind)]);
+    if (p) { write({type: 'equip', id: p.id}, () => message('자동 장착 · ' + pieceName(p))); return true; }
+  }
+  if (isOn(save, 'upgrade')) {
+    const id = upgradeIds.map(k => [k, upgradeCost(save, k)]).filter(([, c]) => c && affords(save, c))
+      .sort((a, b) => Object.values(a[1]).reduce((n, x) => n + x, 0) - Object.values(b[1]).reduce((n, x) => n + x, 0))[0]?.[0];
+    if (id) { write({type: 'upgrade', id}, () => message('자동 강화 · ' + upgrades[id].label + ' ' + level(save, id) + '단계')); return true; }
+  }
+  return false;
+}
 function showResearch() {
   const box = el('research');
   const owned = [...new Set(save?.finds?.filter(p => studies[p.kind]).map(p => p.kind) ?? [])];
-  box.hidden = !save?.front || (!owned.length && !save.research.length && !save.researchJob);
+  box.hidden = !save?.front;
   if (!panel || box.hidden) return;
+  showAutomation();
   const job = save.researchJob;
   el('research-status').textContent = job ? '· 분석 중' : save.research.length ? '· ' + save.research.length + '종 완료' : '';
   const open = owned.filter(k => !save.research.includes(k));
@@ -1118,6 +1197,11 @@ function tick(dt) {
     crossPending = false;
     write({type: 'cross-chunk'});
     return;
+  }
+  // Researched automations press their buttons, about once a second.
+  if (age >= nextAutomation) {
+    nextAutomation = age + 1;
+    if (automate()) return;
   }
   // The hull mends itself from collected minerals, about once a second.
   const repair = hull > 0 && hull < hullRepairBelow && age >= nextHullRepair && hullRepairFor(save);

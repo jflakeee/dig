@@ -13,6 +13,7 @@ import { chooseEnding, endingCounters, counterFor, endingById } from './endings.
 import { trainLength, capacity, load, canCouple, wagonsBeyondSafe, wagonCost, wagonRoom, safeLength, wagonClearance } from './train.js';
 import { craftRecipes, affords, hullRepairFor } from './craft.js';
 import { upgrades, upgradeCost, validUpgrades } from './upgrades.js';
+import { automations, fresh as freshAutomation, validAutomation } from './automation.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
@@ -58,7 +59,7 @@ export const migrations = {
   14: s => ({...s, bids: []}),
   // Endings seen across runs, and how many times memory was let go for a new run.
   15: s => ({...s, endingsSeen: s.ending ? [s.ending] : [], cycles: 0}),
-  16: s => ({...s, upgrades: {body: 0, wagon: 0, drills: 0, bore: 0}}),
+  16: s => ({...s, upgrades: {body: 0, wagon: 0, drills: 0, bore: 0}, automation: freshAutomation()}),
 };
 export const reservedCredits = s => (s.bids ?? []).reduce((n, b) => n + b.amount, 0);
 // A lot closes once the market clock passes the end of its cycle: a bid at or
@@ -114,6 +115,13 @@ function dropWagons(s, lost) {
   return gone;
 }
 // An analysis finishes once the market clock passes its end; its kind is then known.
+// An automation study finishes on the market clock and unlocks its switch, on.
+function finishAutomation(s) {
+  const job = s.automation.job;
+  if (!job || s.marketTime < job.endsAt) return;
+  s.automation.unlocked.push(job.id);
+  s.automation.job = null;
+}
 function finishResearch(s) {
   const job = s.researchJob;
   if (!job || s.marketTime < job.endsAt) return;
@@ -306,6 +314,7 @@ const fresh = () => ({
   bids: [],
   endingsSeen: [],
   upgrades: {body: 0, wagon: 0, drills: 0, bore: 0},
+  automation: freshAutomation(),
   cycles: 0,
   session: null,
   arrivalRadius: 1.64,
@@ -359,7 +368,7 @@ function validMinerals(s) {
     Number.isSafeInteger(s.leftBehind) && s.leftBehind >= 0 &&
     Array.isArray(s.bids) && s.bids.every(b => b && /^c\d+-\d+$/.test(b.lot) && Number.isSafeInteger(b.amount) && b.amount > 0) &&
     new Set(s.bids.map(b => b.lot)).size === s.bids.length && reservedCredits(s) <= s.credits &&
-    validUpgrades(s.upgrades) &&
+    validUpgrades(s.upgrades) && validAutomation(s.automation) &&
     Array.isArray(s.endingsSeen) && s.endingsSeen.every(id => endingById(id)) && new Set(s.endingsSeen).size === s.endingsSeen.length &&
     (s.ending === null || s.endingsSeen.includes(s.ending)) && Number.isSafeInteger(s.cycles) && s.cycles >= 0 &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
@@ -722,6 +731,26 @@ function step(s, operation, session) {
         s.researchJob = {kind: study.kind, endsAt: s.marketTime + study.seconds};
         break;
       }
+      case 'automate': {
+        // Credits and element grams are spent at the start; one study at a time.
+        const a = automations[operation?.id];
+        if (!s.front || !a || s.automation.unlocked.includes(a.id) || s.automation.job) throw Error('연구할 수 없습니다.');
+        if (s.credits - reservedCredits(s) < a.credits) throw Error('크레딧이 부족합니다.');
+        for (const [e, g] of Object.entries(a.elements)) if ((s.elements[e] ?? 0) < g) throw Error('연구에 필요한 원소가 부족합니다.');
+        s.credits -= a.credits;
+        for (const [e, g] of Object.entries(a.elements)) {
+          s.elements[e] -= g;
+          if (s.elements[e] <= 1e-12) delete s.elements[e];
+        }
+        s.automation.job = {id: a.id, endsAt: s.marketTime + a.seconds};
+        break;
+      }
+      case 'automation-switch': {
+        if (!s.automation.unlocked.includes(operation?.id) || typeof operation.on !== 'boolean') throw Error('자동화 설정 오류');
+        s.automation.off = s.automation.off.filter(id => id !== operation.id);
+        if (!operation.on) s.automation.off.push(operation.id);
+        break;
+      }
       case 'read-film': {
         // Reading uses the film up and leaves the next fragment in the observation log.
         const at = s.finds.findIndex(p => p.kind === 'memory_film');
@@ -845,6 +874,7 @@ function step(s, operation, session) {
       settleAuctions(s);
       settleBids(s);
       finishResearch(s);
+      finishAutomation(s);
     }
     return true;
 }

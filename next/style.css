@@ -177,12 +177,14 @@ section {
 }
 #cargo-list,
 #craft-list,
-#upgrade-list {
+#upgrade-list,
+#automation-list {
   margin: 4px 0 12px;
   padding-left: 20px;
 }
 #craft-list li,
-#upgrade-list li {
+#upgrade-list li,
+#automation-list li {
   margin-bottom: 6px;
   color: #9aa6a2;
 }
