@@ -1063,10 +1063,13 @@ el('menu').onclick = () => {
   panel = !panel;
   hud();
 };
-el('close').onclick = () => {
+// A click anywhere outside the menu closes it; the menu button toggles it itself.
+// Checked while capturing, before any handler can rebuild the clicked element.
+document.addEventListener('click', e => {
+  if (!panel || el('panel').contains(e.target) || el('menu').contains(e.target)) return;
   panel = false;
   hud();
-};
+}, {capture: true});
 el('reset').onclick = () => {
   el('reset').hidden = true;
   el('reset-prompt').hidden = false;
