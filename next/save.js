@@ -19,11 +19,13 @@ import { valueOf } from './trade.js';
 import { fresh as freshInsight, validInsight, addTrace, traceKey, urgentRatio } from './insight.js';
 import { portalCost, researchProgress } from './portal.js';
 import { energyCap, energyCost, energyGain, addEnergy, validEnergy } from './energy.js';
+import { topics, freshTopics, validTopics, studied, ceramicRocks, maintainCost, maintainGain } from './research.js';
+export { ceramicRocks };
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 19;
+export const saveVersion = 20;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -67,6 +69,7 @@ export const migrations = {
   16: s => ({...s, upgrades: {body: 0, wagon: 0, drills: 0, bore: 0}, automation: freshAutomation(), gambleCount: 0, gambleLog: []}),
   17: s => ({...s, insight: freshInsight(), portalBuilt: false}),
   18: s => ({...s, energy: energyCap}),
+  19: s => ({...s, topics: freshTopics()}),
 };
 export const reservedCredits = s => (s.bids ?? []).reduce((n, b) => n + b.amount, 0);
 // A lot closes once the market clock passes the end of its cycle: a bid at or
@@ -131,6 +134,13 @@ function noticeTraces(s) {
   const offered = [...marketStock(s.marketSeed, cycle, mineralIds).map(o => o.mineral ? {mineral: o.mineral} : o.item === 'ceramic' ? {ceramic: true} : {kind: o.item}),
     ...lotsFor(s.marketSeed, cycle).map(l => l.piece)];
   if (offered.some(t => s.insight.traces.includes(traceKey(t)))) s.insight.traceSeen = true;
+}
+// A research topic finishes on the market clock and unlocks its recipe or reading.
+function finishTopic(s) {
+  const job = s.topics.job;
+  if (!job || s.marketTime < job.endsAt) return;
+  s.topics.done.push(job.id);
+  s.topics.job = null;
 }
 function finishAutomation(s) {
   const job = s.automation.job;
@@ -339,6 +349,7 @@ const fresh = () => ({
   insight: freshInsight(),
   portalBuilt: false,
   energy: energyCap,
+  topics: freshTopics(),
   cycles: 0,
   session: null,
   arrivalRadius: 1.64,
@@ -394,7 +405,7 @@ function validMinerals(s) {
     Array.isArray(s.bids) && s.bids.every(b => b && /^c\d+-\d+$/.test(b.lot) && Number.isSafeInteger(b.amount) && b.amount > 0) &&
     new Set(s.bids.map(b => b.lot)).size === s.bids.length && reservedCredits(s) <= s.credits &&
     validUpgrades(s.upgrades) && validAutomation(s.automation) &&
-    Number.isSafeInteger(s.gambleCount) && s.gambleCount >= 0 && validGambleLog(s.gambleLog) && validInsight(s.insight) && typeof s.portalBuilt === 'boolean' && validEnergy(s.energy) &&
+    Number.isSafeInteger(s.gambleCount) && s.gambleCount >= 0 && validGambleLog(s.gambleLog) && validInsight(s.insight) && typeof s.portalBuilt === 'boolean' && validEnergy(s.energy) && validTopics(s.topics) &&
     Array.isArray(s.endingsSeen) && s.endingsSeen.every(id => endingById(id)) && new Set(s.endingsSeen).size === s.endingsSeen.length &&
     (s.ending === null || s.endingsSeen.includes(s.ending)) && Number.isSafeInteger(s.cycles) && s.cycles >= 0 &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
@@ -607,8 +618,8 @@ function step(s, operation, session) {
         break;
       }
       case 'fire-ceramic':
-        if (!s.front || s.rocks < rocksPerCeramic) throw Error('가열할 암석이 부족합니다.');
-        spendRocks(s, rocksPerCeramic);
+        if (!s.front || s.rocks < ceramicRocks(s)) throw Error('가열할 암석이 부족합니다.');
+        spendRocks(s, ceramicRocks(s));
         s.ceramic = (s.ceramic ?? 0) + 1;
         break;
       case 'repair':
@@ -650,7 +661,7 @@ function step(s, operation, session) {
         if (s.equipment.aux?.durability > 0 && Math.random() < 0.05) s.equipment.aux.durability = Math.max(0, s.equipment.aux.durability - 2);
         break;
       case 'laser':
-        if (!s.front || s.drillCondition !== 0 || (s.ceramic ?? 0) >= ceramicPerRepair || s.rocks >= rocksPerCeramic) throw Error('긴급 채굴 조건이 바뀌었습니다.');
+        if (!s.front || s.drillCondition !== 0 || (s.ceramic ?? 0) >= ceramicPerRepair || s.rocks >= ceramicRocks(s)) throw Error('긴급 채굴 조건이 바뀌었습니다.');
         break;
       case 'collect':
         if (s.front || s.rocks >= 3) throw Error('채굴 기록이 바뀌었습니다.');
@@ -876,6 +887,30 @@ function step(s, operation, session) {
         if (!s.endingsSeen.includes('portal')) s.endingsSeen.push('portal');
         break;
       }
+      case 'study-topic': {
+        // One topic at a time; its prerequisite first. Element grams are spent at the start.
+        const t = topics[operation?.id];
+        if (!s.front || !t || studied(s, t.id) || s.topics.job || (t.needs && !studied(s, t.needs))) throw Error('연구할 수 없는 주제입니다.');
+        for (const [e, g] of Object.entries(t.elements)) if ((s.elements[e] ?? 0) < g) throw Error('연구에 필요한 원소가 부족합니다.');
+        if (s.energy < t.energy) throw Error('에너지 부족 · 필요 ' + t.energy + ' (보유 ' + s.energy + ')');
+        s.energy -= t.energy;
+        for (const [e, g] of Object.entries(t.elements)) {
+          s.elements[e] -= g;
+          if (s.elements[e] <= 1e-12) delete s.elements[e];
+        }
+        s.topics.job = {id: t.id, endsAt: s.marketTime + t.seconds};
+        break;
+      }
+      case 'maintain': {
+        // Equipment maintenance, unlocked by studying part structure.
+        const piece = s.finds.find(p => p.id === operation?.id) ?? Object.values(s.equipment).find(p => p.id === operation?.id);
+        if (!s.front || !studied(s, 'part_structure') || piece?.durability === undefined || piece.durability >= 100)
+          throw Error('정비할 장비가 없습니다.');
+        if (!affords(s, maintainCost)) throw Error('정비 재료가 부족합니다.');
+        for (const [id, n] of Object.entries(maintainCost)) spendMineral(s, id, n);
+        piece.durability = Math.min(100, piece.durability + maintainGain);
+        break;
+      }
       case 'automation-switch': {
         if (!s.automation.unlocked.includes(operation?.id) || typeof operation.on !== 'boolean') throw Error('자동화 설정 오류');
         s.automation.off = s.automation.off.filter(id => id !== operation.id);
@@ -1011,6 +1046,7 @@ function step(s, operation, session) {
       settleBids(s);
       finishResearch(s);
       finishAutomation(s);
+      finishTopic(s);
       noticeTraces(s);
     }
     return true;

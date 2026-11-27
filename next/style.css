@@ -195,13 +195,17 @@ section {
 #craft-list,
 #upgrade-list,
 #automation-list,
+#topic-list,
+#maintain-list,
 #gamble-log {
   margin: 4px 0 12px;
   padding-left: 20px;
 }
 #craft-list li,
 #upgrade-list li,
-#automation-list li {
+#automation-list li,
+#topic-list li,
+#maintain-list li {
   margin-bottom: 6px;
   color: #9aa6a2;
 }

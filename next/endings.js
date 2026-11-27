@@ -61,8 +61,8 @@ export const allEndingsSeen = s => endings.every(e => s?.endingsSeen?.includes(e
 export const playable = id => id === epilogue.id ? epilogue : endingById(id);
 // Which counter a saved operation adds to, if any.
 export function counterFor(type, operation) {
-  if (type === 'research' || type === 'read-film' || type === 'automate' || type === 'build-portal') return 'research';
+  if (type === 'research' || type === 'read-film' || type === 'automate' || type === 'build-portal' || type === 'study-topic') return 'research';
   if (type === 'equip' || type === 'equip-head' || type === 'craft-equipment' || type === 'upgrade' || (type === 'buy' && operation?.item === 'drill_head')) return 'equip';
-  if (type === 'repair') return 'repair';
+  if (type === 'repair' || type === 'maintain') return 'repair';
   return null;
 }
