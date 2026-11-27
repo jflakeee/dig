@@ -55,6 +55,7 @@ let nextHullRepair = 0;
 let nextAutomation = 0;
 let snagged = null;
 let chainShots = [];
+let safeStopUntil = 0, saveFailures = 0;
 let checkpointAge = 0;
 let hull = 100;
 let hazardVisible = false;
@@ -1018,6 +1019,8 @@ async function write(op, after) {
     if (settled.length) message(settled.map(tradeLogText).join(' · '));
     if (type === 'craft') installedUntil = Date.now()+1600;
     checkpointAge = 0;
+    if (saveFailures && worldOps.includes(type)) message('저장 복구 · 운행을 다시 시작합니다');
+    saveFailures = 0;
     after?.();
   } catch (e) {
     try {
@@ -1025,7 +1028,13 @@ async function write(op, after) {
     } catch {
       fatal = true;
     }
-    message(e.message || '저장 실패 · 다시 시도해 주세요.');
+    // A world save that fails (storage full or blocked, a conflicting write)
+    // halts driving and mining; saving is retried at a growing interval.
+    if (worldOps.includes(type)) {
+      saveFailures++;
+      safeStopUntil = age + Math.min(10, 2 * saveFailures);
+      message('저장 실패 · 안전 정지 · ' + Math.ceil(safeStopUntil - age) + '초 뒤 다시 저장합니다' + (e.message ? ' (' + e.message + ')' : ''));
+    } else message(e.message || '저장 실패 · 다시 시도해 주세요.');
   } finally {
     busy = false;
     hud();
@@ -1359,6 +1368,19 @@ function tick(dt) {
     return;
   }
   if (busy) return;
+  // Physics that produced a non-finite value returns to the last save and waits.
+  if (![...pos, ...velocity, ...drift].every(Number.isFinite)) {
+    loadWorld();
+    safeStopUntil = age + 2;
+    message('물리 값 오류 · 마지막 저장 위치로 돌아가 안전 정지');
+    return;
+  }
+  // Safe stop: nothing drives or mines; only the retried save runs.
+  if (age < safeStopUntil) return;
+  if (saveFailures) {
+    write('checkpoint');
+    return;
+  }
   const {push,damage,impactPoint} = world.hullContacts(dt,pos,velocity.map((v,i) => v+drift[i]),anchors.length > 0 && anchorMass(save));
   const hazard = world.sense(pos,dt,damage > 0);
   hazardVisible = hazard.visible;
