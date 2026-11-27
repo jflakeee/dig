@@ -30,7 +30,7 @@ function dugWorld(seed) {
 }
 
 test('the 24 finds split into eight equipment, unknown and household items', () => {
-  assert.equal(finds.filter(f => f.category !== 'artifact').length, 24);
+  assert.equal(finds.filter(f => !['artifact', 'alien'].includes(f.category)).length, 24);
   for (const category of ['equipment', 'unknown', 'household'])
     assert.equal(finds.filter(f => f.category === category).length, 8, category);
   for (const f of finds.filter(f => f.category === 'household'))
@@ -145,5 +145,19 @@ test('a version-6 save opens with no finds and malformed finds are rejected', t 
     {clockLog: [720]}]) {
     data.set(saveKey, JSON.stringify({...clean, ...bad}));
     assert.throws(readSave, /원본을 보존/, JSON.stringify(bad));
+  }
+});
+
+test('six alien pieces are made body parts that decompose, sell and carry a note', async () => {
+  const { alienNotes, findPiece } = await import('../next/finds.js');
+  const { valueOf } = await import('../next/trade.js');
+  const aliens = finds.filter(f => f.category === 'alien');
+  assert.equal(aliens.length, 6);
+  for (const f of aliens) {
+    assert.equal(f.weight, 1);
+    assert.ok(findPiece(f.id, 'standard').grams > 0, f.id);
+    assert.ok(['C', 'Ca'].some(e => f.variants[0].units[e]), f.id + ' is organic or bone');
+    assert.ok(valueOf({kind: f.id, variant: 'standard'}).base > 0);
+    assert.ok(alienNotes[f.id].length > 20);
   }
 });

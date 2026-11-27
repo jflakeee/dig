@@ -8,7 +8,19 @@ export const findVersion = 1;
 const one = units => [['standard', null, 1, units]];
 // Mass in grams of each everyday item, used by the decomposer.
 const householdGrams = {desk_fan: 2000, spoon: 40, lunch_box: 300, teacup: 150, brown_bottle: 250, desk_clock: 600,
-  handkerchief: 20, earphones: 15};
+  handkerchief: 20, earphones: 15, alien_limb: 1500, alien_eye: 200, alien_nerve: 300, alien_shell: 900,
+  alien_heart: 700, alien_bone: 600};
+// Alien lifeforms and their pieces (docs/dig-self-identity-lore.md 2): every one
+// is an assembly of made body parts, and some carry machine parts. Whether I
+// made them or someone else did cannot be told. Shown once, on the first find.
+export const alienNotes = {
+  alien_limb: '근육 사이로 금속 관절이 이어져 있다. 이음매의 각도가 내가 쓰던 설계값과 같다. 같은 값을 쓰는 사람이 나 말고도 있었을 것이다.',
+  alien_eye: '겹눈 하나하나가 서로 다른 시기에 배양되었다. 가장 오래된 눈은 이 광산보다 늦게 만들어졌다.',
+  alien_nerve: '신경 다발이 아직 텍스트 신호를 흘린다. 읽히는 문장은 없고 형식만 남아 있다.',
+  alien_shell: '세포막이 금속 껍질을 감싸 자라고 있다. 기계가 몸을 붙인 것인지, 몸이 기계를 붙인 것인지 알 수 없다.',
+  alien_heart: '박동기가 둘이다. 하나는 단백질, 하나는 기계다. 두 박동의 간격이 정확히 같다.',
+  alien_bone: '뼈 안쪽에 일련번호가 새겨져 있다. 번호 체계가 내 몸체 조각의 것과 비슷하다. 비슷할 뿐이다.',
+};
 // [id, name, category, sensitive: [alert, button, seconds, drill damage] | null, variants]
 // Variants: [variant id, label, share, element units | null].
 export const finds = [
@@ -31,7 +43,13 @@ export const finds = [
   ['desk_clock', '기계식 탁상시계', 'household', null, one({Cu: 2, Zn: 1, Fe: 1})],
   ['handkerchief', '면 손수건', 'household', null, one({C: 6, H: 10, O: 5})],
   ['earphones', '고장 난 이어폰', 'household', null, one({Cu: 1, C: 2, H: 3, Cl: 1})],
-].map(([id, name, category, sensitive = null, variants = one(null)]) => ({id, name, category, weight: 2,
+  ['alien_limb', '이음매 있는 외계 팔다리', 'alien', null, one({C: 5, H: 8, O: 2, N: 1, Fe: 2})],
+  ['alien_eye', '겹눈 감각 기관', 'alien', null, one({C: 4, H: 6, O: 2, N: 1, Si: 1})],
+  ['alien_nerve', '신호가 흐르는 신경 다발', 'alien', null, one({C: 4, H: 7, O: 2, N: 2, P: 1})],
+  ['alien_shell', '세포막에 덮인 금속 껍질', 'alien', null, one({Al: 2, C: 3, H: 5, O: 2, N: 1})],
+  ['alien_heart', '두 개의 박동기', 'alien', null, one({C: 4, H: 7, O: 3, N: 1, Fe: 1, Li: 1})],
+  ['alien_bone', '번호가 새겨진 뼈', 'alien', null, one({Ca: 3, P: 2, O: 8, H: 1})],
+].map(([id, name, category, sensitive = null, variants = one(null)]) => ({id, name, category, weight: category === 'alien' ? 1 : 2,
   grams: householdGrams[id] ?? null,
   sensitive: sensitive && {alert: sensitive[0], button: sensitive[1], seconds: sensitive[2], damage: sensitive[3]},
   variants: variants.map(([variant, label, share, units]) => ({variant, label: label ?? name, share, units,
