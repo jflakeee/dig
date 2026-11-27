@@ -57,7 +57,7 @@ export function createView(canvas) {
   resize();
   new ResizeObserver(resize).observe(canvas);
   return function render(s, now) {
-    const { world, pos: center, yaw, pitch, light, working, chains = [], contact, minerals, focus, body } = s;
+    const { world, pos: center, yaw, pitch, light, working, chains = [], drones = [], contact, minerals, focus, body } = s;
     // A focusing lamp narrows the central beam and carries it further.
     const spread = focus ? 30 : 16, beam = focus ? 0.55 : 0.28, falloff = focus ? 0.05 : 0.12;
     const w = canvas.width,
@@ -342,6 +342,19 @@ export function createView(canvas) {
         ctx.lineWidth = 1;
         ctx.stroke();
       }
+    }
+    // The small trade drone: a dark diamond with a blinking signal light.
+    for (const dr of drones) {
+      const at = project(dr.point);
+      if (!at) continue;
+      const depth = Math.hypot(...dr.point.map((v, i) => v - pos[i]));
+      const size = Math.max(2, Math.min(10, f * 0.12 / Math.max(0.3, depth)));
+      ctx.fillStyle = '#9aa7ab';
+      ctx.beginPath();
+      ctx.moveTo(at[0], at[1] - size); ctx.lineTo(at[0] + size, at[1]); ctx.lineTo(at[0], at[1] + size); ctx.lineTo(at[0] - size, at[1]);
+      ctx.fill();
+      ctx.fillStyle = dr.blink ? '#9ff0c8' : '#3d6b58';
+      ctx.fillRect(at[0] - 1, at[1] - 1, 2, 2);
     }
     // Chains fly from the hull to the rock and reel back when released. From
     // the cockpit they leave the lower screen corners; from outside, the hull.

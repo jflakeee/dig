@@ -12,6 +12,16 @@ export const forward = (yaw, pitch) => [
   Math.cos(yaw) * Math.cos(pitch),
 ];
 export const offset = (p, d, t) => p.map((v, i) => v + d[i] * t);
+// Whether a body of the given radius moving from `a` to `b` passes through an
+// entrance's square opening, front side first. Exits let nothing in.
+export function throughOpening(portal, a, b, size) {
+  if (portal.exit) return false;
+  const {axis, sign, point} = portal;
+  const before = sign * (a[axis] - point[axis]), after = sign * (b[axis] - point[axis]);
+  if (before >= 0 || after < 0) return false;
+  const t = -before / (after - before);
+  return [0, 1, 2].every(i => i === axis || Math.abs(a[i] + (b[i] - a[i]) * t - point[i]) + size <= portal.radius);
+}
 // Use the same one-sided square opening for visible surfaces and laser targeting.
 export function portalRayDistance(portal, pos, ray, limit) {
   const {axis, sign, point, radius} = portal;
@@ -324,6 +334,7 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
   let cargoTime = saved?.cargoTime ?? 0;
   function hullContacts(dt,pos,speed,anchored) {
     let damage = 0, impactPoint = null, largest = 0;
+    const swallowed = [];
     const blocked = point => blockers(point).length > 0;
     function contact(body,relativeTo,field,time) {
       const loss = contactDamage(body,pos,relativeTo,field,time,blocked,reach());
@@ -356,8 +367,10 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
         for (let i=0; i<3; i++) push[i] += hit[i];
       }
       // Flung pieces are light: they fall, bounce and settle without striking the hull.
-      for (const {item} of ejected()) {
+      // A piece is small enough for any portal: crossing an entrance's opening takes it away.
+      for (const {chunk,item} of ejected()) {
         const field = gravity(item.point,active);
+        const start = item.point.slice();
         for (let i=0; i<3; i++) {
           item.speed[i] = (item.speed[i] + 0.05*field[i])*0.96;
           const point = item.point.slice();
@@ -366,9 +379,13 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
           else item.point = point;
         }
         item.cooldown = Math.max(0,(item.cooldown ?? 0)-0.05);
+        if (active.some(portal => throughOpening(portal, start, item.point, 0))) {
+          chunk.ejected.splice(chunk.ejected.indexOf(item), 1);
+          swallowed.push(item);
+        }
       }
     }
-    return {push,damage,impactPoint};
+    return {push,damage,impactPoint,swallowed};
   }
   function blockers(p, radius = body) {
     const found = [];
