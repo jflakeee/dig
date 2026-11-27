@@ -337,6 +337,37 @@ section {
   pointer-events: none;
   transition: opacity 0.8s;
 }
+/* Always on screen outside the menu: cargo, drill repair and decompose all. */
+#quick {
+  position: absolute;
+  top: calc(max(20px, env(safe-area-inset-top)) + 50px);
+  left: 5%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: 62%;
+  font-size: 12px;
+  color: #c4ceca;
+  text-shadow: 0 1px 3px #000;
+}
+#quick output {
+  flex-basis: 100%;
+}
+#quick button {
+  min-height: 36px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+#cargo-list button.keep {
+  min-height: 28px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+#cargo-list button.keep[aria-pressed="true"] {
+  border-color: #7fd3b0;
+  color: #bfe9d6;
+}
 #memory-line {
   display: block;
   margin-top: 6px;

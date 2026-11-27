@@ -3,7 +3,7 @@ import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, portalRayDistance } from './world.js';
 import { upgrades, upgradeIds, upgradeCost, level, bodyRadius, cellsPerStroke, baseRadius, drillCount, drillSize } from './upgrades.js';
-import { readSave, commit, saveKey, fabricationMs, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice, captureRule, reservedCredits, pledge } from './save.js';
+import { readSave, commit, saveKey, decomposeQueue, fabricationMs, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice, captureRule, reservedCredits, pledge } from './save.js';
 import { massText } from './composition.js';
 import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate, lotsFor, lotById, visibleRival, minimumBid } from './trade.js';
 import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
@@ -730,6 +730,30 @@ function closeEnding() {
 }
 // Cargo train: length against the 16 m chunk side, cargo room and wagons.
 let confirmLong = false;
+// The quick bar outside the menu: cargo at a glance, drill repair, decompose all.
+function showQuick() {
+  const box = el('quick');
+  box.hidden = !save?.front || panel;
+  if (box.hidden) return;
+  const text = '화물 ' + load(save) + ' / ' + capacity(save) + ' · 에너지 ' + save.energy + ' · 드릴 ' + (save.drillCondition ?? 100) + '%';
+  if (el('quick-cargo').textContent !== text) el('quick-cargo').textContent = text;
+  const condition = save.drillCondition ?? 100, ceramic = save.ceramic ?? 0;
+  const canFire = save.rocks >= ceramicRocks(save) && powered('fire-ceramic');
+  el('quick-repair').hidden = condition >= 100;
+  el('quick-repair').textContent = ceramic >= ceramicPerRepair ? '드릴 수리 · 세라믹 1' : canFire ? '드릴 수리 · 세라믹 가열부터' : '드릴 수리 · 재료 부족';
+  el('quick-repair').disabled = ceramic < ceramicPerRepair && !canFire;
+  const n = Math.min(decomposeQueue(save).length, Math.floor(save.energy / energyCost.decompose));
+  el('quick-decompose').textContent = n ? '전체 분해 · ' + n + '개' : decomposeQueue(save).length ? lowPower('decompose') : '분해할 화물 없음';
+  el('quick-decompose').disabled = !n;
+}
+el('quick-repair').onclick = () => {
+  if ((save.ceramic ?? 0) >= ceramicPerRepair) write('repair', () => message('드릴 수리 완료 · 드릴 100%'));
+  else write('fire-ceramic', () => message('세라믹 가열 완료 · 한 번 더 누르면 드릴을 수리합니다'));
+};
+el('quick-decompose').onclick = () => {
+  const before = save.decomposeCount;
+  write({type: 'decompose-all'}, () => message('전체 분해 · ' + (save.decomposeCount - before) + '개 · 보관 중인 종류는 제외'));
+};
 function showTrain() {
   const box = el('train');
   box.hidden = !save?.front;
@@ -758,21 +782,38 @@ function showTrain() {
     const piece = studied(save, 'mineral_assay') && mineralPiece(id, parts[0]?.[0]);
     const assay = piece ? ' · ' + Object.entries(piece.fractions).sort((a, b) => b[1] - a[1]).slice(0, 2)
       .map(([e, f]) => e + ' ' + Math.round(f * 100) + '%').join('·') : '';
-    return '광물 · ' + mineralName(id) + ' × ' + owned(save, id) + detail + assay;
+    return ['m:' + id, '광물 · ' + mineralName(id) + ' × ' + owned(save, id) + detail + assay];
   });
+  // Items grouped by name; kinds the decomposer can take carry a storage key.
   const items = new Map();
-  const add = (name, n = 1) => items.set(name, (items.get(name) ?? 0) + n);
-  for (const p of save.specimens) add('시료 · ' + pieceName(p));
-  for (const p of save.finds) add('물품 · ' + pieceName(p));
-  (save.cargo ?? []).forEach((n, i) => n && add('물품 · ' + cargoNames[i], n));
-  if (save.ceramic) add('물품 · 세라믹', save.ceramic);
-  for (const id of partIds) if (save.parts?.[id]) add('부품 · ' + parts[id].name, save.parts[id]);
-  const lines = [...minerals, ...Array.from(items, ([name, n]) => name + ' × ' + n)];
-  if (!lines.length) lines.push('수집한 광물과 물품이 없습니다.');
+  const add = (name, key, n = 1) => items.set(name, [key, (items.get(name)?.[1] ?? 0) + n]);
+  for (const p of save.specimens) add('시료 · ' + pieceName(p), 's:' + p.kind);
+  for (const p of save.finds) add('물품 · ' + pieceName(p), findPiece(p.kind, p.variant) ? 'f:' + p.kind : null);
+  (save.cargo ?? []).forEach((n, i) => n && add('물품 · ' + cargoNames[i], null, n));
+  if (save.ceramic) add('물품 · 세라믹', null, save.ceramic);
+  for (const id of partIds) if (save.parts?.[id]) add('부품 · ' + parts[id].name, 'p:' + id, save.parts[id]);
+  const rows = [...minerals, ...Array.from(items, ([name, [key, n]]) => [key, name + ' × ' + n])];
   const list = el('cargo-list');
-  if (list.dataset.lines !== JSON.stringify(lines)) {
-    list.replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
-    list.dataset.lines = JSON.stringify(lines);
+  const shape = JSON.stringify(rows);
+  if (list.dataset.rows !== shape) {
+    list.replaceChildren(...(rows.length ? rows : [[null, '수집한 광물과 물품이 없습니다.']]).map(([key, text]) => {
+      const li = Object.assign(document.createElement('li'), {textContent: text + ' '});
+      if (key) {
+        // Kept kinds are left out of "decompose everything".
+        const keep = document.createElement('button');
+        keep.className = 'keep';
+        keep.dataset.key = key;
+        keep.onclick = () => write({type: 'keep', key, on: !save.keep.includes(key)});
+        li.append(keep);
+      }
+      return li;
+    }));
+    list.dataset.rows = shape;
+  }
+  for (const b of list.querySelectorAll('button.keep')) {
+    const on = save.keep.includes(b.dataset.key);
+    b.textContent = on ? '보관 중' : '보관';
+    b.setAttribute('aria-pressed', String(on));
   }
 }
 // Crafting: equipment from collected minerals, craftable recipes first.
@@ -972,6 +1013,7 @@ function hud() {
   showSelf();
   showArrivals();
   showTrain();
+  showQuick();
   showCraft();
   showTrainStrip();
   if (!panel) {
@@ -1378,6 +1420,21 @@ function setZoom(value) {
 }
 const touches = new Map();
 let pinch = 0;
+// A double click or double tap brings the camera back to the default view.
+function defaultView() {
+  setZoom(1);
+  message('기본 시야');
+}
+canvas.addEventListener('dblclick', defaultView);
+let lastTap = null;
+canvas.addEventListener('pointerup', e => {
+  if (e.pointerType !== 'touch' || touches.size > 1) return;
+  const now = performance.now();
+  if (lastTap && now - lastTap.at < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
+    lastTap = null;
+    defaultView();
+  } else lastTap = {at: now, x: e.clientX, y: e.clientY};
+});
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
   setZoom(zoom * Math.exp(e.deltaY * 0.0015));
