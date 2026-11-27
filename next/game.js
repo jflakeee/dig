@@ -54,6 +54,7 @@ let lastRockGain = -Infinity;
 let nextHullRepair = 0;
 let nextAutomation = 0;
 let snagged = null;
+let chainShots = [];
 let checkpointAge = 0;
 let hull = 100;
 let hazardVisible = false;
@@ -94,6 +95,7 @@ function loadWorld() {
   sensor = session?.sensor ?? false;
   entered = session ? world.portals()[session.entered] : false;
   anchors = [];
+  chainShots = [];
   timer = 0;
   targetTag = '';
 }
@@ -1253,13 +1255,30 @@ document.addEventListener('visibilitychange', () => {
     audio.resume().catch(() => {});
   }
 });
+// Chains shoot from the hull to where they strike solid rock; the anchor holds
+// at once, and the drawn chain flies out over a quarter second. Released
+// chains reel back in. Only the drawing is animated; the hold is not delayed.
+const chainOut = 0.25, chainIn = 0.2;
 function holdChains() {
   if (anchors.length) return;
   for (const sign of [-1, 1]) {
     const dir = forward(yaw + sign * 0.96, -0.22);
     const hit = world.trace(pos, ...dir, 6);
-    if (hit) anchors.push(offset(pos, dir, hit.t));
+    if (!hit) continue;
+    const to = offset(pos, dir, hit.t);
+    anchors.push(to);
+    chainShots.push({from: offset(pos, dir, Math.min(hit.t, bodyRadius(save) * 0.9)), to, side: sign, at: age});
   }
+}
+function releaseChains() {
+  anchors = [];
+  for (const c of chainShots) c.off ??= age;
+}
+// How far each chain reaches now, from 0 at the hull to 1 at the rock.
+function chainReach() {
+  chainShots = chainShots.filter(c => c.off === undefined || age - c.off < chainIn);
+  return chainShots.map(c => ({from: c.from, to: c.to, side: c.side,
+    reach: Math.min(1, (age - c.at) / chainOut) * (c.off === undefined ? 1 : Math.max(0, 1 - (age - c.off) / chainIn))}));
 }
 function move(dt, speed = velocity) {
   const next = offset(pos, speed, dt);
@@ -1420,7 +1439,7 @@ function tick(dt) {
     Math.hypot(...a.map((v, i) => v + 0.5 - probe[i])) - Math.hypot(...b.map((v, i) => v + 0.5 - probe[i])));
   if (blocks.length) {
     velocity = [0, 0, 0];
-    if (save.drillCondition === 0) { anchors = []; return; }
+    if (save.drillCondition === 0) { releaseChains(); return; }
     holdChains();
     const target = blocks[0],
       tag = target.join(',');
@@ -1435,13 +1454,13 @@ function tick(dt) {
       const cut = blocks.slice(0, cellsPerStroke(save)).filter(cell => world.dig(...cell));
       if (!cut.length) return;
       write({type: 'drill', cell: cut[0], cells: cut}, () => {
-        anchors = [];
+        releaseChains();
         if (save.drillCondition === 0) message('드릴 파손 · 긴급 레이저 또는 메뉴에서 수리');
       });
     }
     return;
   }
-  anchors = [];
+  releaseChains();
   timer = 0;
   targetTag = '';
   velocity = velocity.map(
@@ -1493,6 +1512,7 @@ function frame(time) {
         pitch,
         light,
         anchors,
+        chains: chainReach(),
         contact, fracture, age,
         mounted: !!save?.front && save.drillCondition !== 0,
         minerals: !!save?.front,
