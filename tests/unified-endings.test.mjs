@@ -119,3 +119,13 @@ test('a second run that reaches a different ending adds it to the endings seen',
   data.set(saveKey, JSON.stringify(old));
   assert.deepEqual([readSave().endingsSeen, readSave().cycles], [['endless'], 0]);
 });
+
+test('the epilogue opens only after all three endings and replays like an ending', async () => {
+  const { epilogue, allEndingsSeen, playable, endings: all } = await import('../next/endings.js');
+  assert.equal(allEndingsSeen({endingsSeen: ['made', 'endless']}), false);
+  assert.equal(allEndingsSeen({endingsSeen: ['endless', 'overwritten', 'made']}), true);
+  assert.equal(playable('epilogue'), epilogue);
+  assert.equal(playable('made').title, '만들어진 채굴기계');
+  assert.equal(epilogue.motion, 'all');
+  assert.ok(epilogue.lines.length >= 5 && !all.some(e => e.id === epilogue.id));
+});

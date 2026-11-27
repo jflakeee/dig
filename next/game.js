@@ -13,7 +13,7 @@ import { arrivalReading } from './arrival.js';
 import { valueCollapse, collapseNotes, showsEndless } from './value.js';
 import { categories, targets, winChance, maxMultiple, maxPieces } from './gamble.js';
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
-import { endingById, endings } from './endings.js';
+import { endingById, endings, epilogue, allEndingsSeen, playable } from './endings.js';
 import { trainLength, capacity, load, canCouple, wagonCost, safeLength, wagonsBeyondSafe, speedFactor, carFill, machineLength, wagonLength, crossingCars } from './train.js';
 let crossing = null;
 import { mineralIds, mineralName, variantName } from './minerals.js';
@@ -470,7 +470,7 @@ function showResearch() {
 // Mining keeps running underneath; the player can skip at any time.
 let endingRun = null;
 function playEnding(id) {
-  const ending = endingById(id);
+  const ending = playable(id);
   if (!ending) return;
   const box = el('ending'), canvas = el('ending-canvas'), line = el('ending-line'), title = el('ending-title');
   const ctx = canvas.getContext('2d');
@@ -482,7 +482,9 @@ function playEnding(id) {
   const run = {stop: false};
   endingRun?.stop && (endingRun.stop = true);
   endingRun = run;
-  const dots = Array.from({length: 140}, (_, i) => ({a: i * 2.399, r: Math.random(), s: 0.3 + Math.random()}));
+  // The epilogue gives every third dot to one of the three endings.
+  const dots = Array.from({length: 140}, (_, i) => ({a: i * 2.399, r: Math.random(), s: 0.3 + Math.random(),
+    as: ending.motion === 'all' ? endings[i % 3] : ending}));
   function draw(now) {
     if (run.stop) return;
     const t = (now - start) / 1000;
@@ -490,16 +492,16 @@ function playEnding(id) {
     ctx.clearRect(0, 0, w, h);
     const k = still ? 0 : t;
     for (const d of dots) {
-      ctx.fillStyle = 'hsla(' + ending.hue + ',70%,' + (45 + 30 * d.s) + '%,' + (0.25 + 0.45 * d.s) + ')';
+      ctx.fillStyle = 'hsla(' + d.as.hue + ',70%,' + (45 + 30 * d.s) + '%,' + (0.25 + 0.45 * d.s) + ')';
       let x, y, size = 1.5 + 2.5 * d.s;
-      if (ending.motion === 'rain') {
+      if (d.as.motion === 'rain') {
         // Memories falling past like unread text.
         x = (d.r * w + d.a * 37) % w;
         y = ((d.s * 90 * k + d.a * 53) % (h + 40)) - 20;
         ctx.fillRect(x, y, 1.5, 10 + 18 * d.s);
         continue;
       }
-      if (ending.motion === 'assemble') {
+      if (d.as.motion === 'assemble') {
         // Parts drawn in from the edges to form one body.
         const p = Math.min(1, k / 18 + d.r * 0.2);
         const far = Math.max(w, h) * (0.9 - 0.6 * d.r);
@@ -684,13 +686,14 @@ function showSelf() {
   el('endings-seen').hidden = !seen.length;
   el('endings-seen').textContent = '본 엔딩 ' + seen.length + ' / ' + endings.length;
   const replays = el('ending-replays');
-  if (replays.dataset.seen !== seen.join()) {
-    replays.replaceChildren(...seen.map(id => {
-      const b = Object.assign(document.createElement('button'), {textContent: '엔딩 다시 보기 · ' + endingById(id).title});
+  const shown = allEndingsSeen(save) ? [...seen, epilogue.id] : seen;
+  if (replays.dataset.seen !== shown.join()) {
+    replays.replaceChildren(...shown.map(id => {
+      const b = Object.assign(document.createElement('button'), {textContent: '엔딩 다시 보기 · ' + playable(id).title});
       b.onclick = () => playEnding(id);
       return b;
     }));
-    replays.dataset.seen = seen.join();
+    replays.dataset.seen = shown.join();
   }
   el('new-cycle').hidden = !save.ending;
   el('new-cycle').disabled = busy;
@@ -896,7 +899,12 @@ async function write(op, after) {
       discoveryNoticeUntil = age + 3;
       el('discovery-notice').textContent = '기억 일부 복구 · ' + save.selfParts.length + ' / ' + selfParts.length;
       // With the last memory back, the ending chosen from the player's habits follows it.
-      if (save.ending && !before.ending) setTimeout(() => playEnding(save.ending), 8000);
+      if (save.ending && !before.ending) {
+        setTimeout(() => playEnding(save.ending), 8000);
+        // Seeing the last of the three endings brings the epilogue after it.
+        if (allEndingsSeen(save) && !allEndingsSeen(before))
+          setTimeout(() => playEnding(epilogue.id), 8000 + (endingById(save.ending).lines.length * 4.5 + 5) * 1000);
+      }
     }
     // Wagons gone without being uncoupled stayed behind in a collapsed chunk or a small portal.
     if ((save.wagons?.length ?? 0) < (before.wagons?.length ?? 0) && type !== 'remove-wagon') {
