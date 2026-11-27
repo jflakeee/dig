@@ -137,6 +137,22 @@ output {
 #train-strip .car.risk {
   border-color: #ffb36b;
 }
+/* Crossing a chunk boundary: cars still behind it dim, cars left behind fade out. */
+#train-strip .car.pending {
+  opacity: 0.45;
+}
+#train-strip .car.passed {
+  box-shadow: 0 0 0 2px #7fd3b0;
+}
+#train-strip .car.lost {
+  opacity: 0.2;
+  border-style: dashed;
+}
+#train-strip .caption {
+  margin-right: 6px;
+  color: #b8d8cb;
+  font-size: 12px;
+}
 footer {
   bottom: max(24px, env(safe-area-inset-bottom));
   left: 0;

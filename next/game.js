@@ -12,7 +12,8 @@ import { automations, automationIds, isOn } from './automation.js';
 import { categories, targets, winChance, maxMultiple, maxPieces } from './gamble.js';
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
 import { endingById, endings } from './endings.js';
-import { trainLength, capacity, load, canCouple, wagonCost, safeLength, wagonsBeyondSafe, speedFactor, carFill, machineLength, wagonLength } from './train.js';
+import { trainLength, capacity, load, canCouple, wagonCost, safeLength, wagonsBeyondSafe, speedFactor, carFill, machineLength, wagonLength, crossingCars } from './train.js';
+let crossing = null;
 import { mineralIds, mineralName, variantName } from './minerals.js';
 import { craftRecipes, affords, owned, hullRepairBelow, hullRepairFor } from './craft.js';
 import { elementSymbols } from './elements.js';
@@ -66,6 +67,7 @@ function newSeed(trips) {
   return fixedSeed === undefined ? undefined : (fixedSeed + trips) >>> 0;
 }
 function loadWorld() {
+  crossing = null;
   // A new or reloaded world starts a fresh chunk reference; arriving is not a crossing.
   lastChunk = '';
   crossPending = false;
@@ -626,16 +628,24 @@ function showTrainStrip() {
   strip.hidden = !save?.front || !wagons;
   if (strip.hidden) return;
   const fills = carFill(save);
-  const shape = fills.map(f => Math.round(f * 10)).join() + '|' + wagons;
+  // While crossing a chunk boundary each car shows whether it is over yet;
+  // the strip keeps the result a second after the last car passes.
+  const states = crossing && crossingCars(save, crossing.traveled);
+  if (crossing && !crossing.doneAt && states.every(c => c !== 'pending')) crossing.doneAt = age;
+  if (crossing?.doneAt && age - crossing.doneAt > 1) crossing = null;
+  const passed = states ? states.filter(c => c === 'passed').length : 0, kept = states ? states.filter(c => c !== 'lost').length : 0;
+  const shape = fills.map(f => Math.round(f * 10)).join() + '|' + wagons + '|' + (crossing ? states.join() : '');
   if (strip.dataset.shape === shape) return;
   strip.dataset.shape = shape;
   strip.replaceChildren(...fills.map((f, i) => {
     const car = document.createElement('span');
-    car.className = i === 0 ? 'car machine' : 'car' + (machineLength + wagonLength * i > safeLength ? ' risk' : '');
+    car.className = (i === 0 ? 'car machine' : 'car' + (machineLength + wagonLength * i > safeLength ? ' risk' : '')) +
+      (crossing ? ' ' + states[i] : '');
     car.style.setProperty('--fill', f);
     return car;
-  }));
-  strip.setAttribute('aria-label', '열차 ' + trainLength(save) + ' m · 광물 ' + load(save) + ' / ' + capacity(save));
+  }), ...(crossing ? [Object.assign(document.createElement('span'), {className: 'caption', textContent: '경계 통과 ' + passed + '/' + kept})] : []));
+  strip.setAttribute('aria-label', '열차 ' + trainLength(save) + ' m · 광물 ' + load(save) + ' / ' + capacity(save) +
+    (crossing ? ' · 경계 통과 ' + passed + '/' + kept : ''));
 }
 // The machine's own recovered memory, one recollection per body part found.
 function showSelf() {
@@ -1154,6 +1164,7 @@ function move(dt, speed = velocity) {
     const lateral = point.map((v, i) => i === axis ? 0 : pos[i] + (next[i] - pos[i]) * t - v);
     if (Math.max(...lateral.map(Math.abs)) + bodyRadius(save) <= portal.radius) entered = portal;
   }
+  if (crossing) crossing.traveled += Math.hypot(...next.map((v, i) => v - pos[i])) * 0.5;
   pos = next;
   // Crossing into another chunk lets the far one collapse; a train over 16 m
   // loses the wagons left in it.
@@ -1161,6 +1172,8 @@ function move(dt, speed = velocity) {
   world.stream(pos);
   if (chunkKey !== lastChunk) {
     if (lastChunk && save?.wagons?.length && trainLength(save) > safeLength) crossPending = true;
+    // The strip shows each car passing the boundary in turn.
+    if (lastChunk && save?.wagons?.length) crossing = {traveled: 0, cars: crossingCars(save, 0)};
     lastChunk = chunkKey;
   }
   if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) < 0) entered = false;
@@ -1341,6 +1354,7 @@ function frame(time) {
   tick(dt);
   if (time - lastDraw >= 33) {
     lastDraw = time;
+    if (crossing) showTrainStrip();
     el('discovery-notice').hidden = age >= discoveryNoticeUntil;
     el('memory-line').hidden = age >= memoryUntil;
     const light = [0, 0.5, 1].map((delay) =>

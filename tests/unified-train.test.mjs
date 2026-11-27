@@ -104,3 +104,12 @@ test('driving slows with a fuller hold and more wagons, never below 60%', async 
   assert.deepEqual(carFill({rocks: baseCapacity + 40, minerals: {}, wagons: wagons(2)}), [1, 0.5, 0]);
   assert.deepEqual(carFill({rocks: 60, minerals: {}, wagons: []}), [0.5]);
 });
+
+test('cars pass a chunk boundary in turn and cars past 16 m are left behind', async () => {
+  const { crossingCars } = await import('../next/train.js');
+  const s = {wagons: wagons(5)};
+  assert.deepEqual(crossingCars(s, 0), ['pending', 'pending', 'pending', 'pending', 'pending', 'lost']);
+  assert.deepEqual(crossingCars(s, 5), ['passed', 'passed', 'pending', 'pending', 'pending', 'lost']);
+  assert.deepEqual(crossingCars(s, 14), ['passed', 'passed', 'passed', 'passed', 'passed', 'lost']);
+  assert.deepEqual(crossingCars({wagons: []}, 2), ['passed']);
+});
