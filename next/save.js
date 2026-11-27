@@ -18,11 +18,12 @@ import { winChance, maxPieces, baseValue, validMultiple, validGambleLog } from '
 import { valueOf } from './trade.js';
 import { fresh as freshInsight, validInsight, addTrace, traceKey, urgentRatio } from './insight.js';
 import { portalCost, researchProgress } from './portal.js';
+import { energyCap, energyCost, energyGain, addEnergy, validEnergy } from './energy.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 18;
+export const saveVersion = 19;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -65,6 +66,7 @@ export const migrations = {
   15: s => ({...s, endingsSeen: s.ending ? [s.ending] : [], cycles: 0}),
   16: s => ({...s, upgrades: {body: 0, wagon: 0, drills: 0, bore: 0}, automation: freshAutomation(), gambleCount: 0, gambleLog: []}),
   17: s => ({...s, insight: freshInsight(), portalBuilt: false}),
+  18: s => ({...s, energy: energyCap}),
 };
 export const reservedCredits = s => (s.bids ?? []).reduce((n, b) => n + b.amount, 0);
 // A lot closes once the market clock passes the end of its cycle: a bid at or
@@ -336,6 +338,7 @@ const fresh = () => ({
   gambleLog: [],
   insight: freshInsight(),
   portalBuilt: false,
+  energy: energyCap,
   cycles: 0,
   session: null,
   arrivalRadius: 1.64,
@@ -391,7 +394,7 @@ function validMinerals(s) {
     Array.isArray(s.bids) && s.bids.every(b => b && /^c\d+-\d+$/.test(b.lot) && Number.isSafeInteger(b.amount) && b.amount > 0) &&
     new Set(s.bids.map(b => b.lot)).size === s.bids.length && reservedCredits(s) <= s.credits &&
     validUpgrades(s.upgrades) && validAutomation(s.automation) &&
-    Number.isSafeInteger(s.gambleCount) && s.gambleCount >= 0 && validGambleLog(s.gambleLog) && validInsight(s.insight) && typeof s.portalBuilt === 'boolean' &&
+    Number.isSafeInteger(s.gambleCount) && s.gambleCount >= 0 && validGambleLog(s.gambleLog) && validInsight(s.insight) && typeof s.portalBuilt === 'boolean' && validEnergy(s.energy) &&
     Array.isArray(s.endingsSeen) && s.endingsSeen.every(id => endingById(id)) && new Set(s.endingsSeen).size === s.endingsSeen.length &&
     (s.ending === null || s.endingsSeen.includes(s.ending)) && Number.isSafeInteger(s.cycles) && s.cycles >= 0 &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
@@ -558,6 +561,12 @@ export async function commit(revision, operation, session) {
 function step(s, operation, session) {
     const type = operation?.type ?? operation;
     let found = null;
+    // Active work draws on the energy buffer; a failed operation throws and the save is untouched.
+    const cost = energyCost[type] ?? 0;
+    if (cost && s.front) {
+      if (s.energy < cost) throw Error('에너지 부족 · 필요 ' + cost + ' (보유 ' + s.energy + ')');
+      s.energy -= cost;
+    }
     if (['collect', 'drill', 'laser'].includes(type)) {
       // The work key is the cell's chunk, generation and index. A cell already
       // excavated in the committed world returns the committed result unpaid.
@@ -951,6 +960,8 @@ function step(s, operation, session) {
     }
     // One mining event pays its base and companion together, after validation.
     if (found) s.blocksMined++;
+    // Breaking the block recovers energy from its dust; past the cap it is lost.
+    if (found && s.front && energyGain[type]) addEnergy(s, energyGain[type]);
     for (const [id, variant] of found ? [[found.base, found.baseVariant], [found.companion, found.companionVariant]] : []) {
       if (!id) continue;
       // With the machine and wagons full, the piece stays where it was mined.
