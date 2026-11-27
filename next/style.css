@@ -307,7 +307,7 @@ section {
   margin: 6px 0;
   padding-left: 20px;
 }
-#memory-list, #memory-line, #self-list, #arrival-list {
+#memory-list, #memory-line, #self-list, #arrival-list, #insight-list {
   font-style: italic;
   color: #c9b8e8;
 }
