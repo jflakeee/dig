@@ -17,6 +17,10 @@ import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathE
 import { endingById, endings, epilogue, allEndingsSeen, playable, endingCount } from './endings.js';
 import { portalCost, researchProgress } from './portal.js';
 import { createDirector, settings as storySettings } from './story.js';
+import { energyCap, energyCost } from './energy.js';
+// Whether the buffer covers an operation's energy, and a short reason when not.
+const powered = type => (save?.energy ?? energyCap) >= (energyCost[type] ?? 0);
+const lowPower = type => '에너지 부족 · 필요 ' + energyCost[type];
 import { trainLength, capacity, load, canCouple, wagonCost, safeLength, wagonsBeyondSafe, speedFactor, carFill, machineLength, wagonLength, crossingCars } from './train.js';
 let crossing = null;
 import { mineralIds, mineralName, variantName } from './minerals.js';
@@ -201,7 +205,8 @@ function showDecomposer() {
   el('decompose-preview').textContent = result ? choice[1].replace(/ · \d+개$/, '') + ' 1개 · ' + massText(result.grams) +
     ' → 회수 ' + massText(result.kept) + ' · 손실 ' + massText(result.grams - result.kept) + ' (' + lossNote(recall(save)) + ')\n' + yieldText(result.out)
     : '분해할 원료가 없습니다.';
-  el('decompose').disabled = !result;
+  el('decompose').disabled = !result || !powered('decompose');
+  el('decompose').textContent = powered('decompose') ? '원료 1개 분해 · 에너지 ' + energyCost.decompose : lowPower('decompose');
   const book = el('element-book');
   const log = save.elementLog ?? [];
   book.hidden = !log.length;
@@ -397,8 +402,8 @@ function showAutomation() {
       Object.entries(a.elements).map(([e, g]) => e + ' ' + g + ' g').join(' · ') + ' · ' + a.seconds + '초');
     li.className = done || !short ? 'ready' : '';
     if (label.textContent !== text) label.textContent = text;
-    act.textContent = done ? (isOn(save, id) ? '켜짐' : '꺼짐') : job?.id === id ? '연구 중' : short ? '재료 부족' : '연구';
-    act.disabled = (!done && (!!job || short));
+    act.textContent = done ? (isOn(save, id) ? '켜짐' : '꺼짐') : job?.id === id ? '연구 중' : short ? '재료 부족' : !powered('automate') ? lowPower('automate') : '연구 · 에너지 ' + energyCost.automate;
+    act.disabled = (!done && (!!job || short || !powered('automate')));
   });
 }
 // Presses one automated button when its condition holds; true when it wrote.
@@ -406,7 +411,7 @@ function automate() {
   if (isOn(save, 'capture') && save.captures?.length && !el('capture').hidden) { el('capture').click(); return true; }
   if (isOn(save, 'repair') && (save.drillCondition ?? 100) < 50) {
     if ((save.ceramic ?? 0) >= ceramicPerRepair) { write('repair', () => message('자동 드릴 수리')); return true; }
-    if (save.rocks >= rocksPerCeramic) { write('fire-ceramic', () => message('자동 세라믹 가열')); return true; }
+    if (save.rocks >= rocksPerCeramic && powered('fire-ceramic')) { write('fire-ceramic', () => message('자동 세라믹 가열')); return true; }
   }
   const full = load(save) >= capacity(save) * 0.9;
   if (isOn(save, 'wagon') && full && canCouple(save) && trainLength(save) + 3 <= safeLength &&
@@ -421,11 +426,11 @@ function automate() {
     const price = op && sellPrice(save, op);
     if (price) { write({type: 'sell', ...op, price}, () => message('자동 판매 · ' + variantName(id, v) + ' · ' + credit(price))); return true; }
   }
-  if (isOn(save, 'decompose')) {
+  if (isOn(save, 'decompose') && powered('decompose')) {
     const p = save.finds.find(q => ['household', 'artifact', 'alien'].includes(findById(q.kind).category) && findPiece(q.kind, q.variant));
     if (p) { write({type: 'decompose', find: p.kind, variant: p.variant}, () => message('자동 분해 · ' + pieceName(p))); return true; }
   }
-  if (isOn(save, 'analyze') && !save.researchJob) {
+  if (isOn(save, 'analyze') && !save.researchJob && powered('research')) {
     const kind = save.finds.map(p => p.kind).find(k => studies[k] && !save.research.includes(k) &&
       Object.entries(studies[k].cost).every(([e, g]) => (save.elements[e] ?? 0) >= g));
     if (kind) { write({type: 'research', kind}, () => message('자동 분석 시작 · ' + findById(kind).name)); return true; }
@@ -483,8 +488,8 @@ function showPortal() {
     : '필요 ' + credit(portalCost.credits) + ' · ' + Object.entries(portalCost.elements).map(([e, g]) => e + ' ' + g + ' g').join(' · ') +
       (save.portalBuilt ? '\n이 모든 것은 내가 포탈을 만들면서 시작되었다.' : '');
   el('build-portal').hidden = !p.done;
-  el('build-portal').disabled = poor || short.length > 0;
-  el('build-portal').textContent = short.length ? '원소 부족 · ' + short.map(([e]) => e).join(', ') : poor ? '크레딧 부족' : save.portalBuilt ? '포탈 다시 제작' : '포탈 제작';
+  el('build-portal').disabled = poor || short.length > 0 || !powered('build-portal');
+  el('build-portal').textContent = short.length ? '원소 부족 · ' + short.map(([e]) => e).join(', ') : poor ? '크레딧 부족' : !powered('build-portal') ? lowPower('build-portal') : (save.portalBuilt ? '포탈 다시 제작' : '포탈 제작') + ' · 에너지 ' + energyCost['build-portal'];
 }
 // The gravity sensor reads the field of the chunk the machine is in: whether
 // there is one, how strong, and which way relative to the machine's heading.
@@ -544,8 +549,8 @@ function showResearch() {
     : study ? '필요 원소 ' + Object.entries(study.cost).map(([e, g]) => e + ' ' + g + ' g (보유 ' + massText(save.elements[e] ?? 0, e) + ')').join(' · ') +
       '\n소요 ' + study.seconds + '초 · 완료하면 관측 특성과 안전 상태를 기록하고 경매 등록이 열립니다'
     : '분석할 미지 물질이 없습니다.';
-  el('research-start').disabled = !!job || !study || short.length > 0;
-  el('research-start').textContent = short?.length ? '원소 부족 · ' + short.map(([e]) => e).join(', ') : '분석 시작';
+  el('research-start').disabled = !!job || !study || short.length > 0 || !powered('research');
+  el('research-start').textContent = short?.length ? '원소 부족 · ' + short.map(([e]) => e).join(', ') : !powered('research') ? lowPower('research') : '분석 시작 · 에너지 ' + energyCost.research;
   const films = save.finds.filter(p => p.kind === 'memory_film').length;
   el('read-film').hidden = !save.research.includes('memory_film') || !films || save.memoryLog.length >= fragments.length;
   el('read-film').textContent = '기억막 판독 · ' + films + '장';
@@ -890,12 +895,14 @@ function hud() {
   if (panel) el('cargo').textContent = (save?.cargo ?? []).map((n,i) => n ? cargoNames[i] + ' × ' + n : '').filter(Boolean).join(' · ');
   if (panel && save.front) {
     const cargo = el('cargo');
-    cargo.textContent = [cargo.textContent, '기체 ' + Math.ceil(hull) + '% · 드릴 ' + (save.drillCondition ?? 100) + '%'].filter(Boolean).join(' | ');
+    cargo.textContent = [cargo.textContent, '기체 ' + Math.ceil(hull) + '% · 드릴 ' + (save.drillCondition ?? 100) + '% · 에너지 ' + save.energy + ' / ' + energyCap].filter(Boolean).join(' | ');
   }
   const condition = save?.drillCondition ?? 100;
   const ceramic = save?.ceramic ?? 0;
   el('fire-ceramic').hidden = !save?.front || save.rocks < rocksPerCeramic;
-  el('fire-ceramic').disabled = false;
+  el('fire-ceramic').disabled = !powered('fire-ceramic');
+  el('fire-ceramic').firstChild.textContent = powered('fire-ceramic') ? '세라믹 가열 ' : lowPower('fire-ceramic') + ' ';
+  el('fire-ceramic').lastElementChild.textContent = '암석 3개 · 에너지 ' + energyCost['fire-ceramic'];
   el('repair').hidden = !save?.front || condition === 100 || ceramic < ceramicPerRepair;
   el('repair').disabled = false;
   el('emergency').hidden = !save?.front || condition !== 0 || ceramic >= ceramicPerRepair || save.rocks >= rocksPerCeramic;
