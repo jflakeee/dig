@@ -57,7 +57,7 @@ export function createView(canvas) {
   resize();
   new ResizeObserver(resize).observe(canvas);
   return function render(s, now) {
-    const { world, pos: center, yaw, pitch, light, working, anchors, contact, minerals, focus, body } = s;
+    const { world, pos: center, yaw, pitch, light, working, chains = [], contact, minerals, focus, body } = s;
     // A focusing lamp narrows the central beam and carries it further.
     const spread = focus ? 30 : 16, beam = focus ? 0.55 : 0.28, falloff = focus ? 0.05 : 0.12;
     const w = canvas.width,
@@ -343,15 +343,23 @@ export function createView(canvas) {
         ctx.stroke();
       }
     }
+    // Chains fly from the hull to the rock and reel back when released. From
+    // the cockpit they leave the lower screen corners; from outside, the hull.
+    for (const c of chains) {
+      if (c.reach <= 0) continue;
+      const tip = project(c.from.map((v, i) => v + (c.to[i] - v) * c.reach));
+      const start = outside ? project(c.from) : [w * (c.side > 0 ? 0.82 : 0.18), h];
+      if (!tip || !start) continue;
+      ctx.setLineDash([2, 1]);
+      line(...start, ...tip, '#969789', 1.6);
+      ctx.setLineDash([]);
+      // The hook bites once the chain reaches the rock.
+      ctx.fillStyle = c.reach >= 1 ? '#c9c6b0' : '#7d7d72';
+      ctx.beginPath();
+      ctx.arc(...tip, c.reach >= 1 ? 2.2 : 1.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
     if (s.mounted && !outside) {
-      for (const [n, point] of anchors.entries()) {
-        const end = project(point);
-        if (end) {
-          ctx.setLineDash([2, 1]);
-          line(w * (n ? 0.82 : 0.18), h, ...end, '#969789', 1.6);
-          ctx.setLineDash([]);
-        }
-      }
       const cx = w * 0.54,
         cy = h * 0.98,
         length = Math.min(w, h) * 0.25;
