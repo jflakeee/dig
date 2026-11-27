@@ -243,7 +243,9 @@ try {
   await page.locator('#menu').click();
   await page.locator('#workshop summary').click();
   await page.locator('#repair').click();
-  await page.waitForFunction(k => JSON.parse(localStorage.getItem(k)).drillCondition===100,key);
+  // A repair wears the maximum by up to 3% and mends to that maximum.
+  await page.waitForFunction(k => { const s = JSON.parse(localStorage.getItem(k)); return s.drillCondition > 0 && s.drillCondition === s.drillMax; }, key);
+  assert.ok((await read()).drillMax >= 97);
   assert.equal((await read()).ceramic,0);
   await page.waitForFunction(k => JSON.parse(localStorage.getItem(k)).blocksMined>0,key);
   await page.evaluate((k) => localStorage.setItem(k, 'broken-save'), key);
