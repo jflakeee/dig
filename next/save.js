@@ -1,3 +1,4 @@
+import { roll } from './roll.js';
 import { cellOwner, savedAir } from './world.js';
 import { blockYield, mineralIds, variants, defaultVariant, rockVariantAt, mineralPiece } from './minerals.js';
 import { elementSymbols } from './elements.js';
@@ -69,6 +70,26 @@ function settleBids(s) {
     } else logTrade(s, 'outbid:' + bid.lot);
   }
   s.bids = s.bids.filter(b => s.marketTime < (lotById(s.marketSeed, b.lot)?.endsAt ?? 0));
+}
+// Flings a piece out of the machine into the chunk where it was mined, away
+// from the hull and upward, at a speed fixed by the block. It stays in that
+// chunk's saved state until collected or until the chunk collapses.
+function eject(session, where, id, what) {
+  const state = where && session?.world?.chunks?.find(c => c.x === where.chunk[0] && c.y === where.chunk[1] &&
+    c.z === where.chunk[2] && (c.epoch ?? 0) === where.epoch);
+  if (!state) return;
+  const point = where.cell.map(v => v + 0.5);
+  const away = point.map((v, i) => v - session.pos[i]);
+  const length = Math.hypot(...away) || 1;
+  const speed = away.map((v, i) => v / length * 1.6 + (roll(where.seed, id + ':eject' + i) - 0.5) * 0.8 + (i === 1 ? 0.8 : 0));
+  state.ejected ??= [];
+  state.ejected.push({id, point, speed, cooldown: 0.8, ...what});
+}
+function validEjected(e) {
+  return e && typeof e.id === 'string' && e.id.length <= 120 && vector(e.point) && vector(e.speed) &&
+    (e.cooldown === undefined || (Number.isFinite(e.cooldown) && e.cooldown >= 0)) &&
+    (e.piece ? (validPiece(e.piece) || validFind(e.piece)) && e.mineral === undefined
+      : variants[e.mineral]?.some(v => v[0] === e.variant));
 }
 // Losing wagons loses the cargo that no longer fits: rocks go first, then
 // minerals in catalog order, each from its default sub-species first.
@@ -379,6 +400,7 @@ function validSession(s) {
         Array.isArray(c.debris.parts) && c.debris.parts.every(p => p && vector(p.point) && vector(p.speed) &&
         Number.isFinite(p.mass) && p.mass > 0))) &&
       (c.starterRocks === undefined || typeof c.starterRocks === 'boolean') &&
+      (c.ejected === undefined || (Array.isArray(c.ejected) && c.ejected.every(validEjected))) &&
       (c.kind === undefined || (['rock','cave','empty','warehouse'].includes(c.kind) &&
         Number.isSafeInteger(c.seed) && c.seed >= 0 && c.seed <= 0xffffffff)) &&
       (c.kind !== 'warehouse' || (Array.isArray(c.items) && c.items.length <= 9 && c.items.every(item =>
@@ -468,6 +490,7 @@ export async function commit(revision, operation, session) {
       if (s.front && Number.isSafeInteger(seed))
         found.discovery = blockDiscovery(seed, chunk.join(',') + ':' + epoch + ':cell' + index);
       found.id = chunk.join(',') + ':' + epoch + ':' + index + '@' + (seed ?? 0);
+      found.where = {chunk, epoch, cell: operation.cell, seed: seed ?? 0};
     }
     switch (type) {
       case 'blast':
@@ -700,6 +723,20 @@ export async function commit(revision, operation, session) {
         s.ending = null;
         s.cycles++;
         break;
+      case 'collect-ejected': {
+        // The piece must lie in the saved world and be gone from the one sent now;
+        // a full train still cannot take it back.
+        const prior = (s.session?.world?.chunks ?? []).flatMap(c => c.ejected ?? []).find(e => e.id === operation?.id);
+        const still = (session?.world?.chunks ?? []).some(c => (c.ejected ?? []).some(e => e.id === operation?.id));
+        if (!s.front || !prior || still) throw Error('회수할 수 있는 조각이 없습니다.');
+        if (load(s) >= capacity(s)) throw Error('화물칸이 가득 찼습니다.');
+        if (prior.piece) addSpecimen(s, prior.piece);
+        else {
+          grant(s, prior.mineral, prior.variant);
+          if (!s.mineralLog.includes(prior.mineral)) s.mineralLog.push(prior.mineral);
+        }
+        break;
+      }
       case 'reset':
         Object.assign(s, fresh(), { revision });
         break;
@@ -711,7 +748,12 @@ export async function commit(revision, operation, session) {
     for (const [id, variant] of found ? [[found.base, found.baseVariant], [found.companion, found.companionVariant]] : []) {
       if (!id) continue;
       // With the machine and wagons full, the piece stays where it was mined.
-      if (load(s) >= capacity(s)) { s.leftBehind++; continue; }
+      // A full sealed train takes nothing more: the piece is flung out of the machine.
+      if (load(s) >= capacity(s)) {
+        s.leftBehind++;
+        eject(session, found.where, found.id + ':' + id, {mineral: id, variant: variant ?? defaultVariant(id)});
+        continue;
+      }
       grant(s, id, variant);
       if (!s.mineralLog.includes(id)) s.mineralLog.push(id);
     }
@@ -731,11 +773,13 @@ export async function commit(revision, operation, session) {
       // An unstable capsule waits in the capture queue; once secured it keeps its form.
       const piece = d.form ? {id: found.id, kind: 'capsule', element, form: d.form} : {id: found.id, kind: 'capsule', element};
       if (d.form) s.captures.push({...piece, seconds: capsuleForms[d.form].seconds + captureBonus(s, piece), expiresAt: null});
+      else if (load(s) >= capacity(s)) eject(session, found.where, piece.id, {piece});
       else addSpecimen(s, piece);
     } else if (d) {
       const piece = d.find ? {id: found.id, ...d.find} : {id: found.id, kind: d.kind, variant: d.variant};
       const rule = captureRule(piece);
       if (rule) s.captures.push({...piece, seconds: rule.seconds + captureBonus(s, piece), expiresAt: null});
+      else if (load(s) >= capacity(s)) eject(session, found.where, piece.id, {piece});
       else addSpecimen(s, piece);
     }
     // Moving to another space or rebooting leaves pending finds behind.

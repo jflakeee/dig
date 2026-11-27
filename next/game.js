@@ -415,7 +415,7 @@ function showTrain() {
   const risk = length > safeLength;
   el('train-status').classList.toggle('risk', risk);
   el('train-status').textContent = '화물칸 ' + save.wagons.length + '량 · 열차 ' + length + ' m / 안전 ' + safeLength + ' m · 광물 ' +
-    load(save) + ' / ' + capacity(save) + ' · 전진 속도 ' + pace + '%' + (save.leftBehind ? ' · 남겨 둔 광물 ' + save.leftBehind + '개' : '') +
+    load(save) + ' / ' + capacity(save) + ' · 전진 속도 ' + pace + '%' + (save.leftBehind ? ' · 튕겨낸 광물 ' + save.leftBehind + '개' : '') +
     (risk ? '\n16 m를 넘었습니다. 청크 경계를 지날 때 뒤쪽 화물칸 ' + wagonsBeyondSafe(save).length + '량과 그 화물을 잃을 수 있습니다.' : '') +
     (canCouple(save) ? '' : '\n화물칸을 연결하려면 화물 연결기를 장착해야 합니다.');
   const short = (save.minerals.iron ?? 0) < wagonCost.iron || save.rocks < wagonCost.rock;
@@ -642,7 +642,7 @@ async function write(op, after) {
   hud();
   const type = op?.type ?? op;
   try {
-    let session = ['collect','drill','laser','repair','fire-ceramic','checkpoint','blast','pickup','capture'].includes(type)
+    let session = ['collect','drill','laser','repair','fire-ceramic','checkpoint','blast','pickup','capture','collect-ejected'].includes(type)
       ? {hull, pos, velocity, drift, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
       : null;
     if (op?.type === 'transit') {
@@ -651,6 +651,8 @@ async function write(op, after) {
     }
     const before = save;
     save = await commit(save.revision, op, session);
+    // Pieces the save flung out of a full train join this world.
+    if (save.session?.world) world.syncEjected(save.session.world.chunks);
     if (save.rocks > before.rocks && ['collect','laser','drill'].includes(type)) lastRockGain = age;
     const gained = mineralIds.filter(id => (save.minerals?.[id] ?? 0) > (before.minerals?.[id] ?? 0));
     if (gained.length && ['laser','drill'].includes(type)) {
@@ -683,7 +685,7 @@ async function write(op, after) {
       el('discovery-notice').textContent = text;
     }
     if ((save.leftBehind ?? 0) > (before.leftBehind ?? 0) && !(before.leftBehind > 0 && load(before) >= capacity(before)))
-      message('화물칸 가득 · 밀폐된 구체에 더 실을 수 없어 채굴한 광물을 그 자리에 남깁니다');
+      message('화물칸 가득 · 채굴한 광물과 아이템을 기계 밖으로 튕겨냅니다');
     const had = new Set([...(before.specimens ?? []), ...(before.finds ?? [])].map(p => p.id));
     const freshFinds = (save.finds ?? []).filter(p => !had.has(p.id));
     if (freshFinds.length && type !== 'capture') {
@@ -1071,6 +1073,12 @@ function tick(dt) {
   if (moved && !busy) {
     const type = world.takeNearby(pos,velocity.map((v,i) => v+drift[i]));
     if (type !== null) recoverCargo(type, cargoNames[type] + ' 회수');
+    // With room again, flung pieces are gathered back on passing close by.
+    else if (save.front && load(save) < capacity(save)) {
+      const piece = world.takeEjected(pos, velocity.map((v,i) => v+drift[i]));
+      if (piece) write({type: 'collect-ejected', id: piece.id}, () =>
+        message('튕겨낸 조각 재수집 · ' + (piece.piece ? pieceName(piece.piece) : variantName(piece.mineral, piece.variant))));
+    }
   }
   if (moved && !sensor) {
     sensor = true;

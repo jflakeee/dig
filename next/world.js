@@ -249,6 +249,33 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
     return null;
   }
 
+  // Pieces flung out of a full train. They belong to their chunk, drift and
+  // bounce like warehouse goods, and vanish when that chunk collapses.
+  function ejected() {
+    const entries = [];
+    for (const chunk of chunks.values())
+      for (const item of chunk.ejected ?? []) entries.push({chunk, item});
+    return entries;
+  }
+  // Adds pieces the save flung out that this world does not hold yet.
+  function syncEjected(savedChunks = []) {
+    for (const state of savedChunks) {
+      const chunk = chunks.get([state.x, state.y, state.z].join(','));
+      if (!chunk || (chunk.epoch ?? 0) !== (state.epoch ?? 0)) continue;
+      chunk.ejected ??= [];
+      for (const item of state.ejected ?? [])
+        if (!chunk.ejected.some(e => e.id === item.id)) chunk.ejected.push(structuredClone(item));
+    }
+  }
+  function takeEjected(pos, velocity = [0, 0, 0]) {
+    for (const {chunk, item} of ejected()) {
+      if (Math.hypot(...item.point.map((v, i) => v - pos[i])) > 1.3 || item.cooldown > 0) continue;
+      if (Math.hypot(...velocity.map((v, i) => v - item.speed[i])) > 3) continue;
+      chunk.ejected.splice(chunk.ejected.indexOf(item), 1);
+      return item;
+    }
+    return null;
+  }
   let cargoTime = saved?.cargoTime ?? 0;
   function hullContacts(dt,pos,speed,anchored) {
     let damage = 0, impactPoint = null, largest = 0;
@@ -282,6 +309,18 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
         const hit = hitHull(body,pos,relativeTo,anchored);
         item.speed = body.speed;
         for (let i=0; i<3; i++) push[i] += hit[i];
+      }
+      // Flung pieces are light: they fall, bounce and settle without striking the hull.
+      for (const {item} of ejected()) {
+        const field = gravity(item.point,active);
+        for (let i=0; i<3; i++) {
+          item.speed[i] = (item.speed[i] + 0.05*field[i])*0.96;
+          const point = item.point.slice();
+          point[i] += 0.05*item.speed[i];
+          if (solid(...point.map(Math.floor))) item.speed[i] *= -0.3;
+          else item.point = point;
+        }
+        item.cooldown = Math.max(0,(item.cooldown ?? 0)-0.05);
       }
     }
     return {push,damage,impactPoint};
@@ -360,6 +399,7 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
     sense(pos,dt,shock) { return senseHazard(this.hazard,pos,dt,trace,shock); },
     advance(dt) { elapsed += dt; },
     hullContacts, debrisStep, fragments, snapshot, portals, gravity, warehouseItems, takeNearby,
+    ejected, syncEjected, takeEjected,
     hasChunk(x, y, z) { return chunks.has([x, y, z].join(',')); },
     tutorial,
     solid,
