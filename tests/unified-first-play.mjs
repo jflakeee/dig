@@ -101,6 +101,7 @@ try {
   assert.ok(Math.hypot(...restored.session.pos.map((n,i) => n - checkpoint.session.pos[i])) < 3);
   assert.equal(restored.session.yaw, checkpoint.session.yaw);
   await page.locator('#menu').click();
+  await page.locator('#settings > summary').click();
   await page.locator('#reset').click();
   const beforeConfirm = (await read()).blocksMined;
   await page.waitForFunction(
