@@ -9,6 +9,7 @@ import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketSt
 import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange, anchorMass } from './equipment.js';
 import { studies, fragments } from './research.js';
 import { automations, automationIds, isOn } from './automation.js';
+import { arrivalReading } from './arrival.js';
 import { categories, targets, winChance, maxMultiple, maxPieces } from './gamble.js';
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
 import { endingById, endings } from './endings.js';
@@ -648,6 +649,18 @@ function showTrainStrip() {
     (crossing ? ' · 경계 통과 ' + passed + '/' + kept : ''));
 }
 // The machine's own recovered memory, one recollection per body part found.
+// The last eight arrivals, newest first, each with its unsettled clock.
+function showArrivals() {
+  const trips = save?.front ? save.trips ?? 0 : 0;
+  el('arrival-book').hidden = !trips;
+  if (!panel || !trips) return;
+  const lines = Array.from({length: Math.min(8, trips)}, (_, i) => arrivalReading(save.marketSeed, trips - i).line.replace(/^도착 · /, ''));
+  const list = el('arrival-list');
+  if (list.dataset.lines !== JSON.stringify(lines)) {
+    list.replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), {textContent: text})));
+    list.dataset.lines = JSON.stringify(lines);
+  }
+}
 function showSelf() {
   const found = save?.selfParts ?? [];
   const seen = save?.endingsSeen ?? [];
@@ -746,6 +759,7 @@ function hud() {
   showGamble();
   showResearch();
   showSelf();
+  showArrivals();
   showTrain();
   showCraft();
   showTrainStrip();
@@ -1185,6 +1199,9 @@ function move(dt, speed = velocity) {
     write({type: 'transit', radius: entered.radius, strength: entered.strength}, () => {
       loadWorld();
       message('포탈 통과 완료');
+      // The clock cannot tell whether this is the past or the future.
+      el('memory-line').textContent = arrivalReading(save.marketSeed, save.trips).line;
+      memoryUntil = age + 8;
     });
   }
   return true;
