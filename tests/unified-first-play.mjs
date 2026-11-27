@@ -71,6 +71,13 @@ try {
   assert.equal(save.blocksMined, startRoom.air.length - 27);
   assert.ok(save.rocks <= startRoom.air.length - 30);
   assert.deepEqual(save.drills, ['drill-1']);
+  // Extra drills (an upgrade the player can buy) cut several cells a stroke,
+  // so the boundary stretch below fits slow runners. The reload drops any
+  // write the page makes in between; its revision no longer matches.
+  await page.evaluate(k => {
+    const s = JSON.parse(localStorage.getItem(k));
+    localStorage.setItem(k, JSON.stringify({...s, upgrades: {body: 0, wagon: 0, drills: 2, bore: 1}}));
+  }, key);
   await page.reload();
   await page.locator('#sensor').waitFor();
   await page.waitForFunction(k => JSON.parse(localStorage.getItem(k))?.transited, key, {timeout: 60000});
@@ -80,16 +87,21 @@ try {
   await page.mouse.down();
   await page.mouse.move(375, 400, { steps: 4 });
   await page.mouse.up();
-  const afterPortal = (await read()).blocksMined;
-  // At most 15 forward layers of 9 voxels fit before the old boundary.
-  // Mining 170 blocks on this straight course requires crossing it.
+  // Drive with the menu open until the saved position lies in the next chunk:
+  // the same chunk key the game uses for boundary crossings.
+  const chunkOf = pos => pos.map(v => Math.floor((Math.floor(v) + 15) / 32)).join();
+  const arrivalChunk = chunkOf((await read()).session.pos);
   await page.locator('#menu').click();
   await page.waitForFunction(
-    ([k, n]) => JSON.parse(localStorage.getItem(k)).blocksMined >= n + 170,
-    [key, afterPortal],
-    // About a minute on a typical runner; slower CI runners have needed over 150 s.
+    ([k, from]) => {
+      const pos = JSON.parse(localStorage.getItem(k)).session?.pos;
+      return pos && pos.map(v => Math.floor((Math.floor(v) + 15) / 32)).join() !== from;
+    },
+    [key, arrivalChunk],
+    // Well under a minute with three drills; the margin is for slow CI runners.
     { timeout: 300000 },
   );
+  assert.notEqual(chunkOf((await read()).session.pos), arrivalChunk);
   assert.equal(await page.locator('#panel').isVisible(), true);
   assert.equal(await page.getByText(/청크 경계/).count(), 0);
   const checkpoint = await read();
