@@ -1,0 +1,51 @@
+import { working } from './equipment.js';
+import { level } from './upgrades.js';
+// Cargo train (docs/dig-4d-train-cargo-chunk-transition-detail-20261125.md).
+// Every wagon is a sealed spherical machine like the miner itself: cargo
+// never spills from it; once full, it simply takes nothing more.
+// Mined minerals are the cargo; specimens, finds and elements ride in the
+// drone hold and storage and do not count. All numbers are trial values.
+export const machineLength = 2;      // metres
+export const wagonLength = 3;
+export const safeLength = 16;        // one chunk side
+export const baseCapacity = 120;     // mineral pieces the machine carries
+export const wagonCapacity = 80;
+export const wagonCost = {iron: 3, rock: 10};
+export const wagonClearance = 1.2;   // smallest portal radius a wagon passes
+export const trainLength = s => machineLength + wagonLength * (s?.wagons?.length ?? 0);
+// Upgrades widen the machine's hold and every wagon's.
+export const machineRoom = s => baseCapacity + 60 * level(s, 'body');
+export const wagonRoom = s => wagonCapacity + 40 * level(s, 'wagon');
+export const capacity = s => machineRoom(s) + wagonRoom(s) * (s?.wagons?.length ?? 0);
+export const load = s => (s?.rocks ?? 0) + Object.values(s?.minerals ?? {}).reduce((n, k) => n + k, 0);
+export const canCouple = s => !!working(s, 'coupler');
+// Driving speed falls with how full the hold is and how many wagons are towed.
+export function speedFactor(s) {
+  const fill = Math.min(1, load(s) / capacity(s));
+  return Math.max(0.6, 1 - 0.25 * fill - 0.03 * (s?.wagons?.length ?? 0));
+}
+// How full each car is, front first: the machine's hold, then each wagon in order.
+export function carFill(s) {
+  let left = load(s);
+  return [machineRoom(s), ...(s?.wagons ?? []).map(() => wagonRoom(s))].map(room => {
+    const used = Math.min(room, left);
+    left -= used;
+    return used / room;
+  });
+}
+// Wagons whose rear end lies more than 16 m behind the machine's front.
+export function wagonsBeyondSafe(s) {
+  return (s?.wagons ?? []).filter((_, i) => machineLength + wagonLength * (i + 1) > safeLength);
+}
+// Each car's state while the train crosses a chunk boundary, front first:
+// 'passed' once its rear end is over, 'lost' when it lies past the 16 m safe
+// length (left in the collapsing chunk), otherwise 'pending'. `traveled` is
+// metres driven since the machine's front crossed.
+export function crossingCars(s, traveled) {
+  const wagons = s?.wagons?.length ?? 0;
+  return Array.from({length: wagons + 1}, (_, i) => {
+    const rear = machineLength + wagonLength * i;
+    if (i && rear > safeLength) return 'lost';
+    return traveled >= rear ? 'passed' : 'pending';
+  });
+}

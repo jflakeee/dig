@@ -1,0 +1,109 @@
+import { chromium } from 'playwright';
+import assert from 'node:assert/strict';
+
+const browser = await chromium.launch({
+  headless: true,
+  executablePath: process.env.CHROME_BIN,
+  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+});
+
+try {
+  for (const [sample, expected] of [[0.01, '소형·대형'], [0.05, '소형'], [0.8, '']] as const) {
+    const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await mobile.addInitScript((roll) => { Math.random = () => roll; }, sample);
+    await mobile.goto('http://127.0.0.1:4173/dig/dig-4d.html');
+    await mobile.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('수집:'));
+    const sensor = mobile.locator('#passage-sensor');
+    assert.equal(await sensor.isVisible(), !!expected);
+    if (expected) assert.equal(await sensor.textContent(), expected + ' 통로 · 미세중력 감지');
+    await mobile.close();
+  }
+  const page = await browser.newPage({ viewport: { width: 1000, height: 720 } });
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          if ((window as Window & { __digFailClipboard?: boolean }).__digFailClipboard) {
+            throw new Error('clipboard permission denied');
+          }
+          (window as Window & { __digClipboardText?: string }).__digClipboardText = text;
+        },
+      },
+    });
+  });
+
+  await page.goto('http://127.0.0.1:4173/dig/dig-4d.html');
+  const menuToggle = page.getByRole('button', { name: '메뉴', exact: true });
+  await menuToggle.waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#menu-items').isHidden(), true);
+  for (const selector of ['#upgrade', '#add-drill', '#restore-toggle', '#reset-record']) {
+    assert.equal(await page.locator(selector).isHidden(), true);
+  }
+  await menuToggle.click();
+  assert.equal(await page.locator('#menu-items').isVisible(), true);
+  assert.equal(await page.locator('#action-items button:visible').count(), 2);
+  await page.getByRole('button', { name: '공유 코드' }).waitFor();
+  await page.getByRole('button', { name: '공유 코드' }).click();
+  await page.locator('#restore-panel').waitFor({ state: 'visible' });
+
+  await page.locator('#copy-progress-code').click();
+  const code = await page.locator('#backup-code').inputValue();
+  assert.match(code, /^DIG4R1\.[A-Za-z0-9_-]+\.[0-9a-f]{8}$/);
+  assert.equal(await page.evaluate(() => (window as Window & { __digClipboardText?: string }).__digClipboardText), code);
+
+  const saveKey = 'dig-4d-train-v1';
+  const beforeInvalidRestore = await page.evaluate((key) => localStorage.getItem(key), saveKey);
+  await page.locator('#restore-input').fill('not-a-valid-restore-code');
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.locator('#restore-submit').click();
+  await page.waitForFunction(() => document.querySelector('#restore-message')?.textContent?.includes('올바르지'));
+  assert.equal(await page.evaluate((key) => localStorage.getItem(key), saveKey), beforeInvalidRestore);
+
+  await page.evaluate(() => {
+    (window as Window & { __digFailClipboard?: boolean }).__digFailClipboard = true;
+  });
+  await page.locator('#restore-input').fill(code);
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.locator('#restore-submit').click();
+  await page.locator('#manual-copy-confirm').waitFor({ state: 'visible' });
+  assert.equal(await page.evaluate((key) => localStorage.getItem(key), saveKey), beforeInvalidRestore);
+
+  await page.locator('#manual-copy-confirm').click();
+  await page.waitForFunction(() => document.querySelector('#restore-message')?.textContent?.includes('복원했습니다'));
+  const restored = await page.evaluate((key) => localStorage.getItem(key), saveKey);
+  assert.ok(restored, 'restore should persist the validated train save');
+  assert.equal(JSON.parse(restored).version, 1);
+  assert.deepEqual(pageErrors, []);
+
+  const resetPage = await browser.newPage({ viewport: { width: 1000, height: 720 } });
+  await resetPage.goto('http://127.0.0.1:4173/dig/dig-4d.html');
+  await resetPage.waitForURL('**/versions/2026-11-25/dig-4d.html');
+  await resetPage.evaluate((key) => {
+    localStorage.setItem(key, JSON.stringify({
+      version: 1,
+      equipment: { drillEnhancement: 2, drillCount: 3 },
+      inventory: { rock: 0, coal: 4, iron: 0, gold: 0, rare: 0 },
+      research: [],
+      codex: [],
+    }));
+  }, saveKey);
+  await resetPage.reload();
+  await resetPage.getByRole('button', { name: '메뉴', exact: true }).click();
+  resetPage.once('dialog', async (dialog) => {
+    assert.match(dialog.message(), /처음부터 다시 시작/);
+    await dialog.accept();
+  });
+  await Promise.all([
+    resetPage.waitForNavigation(),
+    resetPage.getByRole('button', { name: '처음부터 다시 시작' }).click(),
+  ]);
+  assert.equal(await resetPage.evaluate((key) => localStorage.getItem(key), saveKey), null);
+  assert.equal(await resetPage.locator('#reconnect-line').isHidden(), true);
+  console.log('4D menu disclosure, share/restore and restart reset passed');
+  await resetPage.close();
+} finally {
+  await browser.close();
+}
