@@ -61,6 +61,29 @@ let safeStopUntil = 0, saveFailures = 0;
 // which runs only while the page is visible.
 const story = createDirector({get: k => localStorage.getItem(k), set: (k, v) => localStorage.setItem(k, v)});
 let storyClock = 0, storyUntil = 0, tradeSeenSince = null;
+// The trade drone is small enough for any portal: each trade sends it from the
+// hull into the nearest open entrance (or ahead, relaying) and back.
+let drones = [];
+const droneOut = 1.4, droneAway = 1.2;
+function launchDrone() {
+  const from = pos.map((v, i) => v + (i === 1 ? 0.6 : 0));
+  const gate = world.portals().filter(p => !p.exit).map(p => [p, Math.hypot(...p.point.map((v, i) => v - pos[i]))])
+    .filter(([, d]) => d < 40).sort((a, b) => a[1] - b[1])[0]?.[0];
+  const to = gate ? gate.point.slice() : offset(from, forward(yaw, pitch + 0.3), 6);
+  drones.push({from, to, at: age, gate: !!gate});
+}
+// Where each drone is now: out along its path, gone through the portal, then back.
+function dronePoints() {
+  const total = droneOut * 2 + droneAway;
+  drones = drones.filter(d => age - d.at < total);
+  return drones.flatMap(d => {
+    const t = age - d.at;
+    const k = t < droneOut ? t / droneOut : t < droneOut + droneAway ? null : 1 - (t - droneOut - droneAway) / droneOut;
+    if (k === null) return [];
+    const ease = k * k * (3 - 2 * k);
+    return [{point: d.from.map((v, i) => v + (d.to[i] - v) * ease + (i === 1 ? Math.sin(Math.PI * k) * 0.8 : 0)), blink: Math.floor(age * 6) % 2 === 0}];
+  });
+}
 let checkpointAge = 0;
 let hull = 100;
 let hazardVisible = false;
@@ -1017,6 +1040,7 @@ async function write(op, after) {
     if ((save.memoryLog?.length ?? 0) > (before.memoryLog?.length ?? 0)) story.emit('memory_recognized', 'film' + save.memoryLog.length);
     for (const id of (save.selfParts ?? []).filter(id => !before.selfParts?.includes(id))) story.emit('memory_recognized', 'part:' + id);
     for (const p of (save.finds ?? []).filter(p => findById(p.kind)?.category === 'alien' && !before.findLog?.includes(p.kind))) story.emit('life_found', p.kind);
+    if (['sell', 'buy', 'auction', 'bid', 'cancel-auction'].includes(type)) launchDrone();
     const had = new Set([...(before.specimens ?? []), ...(before.finds ?? [])].map(p => p.id));
     const freshFinds = (save.finds ?? []).filter(p => !had.has(p.id));
     if (freshFinds.length && type !== 'capture') {
@@ -1417,7 +1441,8 @@ function tick(dt) {
     write('checkpoint');
     return;
   }
-  const {push,damage,impactPoint} = world.hullContacts(dt,pos,velocity.map((v,i) => v+drift[i]),anchors.length > 0 && anchorMass(save));
+  const {push,damage,impactPoint,swallowed} = world.hullContacts(dt,pos,velocity.map((v,i) => v+drift[i]),anchors.length > 0 && anchorMass(save));
+  if (swallowed.length) message('튕겨낸 조각 ' + swallowed.length + '개가 포탈로 빨려 들어갔습니다');
   const hazard = world.sense(pos,dt,damage > 0);
   hazardVisible = hazard.visible;
   for (const [loss,cause,origin] of [[damage,'impact',impactPoint],
@@ -1573,6 +1598,7 @@ function frame(time) {
         light,
         anchors,
         chains: chainReach(),
+        drones: dronePoints(),
         contact, fracture, age,
         mounted: !!save?.front && save.drillCondition !== 0,
         minerals: !!save?.front,

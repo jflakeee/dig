@@ -513,3 +513,13 @@ test('some chunks hold a weak microgravity fixed by seed, chunk and generation; 
   const f = w.microgravity(at);
   assert.deepEqual(w.gravity(at, []), f.dir.map(v => v * f.strength));
 });
+
+test('small things pass any entrance opening from the front; exits let nothing in', async () => {
+  const { throughOpening } = await import('../next/world.js');
+  const gate = {point: [0, 0, 10], axis: 2, sign: 1, radius: 0.6, exit: false};
+  assert.equal(throughOpening(gate, [0, 0, 9.9], [0, 0, 10.1], 0), true);
+  assert.equal(throughOpening(gate, [0.5, 0, 9.9], [0.5, 0, 10.1], 0), true, 'a piece fits a small opening');
+  assert.equal(throughOpening(gate, [0.5, 0, 9.9], [0.5, 0, 10.1], 0.92), false, 'the machine does not');
+  assert.equal(throughOpening(gate, [0, 0, 10.1], [0, 0, 9.9], 0), false, 'not from behind');
+  assert.equal(throughOpening({...gate, exit: true}, [0, 0, 9.9], [0, 0, 10.1], 0), false);
+});
