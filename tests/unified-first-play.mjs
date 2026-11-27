@@ -220,6 +220,7 @@ try {
   assert.equal(await page.locator('#emergency').isVisible(),false);
   await page.locator('#menu').click();
   assert.equal(await page.locator('#repair').isVisible(),false);
+  await page.locator('#workshop summary').click();
   await page.locator('#fire-ceramic').click();
   await page.locator('#repair').waitFor();
   const fired = await read();
@@ -227,6 +228,7 @@ try {
   assert.equal(fired.ceramic,1);
   await page.reload();
   await page.locator('#menu').click();
+  await page.locator('#workshop summary').click();
   await page.locator('#repair').click();
   await page.waitForFunction(k => JSON.parse(localStorage.getItem(k)).drillCondition===100,key);
   assert.equal((await read()).ceramic,0);

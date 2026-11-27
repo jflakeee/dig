@@ -35,7 +35,19 @@
       <section id="panel" aria-label="메뉴" hidden>
         <output id="cargo"></output>
         <output id="materials"></output>
-        <output id="minerals"></output>
+        <details id="train" hidden>
+          <summary>화물 <span id="train-summary"></span></summary>
+          <p id="train-status"></p>
+          <ul id="cargo-list"></ul>
+          <button id="add-wagon">화물칸 연결</button>
+          <button id="remove-wagon" hidden>마지막 화물칸 분리</button>
+        </details>
+        <details id="workshop" hidden>
+          <summary>제작 <span id="craft-summary"></span></summary>
+          <ul id="craft-list"></ul>
+          <button id="fire-ceramic" hidden>세라믹 가열 <small>암석 3개</small></button>
+          <button id="repair" hidden>드릴 수리 <small>세라믹 1개</small></button>
+        </details>
         <details id="decomposer" hidden>
           <summary>분해기</summary>
           <label for="decompose-source">원료</label>
@@ -67,12 +79,6 @@
           <summary>원소 도감 <span id="element-count"></span></summary>
           <p id="element-list"></p>
         </details>
-        <details id="train" hidden>
-          <summary>화물 열차 <span id="train-summary"></span></summary>
-          <p id="train-status"></p>
-          <button id="add-wagon">화물칸 연결</button>
-          <button id="remove-wagon" hidden>마지막 화물칸 분리</button>
-        </details>
         <details id="trade" hidden>
           <summary>거래 드론 <span id="credits"></span></summary>
           <p id="trader"></p>
@@ -98,8 +104,6 @@
           <summary>발견 도감</summary>
           <ul id="discovery-list"></ul>
         </details>
-        <button id="fire-ceramic" hidden>세라믹 가열 <small>암석 3개</small></button>
-        <button id="repair" hidden>드릴 수리 <small>세라믹 1개</small></button>
         <button id="reset">처음부터 다시 시작</button>
         <div id="reset-prompt" hidden>
           <p>이 시험판의 기록을 지울까요?</p>

@@ -171,6 +171,21 @@ section {
 #panel {
   max-height: calc(100dvh - max(20px, env(safe-area-inset-top)) - 70px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+#cargo-list,
+#craft-list {
+  margin: 4px 0 12px;
+  padding-left: 20px;
+}
+#craft-list li {
+  margin-bottom: 6px;
+  color: #9aa6a2;
+}
+#craft-list li.ready {
+  color: #e4e9e5;
 }
 #discoveries summary {
   padding: 12px 0;
