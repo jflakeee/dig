@@ -235,6 +235,10 @@ section {
   padding-left: 20px;
 }
 /* Memory fragments are the machine's own recollection, set apart from work records. */
+#endings-seen {
+  margin: 8px 0 4px;
+  color: #b9c4c2;
+}
 #self-list {
   margin: 6px 0;
   padding-left: 20px;

@@ -14,7 +14,7 @@ export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 15;
+export const saveVersion = 16;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -53,6 +53,8 @@ export const migrations = {
   13: s => ({...s, wagons: [], wagonCount: 0, leftBehind: 0}),
   // Bids on lots other machines list; their credits stay reserved until the lot closes.
   14: s => ({...s, bids: []}),
+  // Endings seen across runs, and how many times memory was let go for a new run.
+  15: s => ({...s, endingsSeen: s.ending ? [s.ending] : [], cycles: 0}),
 };
 export const reservedCredits = s => (s.bids ?? []).reduce((n, b) => n + b.amount, 0);
 // A lot closes once the market clock passes the end of its cycle: a bid at or
@@ -273,6 +275,8 @@ const fresh = () => ({
   wagonCount: 0,
   leftBehind: 0,
   bids: [],
+  endingsSeen: [],
+  cycles: 0,
   session: null,
   arrivalRadius: 1.64,
   arrivalStrength: 2.8,
@@ -325,6 +329,8 @@ function validMinerals(s) {
     Number.isSafeInteger(s.leftBehind) && s.leftBehind >= 0 &&
     Array.isArray(s.bids) && s.bids.every(b => b && /^c\d+-\d+$/.test(b.lot) && Number.isSafeInteger(b.amount) && b.amount > 0) &&
     new Set(s.bids.map(b => b.lot)).size === s.bids.length && reservedCredits(s) <= s.credits &&
+    Array.isArray(s.endingsSeen) && s.endingsSeen.every(id => endingById(id)) && new Set(s.endingsSeen).size === s.endingsSeen.length &&
+    (s.ending === null || s.endingsSeen.includes(s.ending)) && Number.isSafeInteger(s.cycles) && s.cycles >= 0 &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
     new Set(s.elementLog).size === s.elementLog.length &&
     Array.isArray(s.specimens) && s.specimens.every(validPiece) &&
@@ -684,6 +690,16 @@ export async function commit(revision, operation, session) {
         else s.bids.push({lot: lot.id, amount});
         break;
       }
+      case 'new-cycle':
+        // Only memory starts over: body parts, read films, habits and this run's
+        // ending. Work records -- inventory, equipment, research, credits -- remain.
+        if (!s.ending) throw Error('엔딩을 본 뒤에 새 회차를 시작할 수 있습니다.');
+        s.selfParts = [];
+        s.memoryLog = [];
+        s.actions = {research: 0, equip: 0, repair: 0};
+        s.ending = null;
+        s.cycles++;
+        break;
       case 'reset':
         Object.assign(s, fresh(), { revision });
         break;
@@ -705,7 +721,10 @@ export async function commit(revision, operation, session) {
       const part = nextPart(s.selfParts, d.self);
       if (part) s.selfParts.push(part);
       // The last part brings back the last memory; the ending is fixed then.
-      if (part && s.selfParts.length === selfParts.length) s.ending = chooseEnding(s.actions);
+      if (part && s.selfParts.length === selfParts.length) {
+        s.ending = chooseEnding(s.actions);
+        if (!s.endingsSeen.includes(s.ending)) s.endingsSeen.push(s.ending);
+      }
     } else if (d?.kind === 'capsule') {
       const element = capsuleElement(d.sample, s.elementLog, s.capsuleMisses);
       s.capsuleMisses = s.elementLog.includes(element) ? s.capsuleMisses + 1 : 0;
