@@ -9,7 +9,7 @@ import { slots, slotOf, working as fittedAndWorking, drillInterval, sensorRange,
 import { studies, fragments } from './research.js';
 import { selfParts, recall, traderLook, lossNote, makerNote, finalMemory, deathEnding } from './self.js';
 import { endingById, endings } from './endings.js';
-import { trainLength, capacity, load, canCouple, wagonCost, safeLength, wagonsBeyondSafe } from './train.js';
+import { trainLength, capacity, load, canCouple, wagonCost, safeLength, wagonsBeyondSafe, speedFactor, carFill, machineLength, wagonLength } from './train.js';
 import { mineralIds, mineralName, variantName } from './minerals.js';
 import { elementSymbols } from './elements.js';
 import { specimenById, specimenLabel } from './specimens.js';
@@ -411,10 +411,11 @@ function showTrain() {
   if (!panel || box.hidden) return;
   const length = trainLength(save), next = length + 3;
   el('train-summary').textContent = '· ' + length + ' m · ' + load(save) + ' / ' + capacity(save);
+  const pace = Math.round(speedFactor(save) * 100);
   const risk = length > safeLength;
   el('train-status').classList.toggle('risk', risk);
   el('train-status').textContent = '화물칸 ' + save.wagons.length + '량 · 열차 ' + length + ' m / 안전 ' + safeLength + ' m · 광물 ' +
-    load(save) + ' / ' + capacity(save) + (save.leftBehind ? ' · 남겨 둔 광물 ' + save.leftBehind + '개' : '') +
+    load(save) + ' / ' + capacity(save) + ' · 전진 속도 ' + pace + '%' + (save.leftBehind ? ' · 남겨 둔 광물 ' + save.leftBehind + '개' : '') +
     (risk ? '\n16 m를 넘었습니다. 청크 경계를 지날 때 뒤쪽 화물칸 ' + wagonsBeyondSafe(save).length + '량과 그 화물을 잃을 수 있습니다.' : '') +
     (canCouple(save) ? '' : '\n화물칸을 연결하려면 화물 연결기를 장착해야 합니다.');
   const short = (save.minerals.iron ?? 0) < wagonCost.iron || save.rocks < wagonCost.rock;
@@ -423,6 +424,25 @@ function showTrain() {
     '화물칸 연결 · 철광 ' + wagonCost.iron + ' · 일반 암석 ' + wagonCost.rock + (next > safeLength ? ' · ' + next + ' m 경고' : '');
   el('remove-wagon').hidden = !save.wagons.length;
   el('remove-wagon').disabled = busy;
+}
+// A small diagram of the train at the bottom left: the spherical machine, then
+// each spherical wagon with its fill, cars past the 16 m safe length marked.
+function showTrainStrip() {
+  const strip = el('train-strip');
+  const wagons = save?.wagons?.length ?? 0;
+  strip.hidden = !save?.front || !wagons;
+  if (strip.hidden) return;
+  const fills = carFill(save);
+  const shape = fills.map(f => Math.round(f * 10)).join() + '|' + wagons;
+  if (strip.dataset.shape === shape) return;
+  strip.dataset.shape = shape;
+  strip.replaceChildren(...fills.map((f, i) => {
+    const car = document.createElement('span');
+    car.className = i === 0 ? 'car machine' : 'car' + (machineLength + wagonLength * i > safeLength ? ' risk' : '');
+    car.style.setProperty('--fill', f);
+    return car;
+  }));
+  strip.setAttribute('aria-label', '열차 ' + trainLength(save) + ' m · 광물 ' + load(save) + ' / ' + capacity(save));
 }
 // The machine's own recovered memory, one recollection per body part found.
 function showSelf() {
@@ -523,6 +543,7 @@ function hud() {
   showResearch();
   showSelf();
   showTrain();
+  showTrainStrip();
   if (!panel) {
     el('reset-prompt').hidden = true;
     el('reset').hidden = false;
@@ -662,7 +683,7 @@ async function write(op, after) {
       el('discovery-notice').textContent = text;
     }
     if ((save.leftBehind ?? 0) > (before.leftBehind ?? 0) && !(before.leftBehind > 0 && load(before) >= capacity(before)))
-      message('화물칸 가득 · 채굴한 광물을 그 자리에 남깁니다');
+      message('화물칸 가득 · 밀폐된 구체에 더 실을 수 없어 채굴한 광물을 그 자리에 남깁니다');
     const had = new Set([...(before.specimens ?? []), ...(before.finds ?? [])].map(p => p.id));
     const freshFinds = (save.finds ?? []).filter(p => !had.has(p.id));
     if (freshFinds.length && type !== 'capture') {
@@ -1040,7 +1061,7 @@ function tick(dt) {
   timer = 0;
   targetTag = '';
   velocity = velocity.map(
-    (n, i) => n + ((d[i] * 1.9 - n) * 3 + pull[i]) * dt,
+    (n, i) => n + ((d[i] * 1.9 * speedFactor(save) - n) * 3 + pull[i]) * dt,
   );
   // Turning redirects propulsion. Inertia and portal pull may deflect the hull
   // sideways, but never translate it behind its current heading.

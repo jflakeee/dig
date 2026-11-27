@@ -110,6 +110,33 @@ output {
 #message {
   margin-top: 8px;
 }
+/* Train diagram: machine first, then wagons; the fill shows the load. */
+#train-strip {
+  position: absolute;
+  left: max(12px, env(safe-area-inset-left));
+  bottom: max(84px, calc(env(safe-area-inset-bottom) + 60px));
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 3px;
+  pointer-events: none;
+}
+/* Every car, the machine included, is a sealed sphere; the fill rises from below. */
+#train-strip .car {
+  width: 13px;
+  height: 13px;
+  border: 1px solid #8a9694;
+  border-radius: 50%;
+  background: linear-gradient(to top, #c9a46a calc(var(--fill) * 100%), #0d1213 calc(var(--fill) * 100%));
+}
+#train-strip .car.machine {
+  width: 16px;
+  height: 16px;
+  border-color: #cfd8d6;
+}
+#train-strip .car.risk {
+  border-color: #ffb36b;
+}
 footer {
   bottom: max(24px, env(safe-area-inset-bottom));
   left: 0;
