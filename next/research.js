@@ -27,3 +27,26 @@ export const fragments = [
   '같은 날을 몇 번이고 다시 살았다. 그날이 언제였는지 묻는 사람은 이미 없었다.',
 ];
 export const canAnalyze = kind => !!studies[kind];
+// Research topics (docs/dig-4d-research-discovery-memory-detail-20261125.md 3):
+// studied on the market clock like analyses, one at a time; each unlocks a
+// recipe or a reading and never changes what a block or a trade yields.
+// [id, label, prerequisite, energy, element grams, seconds, unlock]. Trial values.
+const topicTable = [
+  ['mineral_assay', '광물 분석', null, 10, {Si: 3}, 30, '화물 목록에 광물별 주요 원소를 표시'],
+  ['ceramic_firing', '세라믹 가공 조건', 'mineral_assay', 15, {Al: 2, O: 4}, 40, '세라믹 가열에 일반 암석 3개 대신 2개'],
+  ['part_structure', '장비 부품 구조', 'mineral_assay', 20, {Fe: 5}, 60, '장비 정비 레시피: 철광 2·구리광 1로 장비 내구도 +40'],
+  ['portal_emission', '출구 방출물 성분', 'mineral_assay', 20, {Ni: 2}, 60, '방출물·부유물 충돌 피해 30% 감소(궤적 예측)'],
+];
+export const topics = Object.fromEntries(topicTable.map(([id, label, needs, energy, elements, seconds, unlock]) =>
+  [id, {id, label, needs, energy, elements, seconds, unlock}]));
+export const topicIds = Object.keys(topics);
+export const studied = (s, id) => !!s?.topics?.done.includes(id);
+export const freshTopics = () => ({done: [], job: null});
+export const validTopics = t => !!t && Array.isArray(t.done) && t.done.every(id => topics[id]) && new Set(t.done).size === t.done.length &&
+  t.done.every(id => !topics[id].needs || t.done.includes(topics[id].needs)) &&
+  (t.job === null || (!!topics[t.job?.id] && !t.done.includes(t.job.id) && Number.isFinite(t.job.endsAt))) && Object.keys(t).length === 2;
+// Unlocked effects.
+export const ceramicRocks = s => studied(s, 'ceramic_firing') ? 2 : 3;
+export const impactShare = s => studied(s, 'portal_emission') ? 0.7 : 1;
+export const maintainCost = {iron: 2, copper_ore: 1};
+export const maintainGain = 40;
