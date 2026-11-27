@@ -2,7 +2,7 @@ import { intersectStone } from './rock-shapes.js';
 import { cargoLoss } from './hazards.js';
 import { cargoNames } from './chunk-terrain.js';
 import { createWorld, forward, offset, portalRayDistance } from './world.js';
-import { upgrades, upgradeIds, upgradeCost, level, bodyRadius, cellsPerStroke, baseRadius } from './upgrades.js';
+import { upgrades, upgradeIds, upgradeCost, level, bodyRadius, cellsPerStroke, baseRadius, drillCount, drillSize } from './upgrades.js';
 import { readSave, commit, saveKey, fabricationMs, rocksPerCeramic, ceramicPerRepair, variantCounts, decompositionPreview, sellPrice, captureRule, reservedCredits } from './save.js';
 import { massText } from './composition.js';
 import { currency, marketCycle, cycleSeconds, auctionSeconds, traderOf, marketStock, auctionEstimate, lotsFor, lotById, visibleRival, minimumBid } from './trade.js';
@@ -943,11 +943,39 @@ el('confirm-reset').onclick = () => {
     message('');
   });
 };
+// Camera distance: a factor of the default that shows the machine and every
+// drill. Mouse wheel on PC, two-finger pinch on touch. Kept on this device.
+const zoomKey = 'dig-camera-zoom';
+let zoom = 1;
+try { zoom = Math.min(3, Math.max(0.4, Number(localStorage.getItem(zoomKey)) || 1)); } catch { /* storage may be blocked */ }
+function setZoom(value) {
+  zoom = Math.min(3, Math.max(0.4, value));
+  try { localStorage.setItem(zoomKey, String(zoom)); } catch { /* storage may be blocked */ }
+}
+const touches = new Map();
+let pinch = 0;
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  setZoom(zoom * Math.exp(e.deltaY * 0.0015));
+}, {passive: false});
 canvas.onpointerdown = (e) => {
-  pointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  touches.set(e.pointerId, [e.clientX, e.clientY]);
   canvas.setPointerCapture(e.pointerId);
+  if (touches.size === 2) {
+    pointer = null;
+    pinch = Math.hypot(...[...touches.values()].reduce((a, b) => [a[0] - b[0], a[1] - b[1]]));
+    return;
+  }
+  if (touches.size === 1) pointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
 };
 canvas.onpointermove = (e) => {
+  if (touches.has(e.pointerId)) touches.set(e.pointerId, [e.clientX, e.clientY]);
+  if (touches.size === 2 && pinch) {
+    const spread = Math.hypot(...[...touches.values()].reduce((a, b) => [a[0] - b[0], a[1] - b[1]]));
+    if (spread > 0) setZoom(zoom * pinch / spread);
+    pinch = spread;
+    return;
+  }
   if (!pointer || pointer.id !== e.pointerId) return;
   yaw += (e.clientX - pointer.x) * 0.008;
   pitch = Math.max(
@@ -960,8 +988,11 @@ canvas.onpointermove = (e) => {
 function releaseLook() {
   pointer = null;
 }
-canvas.onpointerup = releaseLook;
-canvas.onpointercancel = releaseLook;
+canvas.onpointerup = canvas.onpointercancel = (e) => {
+  touches.delete(e.pointerId);
+  if (touches.size < 2) pinch = 0;
+  releaseLook();
+};
 window.addEventListener('orientationchange', releaseLook);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
@@ -1197,6 +1228,9 @@ function frame(time) {
         minerals: !!save?.front,
         focus: !!fittedAndWorking(save, 'lamp'),
         working,
+        // Once a drill is mounted the camera stands back far enough for all drills.
+        body: save?.front ? {radius: bodyRadius(save), drills: drillCount(save), size: drillSize(save),
+          distance: (bodyRadius(save) * 2.4 + drillSize(save) * 1.2) * zoom} : null,
       },
       time / 1000,
     );
