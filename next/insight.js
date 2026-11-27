@@ -7,7 +7,7 @@ export const urgentRatio = 1.6;          // a purchase at 1.6x the base value or
 export const tradesForFaction = 30;
 export const maxTraces = 64;
 // What a sold or offered thing leaves as a trace.
-export const traceKey = t => t.mineral ? 'm:' + t.mineral : t.ceramic ? 'ceramic' : t.kind === 'capsule' ? 'capsule:' + t.element : t.kind;
+export const traceKey = t => t.mineral ? 'm:' + t.mineral : t.ceramic ? 'ceramic' : t.part ? 'part:' + t.part : t.kind === 'capsule' ? 'capsule:' + t.element : t.kind;
 export function addTrace(s, thing) {
   const key = traceKey(thing);
   if (!s.insight.traces.includes(key)) s.insight.traces = [key, ...s.insight.traces].slice(0, maxTraces);

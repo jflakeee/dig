@@ -1,6 +1,7 @@
 import { roll } from './roll.js';
 import { specimenById, capsuleOnly } from './specimens.js';
 import { findById } from './finds.js';
+import { parts } from './parts.js';
 // Drone trade with mining machines of other times (docs/dig-4d-trade-implementation-detail-20261125.md).
 // Every price, rate and duration here is a trial value.
 export const currency = '크레딧';
@@ -36,6 +37,8 @@ export function traderOf(seed, cycle) {
 export function valueOf(thing) {
   if (thing.mineral) return {group: 'mineral', base: mineralValue[thing.mineral] * (thing.count ?? 1)};
   if (thing.ceramic) return {group: 'equipment', base: 12};
+  // A salvaged part is worth its share of the item it came from.
+  if (thing.part) return parts[thing.part] ? {group: 'household', base: Math.max(1, Math.round(householdValue[parts[thing.part].item] * parts[thing.part].share))} : null;
   // Capsules and unknown materials sell at a little over a third of their auction estimate.
   if (thing.kind === 'capsule') return {group: 'specimen', base: Math.round(auctionEstimate(thing) * 0.35)};
   if (specimenById(thing.kind)) return {group: 'specimen', base: tierValue[specimenById(thing.kind).tier]};

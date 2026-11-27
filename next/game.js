@@ -18,6 +18,7 @@ import { endingById, endings, epilogue, allEndingsSeen, playable, endingCount } 
 import { portalCost, researchProgress } from './portal.js';
 import { createDirector, settings as storySettings } from './story.js';
 import { energyCap, energyCost } from './energy.js';
+import { parts, partIds, partsOf, mechanical, shardsPerCeramic, plateHull, partsPerMaintain, partCount } from './parts.js';
 // Whether the buffer covers an operation's energy, and a short reason when not.
 const powered = type => (save?.energy ?? energyCap) >= (energyCost[type] ?? 0);
 const lowPower = type => '에너지 부족 · 필요 ' + energyCost[type];
@@ -178,10 +179,12 @@ function decomposeChoices() {
     p => specimenLabel(p.kind, p.variant, p.element, p.form));
   count(save.finds ?? [], p => findPiece(p.kind, p.variant) && 'f:' + p.kind + ':' + p.variant,
     p => findLabel(p) + (findById(p.kind).setting ? ' (' + findById(p.kind).setting + ')' : ''));
+  for (const id of partIds) if (save.parts?.[id]) choices.push(['p:' + id, '부품 · ' + parts[id].name + ' · ' + save.parts[id] + '개']);
   return choices;
 }
 function decomposeOperation(value) {
   const [source, kind, variant] = value.split(':');
+  if (source === 'p') return {type: 'decompose', part: kind};
   if (source === 'm') return {type: 'decompose', mineral: kind, variant};
   if (source === 'f') return {type: 'decompose', find: kind, variant};
   return kind === 'capsule' ? {type: 'decompose', kind, element: variant} : {type: 'decompose', kind, variant};
@@ -206,6 +209,11 @@ function showDecomposer() {
     ' → 회수 ' + massText(result.kept) + ' · 손실 ' + massText(result.grams - result.kept) + ' (' + lossNote(recall(save)) + ')\n' + yieldText(result.out)
     : '분해할 원료가 없습니다.';
   el('decompose').disabled = !result || !powered('decompose');
+  // An everyday item can instead be taken apart into reusable parts, losing nothing.
+  const [src, kind, variant] = (choice?.[0] ?? '').split(':');
+  const got = src === 'f' ? partsOf(kind, variant) : [];
+  el('salvage').hidden = !got.length;
+  el('salvage').textContent = '부품으로 회수 · ' + got.map(id => parts[id].name).join(' + ') + ' (손실 없음)';
   el('decompose').textContent = powered('decompose') ? '원료 1개 분해 · 에너지 ' + energyCost.decompose : lowPower('decompose');
   const book = el('element-book');
   const log = save.elementLog ?? [];
@@ -232,6 +240,7 @@ function sellChoices() {
     groups.set(value, [(groups.get(value)?.[0] ?? 0) + 1, p]);
   }
   if (save.ceramic) choices.push(['c|ceramic|', '세라믹 · ' + save.ceramic + '개']);
+  for (const id of partIds) if (save.parts?.[id]) choices.push(['p|' + id + '|', '부품 · ' + parts[id].name + ' · ' + save.parts[id] + '개']);
   for (const p of save.finds) {
     const c = findById(p.kind).category;
     const value = 'f|' + p.kind + '|' + p.variant + (c === 'equipment' ? '|' + p.id : '');
@@ -401,7 +410,18 @@ function showTopics() {
   });
 }
 // Equipment maintenance appears once part structure is studied: every worn piece, fitted or stored.
+function showParts() {
+  const shards = partCount(save, ['ceramic_shard']), plates = partCount(save, ['light_plate']);
+  el('parts-title').hidden = !shards && !plates;
+  el('refire-shards').hidden = !shards;
+  el('refire-shards').textContent = '세라믹 파편 재소성 · 파편 ' + Math.min(shards, shardsPerCeramic) + '/' + shardsPerCeramic + ' → 세라믹 1개';
+  el('refire-shards').disabled = shards < shardsPerCeramic;
+  el('patch-hull').hidden = !plates;
+  el('patch-hull').textContent = '경량 판재로 기체 보강 · 기체 +' + plateHull + '% · 판재 ' + plates + '개';
+  el('patch-hull').disabled = hull >= 100;
+}
 function showMaintain() {
+  showParts();
   const on = studied(save, 'part_structure');
   el('maintain-title').hidden = !on;
   const pieces = on ? [...Object.values(save.equipment), ...save.finds].filter(p => p.durability !== undefined && p.durability < 100) : [];
@@ -413,7 +433,10 @@ function showMaintain() {
       const li = document.createElement('li');
       const act = Object.assign(document.createElement('button'), {textContent: '정비'});
       act.onclick = () => write({type: 'maintain', id}, () => message('장비 정비 완료'));
-      li.append(document.createElement('span'), ' ', act);
+      // Two salvaged mechanical parts can stand in for the minerals.
+      const alt = Object.assign(document.createElement('button'), {textContent: '기계 부품 ' + partsPerMaintain + '개로 정비'});
+      alt.onclick = () => write({type: 'maintain', id, parts: true}, () => message('부품으로 장비 정비 완료'));
+      li.append(document.createElement('span'), ' ', act, ' ', alt);
       return li;
     }));
     list.dataset.ids = rows.map(r => r[0]).join();
@@ -422,8 +445,11 @@ function showMaintain() {
   rows.forEach(([, text], i) => {
     const li = list.children[i];
     if (li.firstChild.textContent !== text) li.firstChild.textContent = text;
-    li.className = ok ? 'ready' : '';
-    li.lastChild.disabled = !ok;
+    const byParts = partCount(save, mechanical) >= partsPerMaintain && powered('maintain');
+    li.className = ok || byParts ? 'ready' : '';
+    li.children[1].disabled = !ok;
+    li.lastChild.disabled = !byParts;
+    li.lastChild.hidden = !partCount(save, mechanical);
   });
 }
 function showAutomation() {
@@ -740,6 +766,7 @@ function showTrain() {
   for (const p of save.finds) add('물품 · ' + pieceName(p));
   (save.cargo ?? []).forEach((n, i) => n && add('물품 · ' + cargoNames[i], n));
   if (save.ceramic) add('물품 · 세라믹', save.ceramic);
+  for (const id of partIds) if (save.parts?.[id]) add('부품 · ' + parts[id].name, save.parts[id]);
   const lines = [...minerals, ...Array.from(items, ([name, n]) => name + ' × ' + n)];
   if (!lines.length) lines.push('수집한 광물과 물품이 없습니다.');
   const list = el('cargo-list');
@@ -1047,7 +1074,7 @@ async function write(op, after) {
   hud();
   const type = op?.type ?? op;
   try {
-    let session = ['collect','drill','laser','repair','fire-ceramic','checkpoint','blast','pickup','capture','collect-ejected','repair-hull'].includes(type)
+    let session = ['collect','drill','laser','repair','fire-ceramic','checkpoint','blast','pickup','capture','collect-ejected','repair-hull','patch-hull'].includes(type)
       ? {hull, pos, velocity, drift, yaw, pitch, sensor, entered: world.portals().indexOf(entered), world: world.snapshot()}
       : null;
     if (op?.type === 'transit') {
@@ -1276,6 +1303,15 @@ el('equip-head').onclick = () => {
   const head = bestHead();
   if (head) write({type: 'equip-head', id: head.id}, () => message('드릴 헤드 교체 · 내구도 ' + save.drillCondition + '%'));
 };
+el('salvage').onclick = () => {
+  const [, find, variant] = (el('decompose-source').value ?? '').split(':');
+  write({type: 'salvage', find, variant}, () => message('부품 회수 · ' + partsOf(find, variant).map(id => parts[id].name).join(' · ')));
+};
+el('refire-shards').onclick = () => write('refire-shards', () => message('세라믹 파편 재소성 · 세라믹 1개'));
+el('patch-hull').onclick = () => write({type: 'patch-hull'}, () => {
+  hull = Math.min(100, hull + plateHull);
+  message('경량 판재로 기체 보강 · 기체 ' + Math.ceil(hull) + '%');
+});
 el('decompose').onclick = () => {
   const choice = decomposeChoices().find(([value]) => value === el('decompose-source').value);
   const result = choice && decompositionPreview(save, decomposeOperation(choice[0]));

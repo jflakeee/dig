@@ -21,11 +21,12 @@ import { portalCost, researchProgress } from './portal.js';
 import { energyCap, energyCost, energyGain, addEnergy, validEnergy } from './energy.js';
 import { topics, freshTopics, validTopics, studied, ceramicRocks, maintainCost, maintainGain } from './research.js';
 export { ceramicRocks };
+import { parts, partsOf, partPiece, mechanical, shardsPerCeramic, plateHull, partsPerMaintain, validParts, partCount, takeParts } from './parts.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
 export const saveKey = 'dig-unified-v1';
-export const saveVersion = 20;
+export const saveVersion = 21;
 // migrations[n] turns a version-n save into version n + 1. Add one entry per
 // schema change and bump saveVersion; readSave applies them in order.
 export const migrations = {
@@ -70,6 +71,7 @@ export const migrations = {
   17: s => ({...s, insight: freshInsight(), portalBuilt: false}),
   18: s => ({...s, energy: energyCap}),
   19: s => ({...s, topics: freshTopics()}),
+  20: s => ({...s, parts: {}}),
 };
 export const reservedCredits = s => (s.bids ?? []).reduce((n, b) => n + b.amount, 0);
 // A lot closes once the market clock passes the end of its cycle: a bid at or
@@ -191,6 +193,7 @@ function tradeTarget(s, op) {
   if (op?.source === 'm' && variants[op.kind] && (variantCounts(s, op.kind)[op.variant] ?? 0) > 0)
     return {thing: {mineral: op.kind}, key: 'm:' + op.kind, take: () => spendVariant(s, op.kind, op.variant)};
   if (op?.source === 'c' && (s.ceramic ?? 0) > 0) return {thing: {ceramic: true}, key: 'c', take: () => s.ceramic--};
+  if (op?.source === 'p' && (s.parts[op.kind] ?? 0) > 0) return {thing: {part: op.kind}, key: 'p:' + op.kind, take: () => takeParts(s, [op.kind], 1)};
   const list = op?.source === 's' ? s.specimens : op?.source === 'f' ? s.finds : null;
   const at = list ? list.findIndex(p => op.id ? p.id === op.id : p.kind === op.kind &&
     (p.kind === 'capsule' ? p.element === op.element : p.variant === op.variant)) : -1;
@@ -207,7 +210,10 @@ export function sellPrice(s, op) {
 // changing the save: input grams, the share lost and element grams out.
 export function decompositionPreview(s, operation) {
   let piece = null, key = null;
-  if (operation?.find) {
+  if (operation?.part) {
+    piece = (s.parts[operation.part] ?? 0) > 0 && partPiece(operation.part);
+    key = 'part:' + operation.part;
+  } else if (operation?.find) {
     const p = s.finds.find(q => q.kind === operation.find && q.variant === operation.variant);
     piece = p && findPiece(p.kind, p.variant);
     key = 'find:' + operation.find + ':' + operation.variant;
@@ -350,6 +356,7 @@ const fresh = () => ({
   portalBuilt: false,
   energy: energyCap,
   topics: freshTopics(),
+  parts: {},
   cycles: 0,
   session: null,
   arrivalRadius: 1.64,
@@ -405,7 +412,7 @@ function validMinerals(s) {
     Array.isArray(s.bids) && s.bids.every(b => b && /^c\d+-\d+$/.test(b.lot) && Number.isSafeInteger(b.amount) && b.amount > 0) &&
     new Set(s.bids.map(b => b.lot)).size === s.bids.length && reservedCredits(s) <= s.credits &&
     validUpgrades(s.upgrades) && validAutomation(s.automation) &&
-    Number.isSafeInteger(s.gambleCount) && s.gambleCount >= 0 && validGambleLog(s.gambleLog) && validInsight(s.insight) && typeof s.portalBuilt === 'boolean' && validEnergy(s.energy) && validTopics(s.topics) &&
+    Number.isSafeInteger(s.gambleCount) && s.gambleCount >= 0 && validGambleLog(s.gambleLog) && validInsight(s.insight) && typeof s.portalBuilt === 'boolean' && validEnergy(s.energy) && validTopics(s.topics) && validParts(s.parts) &&
     Array.isArray(s.endingsSeen) && s.endingsSeen.every(id => endingById(id)) && new Set(s.endingsSeen).size === s.endingsSeen.length &&
     (s.ending === null || s.endingsSeen.includes(s.ending)) && Number.isSafeInteger(s.cycles) && s.cycles >= 0 &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
@@ -739,7 +746,8 @@ function step(s, operation, session) {
         // One piece leaves and its element grams, less the decomposer's loss, arrive in the same save.
         const result = s.front && decompositionPreview(s, operation);
         if (!result) throw Error('분해할 원료가 없습니다.');
-        if (operation.find) s.finds.splice(s.finds.findIndex(q => q.kind === operation.find && q.variant === operation.variant), 1);
+        if (operation.part) takeParts(s, [operation.part], 1);
+        else if (operation.find) s.finds.splice(s.finds.findIndex(q => q.kind === operation.find && q.variant === operation.variant), 1);
         else if (operation.kind) s.specimens.splice(s.specimens.findIndex(q => q.kind === operation.kind &&
           (q.kind === 'capsule' ? q.element === operation.element : q.variant === operation.variant)), 1);
         else spendVariant(s, operation.mineral, operation.variant);
@@ -901,13 +909,40 @@ function step(s, operation, session) {
         s.topics.job = {id: t.id, endsAt: s.marketTime + t.seconds};
         break;
       }
+      case 'salvage': {
+        // Taking an everyday item apart into parts: mechanical, nothing lost.
+        const at = s.finds.findIndex(q => q.kind === operation?.find && q.variant === operation.variant);
+        const got = at >= 0 ? partsOf(operation.find, operation.variant) : [];
+        if (!s.front || !got.length) throw Error('부품으로 나눌 물품이 없습니다.');
+        s.finds.splice(at, 1);
+        for (const id of got) s.parts[id] = (s.parts[id] ?? 0) + 1;
+        break;
+      }
+      case 'refire-shards':
+        if (!s.front || partCount(s, ['ceramic_shard']) < shardsPerCeramic) throw Error('세라믹 파편이 부족합니다.');
+        takeParts(s, ['ceramic_shard'], shardsPerCeramic);
+        s.ceramic = (s.ceramic ?? 0) + 1;
+        break;
+      case 'patch-hull': {
+        // A light plate patches the hull; the save sets the patched hull.
+        if (!s.front || !session || partCount(s, ['light_plate']) < 1 || (session.hull ?? 100) >= 100) throw Error('기체를 덧댈 수 없습니다.');
+        takeParts(s, ['light_plate'], 1);
+        session.hull = Math.min(100, (session.hull ?? 100) + plateHull);
+        break;
+      }
       case 'maintain': {
         // Equipment maintenance, unlocked by studying part structure.
         const piece = s.finds.find(p => p.id === operation?.id) ?? Object.values(s.equipment).find(p => p.id === operation?.id);
         if (!s.front || !studied(s, 'part_structure') || piece?.durability === undefined || piece.durability >= 100)
           throw Error('정비할 장비가 없습니다.');
-        if (!affords(s, maintainCost)) throw Error('정비 재료가 부족합니다.');
-        for (const [id, n] of Object.entries(maintainCost)) spendMineral(s, id, n);
+        // Two salvaged mechanical parts can stand in for the minerals.
+        if (operation.parts) {
+          if (partCount(s, mechanical) < partsPerMaintain) throw Error('정비 재료가 부족합니다.');
+          takeParts(s, mechanical, partsPerMaintain);
+        } else {
+          if (!affords(s, maintainCost)) throw Error('정비 재료가 부족합니다.');
+          for (const [id, n] of Object.entries(maintainCost)) spendMineral(s, id, n);
+        }
         piece.durability = Math.min(100, piece.durability + maintainGain);
         break;
       }
