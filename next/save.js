@@ -17,6 +17,7 @@ import { automations, fresh as freshAutomation, validAutomation } from './automa
 import { winChance, maxPieces, baseValue, validMultiple, validGambleLog } from './gamble.js';
 import { valueOf } from './trade.js';
 import { fresh as freshInsight, validInsight, addTrace, traceKey, urgentRatio } from './insight.js';
+import { portalCost, researchProgress } from './portal.js';
 export const rocksPerCeramic = 3;
 export const ceramicPerRepair = 1;
 export const fabricationMs = 3000;
@@ -63,7 +64,7 @@ export const migrations = {
   // Endings seen across runs, and how many times memory was let go for a new run.
   15: s => ({...s, endingsSeen: s.ending ? [s.ending] : [], cycles: 0}),
   16: s => ({...s, upgrades: {body: 0, wagon: 0, drills: 0, bore: 0}, automation: freshAutomation(), gambleCount: 0, gambleLog: []}),
-  17: s => ({...s, insight: freshInsight()}),
+  17: s => ({...s, insight: freshInsight(), portalBuilt: false}),
 };
 export const reservedCredits = s => (s.bids ?? []).reduce((n, b) => n + b.amount, 0);
 // A lot closes once the market clock passes the end of its cycle: a bid at or
@@ -334,6 +335,7 @@ const fresh = () => ({
   gambleCount: 0,
   gambleLog: [],
   insight: freshInsight(),
+  portalBuilt: false,
   cycles: 0,
   session: null,
   arrivalRadius: 1.64,
@@ -389,7 +391,7 @@ function validMinerals(s) {
     Array.isArray(s.bids) && s.bids.every(b => b && /^c\d+-\d+$/.test(b.lot) && Number.isSafeInteger(b.amount) && b.amount > 0) &&
     new Set(s.bids.map(b => b.lot)).size === s.bids.length && reservedCredits(s) <= s.credits &&
     validUpgrades(s.upgrades) && validAutomation(s.automation) &&
-    Number.isSafeInteger(s.gambleCount) && s.gambleCount >= 0 && validGambleLog(s.gambleLog) && validInsight(s.insight) &&
+    Number.isSafeInteger(s.gambleCount) && s.gambleCount >= 0 && validGambleLog(s.gambleLog) && validInsight(s.insight) && typeof s.portalBuilt === 'boolean' &&
     Array.isArray(s.endingsSeen) && s.endingsSeen.every(id => endingById(id)) && new Set(s.endingsSeen).size === s.endingsSeen.length &&
     (s.ending === null || s.endingsSeen.includes(s.ending)) && Number.isSafeInteger(s.cycles) && s.cycles >= 0 &&
     Array.isArray(s.elementLog) && s.elementLog.every(symbol => elementSymbols.includes(symbol)) &&
@@ -849,6 +851,20 @@ function step(s, operation, session) {
         }
         s.gambleLog.unshift({win, category, id, multiple, stake});
         s.gambleLog.length = Math.min(s.gambleLog.length, 10);
+        break;
+      }
+      case 'build-portal': {
+        // The last design of research. Building it shows where all of this began.
+        if (!s.front || !researchProgress(s).done) throw Error('연구가 아직 끝나지 않았습니다.');
+        if (s.credits - reservedCredits(s) < portalCost.credits) throw Error('크레딧이 부족합니다.');
+        for (const [e, g] of Object.entries(portalCost.elements)) if ((s.elements[e] ?? 0) < g) throw Error('포탈 제작에 필요한 원소가 부족합니다.');
+        s.credits -= portalCost.credits;
+        for (const [e, g] of Object.entries(portalCost.elements)) {
+          s.elements[e] -= g;
+          if (s.elements[e] <= 1e-12) delete s.elements[e];
+        }
+        s.portalBuilt = true;
+        if (!s.endingsSeen.includes('portal')) s.endingsSeen.push('portal');
         break;
       }
       case 'automation-switch': {
