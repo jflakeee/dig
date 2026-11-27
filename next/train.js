@@ -1,5 +1,7 @@
 import { working } from './equipment.js';
 // Cargo train (docs/dig-4d-train-cargo-chunk-transition-detail-20261125.md).
+// Every wagon is a sealed spherical machine like the miner itself: cargo
+// never spills from it; once full, it simply takes nothing more.
 // Mined minerals are the cargo; specimens, finds and elements ride in the
 // drone hold and storage and do not count. All numbers are trial values.
 export const machineLength = 2;      // metres

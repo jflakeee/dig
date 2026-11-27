@@ -425,8 +425,8 @@ function showTrain() {
   el('remove-wagon').hidden = !save.wagons.length;
   el('remove-wagon').disabled = busy;
 }
-// A small diagram of the train at the bottom left: the machine, then each
-// wagon with its fill, cars past the 16 m safe length marked.
+// A small diagram of the train at the bottom left: the spherical machine, then
+// each spherical wagon with its fill, cars past the 16 m safe length marked.
 function showTrainStrip() {
   const strip = el('train-strip');
   const wagons = save?.wagons?.length ?? 0;
@@ -683,7 +683,7 @@ async function write(op, after) {
       el('discovery-notice').textContent = text;
     }
     if ((save.leftBehind ?? 0) > (before.leftBehind ?? 0) && !(before.leftBehind > 0 && load(before) >= capacity(before)))
-      message('화물칸 가득 · 채굴한 광물을 그 자리에 남깁니다');
+      message('화물칸 가득 · 밀폐된 구체에 더 실을 수 없어 채굴한 광물을 그 자리에 남깁니다');
     const had = new Set([...(before.specimens ?? []), ...(before.finds ?? [])].map(p => p.id));
     const freshFinds = (save.finds ?? []).filter(p => !had.has(p.id));
     if (freshFinds.length && type !== 'capture') {

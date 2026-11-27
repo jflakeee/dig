@@ -117,19 +117,21 @@ output {
   bottom: max(84px, calc(env(safe-area-inset-bottom) + 60px));
   display: flex;
   flex-direction: row-reverse;
+  align-items: center;
   gap: 3px;
   pointer-events: none;
 }
+/* Every car, the machine included, is a sealed sphere; the fill rises from below. */
 #train-strip .car {
-  width: 18px;
-  height: 10px;
+  width: 13px;
+  height: 13px;
   border: 1px solid #8a9694;
-  border-radius: 2px;
-  background: linear-gradient(to right, #c9a46a calc(var(--fill) * 100%), #0d1213 calc(var(--fill) * 100%));
+  border-radius: 50%;
+  background: linear-gradient(to top, #c9a46a calc(var(--fill) * 100%), #0d1213 calc(var(--fill) * 100%));
 }
 #train-strip .car.machine {
-  width: 12px;
-  border-radius: 50%;
+  width: 16px;
+  height: 16px;
   border-color: #cfd8d6;
 }
 #train-strip .car.risk {
