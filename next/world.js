@@ -36,6 +36,13 @@ export function portalRayDistance(portal, pos, ray, limit) {
 const side = 32;
 const chunkOf = (cell) => Math.floor((cell + 15) / side);
 export const microgravityChance = 0.25;
+// Portals no longer wait for a cleared face: a new chunk rolls once whether a
+// portal will open on one of its faces, and when. For the last minute before
+// it opens the forming portal reads on the sensor as microgravity and pulls
+// weakly. Trial values.
+export const portalChance = 0.35;
+export const portalDelay = [60, 360];     // seconds after the chunk first appears
+export const formingSeconds = 60;
 const pourInterval = 0.25; // seconds between minerals pouring out after arrival
 // The chunk coordinate and bit index that own a voxel.
 export function cellOwner(x, y, z) {
@@ -77,6 +84,8 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
       const kind = terrainKind(terrainRandom(id + ':kind'));
       cached = makeChunk(cx, cy, cz, kind, kind === 'rock' ? 0 : Math.floor(terrainRandom(id + ':seed') * 0x100000000));
       cached.epoch = epoch;
+      // The guaranteed tutorial entrance stands alone in its chunk.
+      if (!(tutorial && !cx && !cy && !cz)) schedulePortal(cached, [cx, cy, cz], id + ':portal:');
       let draw = 0;
       if (!tutorial && hasMouth && cx===0 && cy===0 && cz===0 && !saved)
         cached.hazard = arrivalHazard(() => terrainRandom(id + ':hazard:' + draw++));
@@ -87,9 +96,15 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
   function localIndex(x, y, z) {
     return (((x + 15) & 31) * side + ((y + 15) & 31)) * side + ((z + 15) & 31);
   }
-  // cause: 'initial' (empty from generation), 'mined' (player excavation) or
-  // 'debris' (portal detachment). Only mined faces open the six-face window.
-  function scheduleFace(chunk, owner, axis, sign, cause) {
+  // A chunk's one random portal: whether, which face, and when it opens.
+  function schedulePortal(chunk, owner, id) {
+    if (random(id + 'chance') >= portalChance) return;
+    const face = Math.floor(random(id + 'face') * 6);
+    const ready = elapsed + portalDelay[0] + random(id + 'delay') * (portalDelay[1] - portalDelay[0]);
+    scheduleFace(chunk, owner, Math.floor(face / 2), face % 2 ? 1 : -1, 'random', ready);
+  }
+  // A face portal's opening: size, place on the face, strength. `ready` is when it opens.
+  function scheduleFace(chunk, owner, axis, sign, cause, ready) {
       const id = owner.join(',') + ':' + (chunk.epoch ?? 0) + ':face' + (axis * 2 + Number(sign > 0)) + ':';
       const point = owner.map(n => n * side + 1);
       point[axis] += sign * side / 2;
@@ -98,41 +113,23 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
         if (i !== axis) point[i] += Math.floor(random(id + 'offset' + i) * (side - width + 1)) - (side - width) / 2;
       chunk.faces.push({point, axis, sign, chunk: owner, exit: false,
         radius: width / 2, strength: 0.8 + random(id + 'strength') * 4,
-        ready: elapsed + 301 + random(id + 'delay') * 59, cleared: elapsed, cause});
+        ready, cleared: elapsed, cause});
   }
   function enter(chunk) {
     if (chunk.entered) return;
     chunk.entered = true;
-    if (chunk.kind !== 'empty' && chunk.kind !== 'warehouse') return;
-    const owner = [chunk.x,chunk.y,chunk.z];
-    for (let axis=0; axis<3; axis++)
-      for (const sign of [-1,1]) scheduleFace(chunk, owner, axis, sign, 'initial');
   }
   function dig(x, y, z, mined = true) {
     const chunk = chunkAt(x, y, z, true);
     const index = localIndex(x, y, z);
     if (!naturalSolid(chunk,x,y,z) || chunk.air.has(index)) return;
     chunk.air.add(index);
-    const priorFaces = chunk.faces.length;
+    // Face counts are still kept for saves, but clearing a face no longer opens anything.
     const coords = [x, y, z];
-    const owner = [chunk.x, chunk.y, chunk.z];
     for (let axis = 0; axis < 3; axis++) {
       const local = (coords[axis] + 15) & 31;
       if (local !== 0 && local !== side - 1) continue;
-      const sign = local === 0 ? -1 : 1;
-      const face = axis * 2 + Number(sign > 0);
-      if (--chunk.remaining[face] !== 0) continue;
-      scheduleFace(chunk, owner, axis, sign, mined ? 'mined' : 'debris');
-    }
-    // Saves written before `cause` existed count every face as mined.
-    const firstMined = chunk.faces.find(f => (f.cause ?? 'mined') === 'mined');
-    if (mined && priorFaces < 6 && chunk.faces.length === 6 && !chunk.linked &&
-        firstMined && elapsed - firstMined.cleared <= 300) {
-      chunk.linked = true;
-      for (const face of chunk.faces) {
-        const adjacent = owner.map((n, i) => n + (i === face.axis ? face.sign : 0));
-        chunkAt(...adjacent.map(n => n * side), true);
-      }
+      chunk.remaining[axis * 2 + Number(local !== 0)]--;
     }
     return true;
   }
@@ -197,9 +194,21 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
     return f;
   }
   // The field at a point: a varied field bends its direction smoothly with position.
+  // A portal forming in this chunk during its last minute: direction toward
+  // where it will open, and a pull that grows to a fifth of its strength.
+  function forming(p) {
+    const key = p.map(v => chunkOf(Math.floor(v))).join(',');
+    const chunk = chunks.get(key);
+    const face = chunk?.faces.find(f => elapsed < f.ready && elapsed >= f.ready - formingSeconds);
+    if (!face) return null;
+    const gap = face.point.map((v, i) => v - p[i]);
+    const distance = Math.hypot(...gap) || 1;
+    const progress = 1 - (face.ready - elapsed) / formingSeconds;
+    return {dir: gap.map(v => v / distance), strength: face.strength * 0.2 * progress, seconds: face.ready - elapsed, forming: true};
+  }
   function microgravity(p) {
     const f = field(...p.map(v => chunkOf(Math.floor(v))));
-    if (!f) return null;
+    if (!f) return forming(p);
     let dir = f.dir;
     if (f.varied) {
       dir = dir.map((v, i) => v + 0.5 * Math.sin(p[(i + 1) % 3] / 5));
@@ -210,8 +219,8 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
   }
   function gravity(p, active = portals()) {
     const pull = [0, 0, 0];
-    const micro = microgravity(p);
-    if (micro) for (let i = 0; i < 3; i++) pull[i] += micro.dir[i] * micro.strength;
+    const micro = microgravity(p), shaping = micro && !micro.forming ? forming(p) : null;
+    for (const f of [micro, shaping]) if (f) for (let i = 0; i < 3; i++) pull[i] += f.dir[i] * f.strength;
     for (const portal of active) {
       if (!portal.chunk.every((n, i) => chunkOf(Math.floor(p[i])) === n)) continue;
       const gap = portal.point.map((v, i) => v - p[i]);
@@ -461,7 +470,7 @@ export function createWorld(tutorial, random, arrivalRadius = 1.64, arrivalStren
     sense(pos,dt,shock) { return senseHazard(this.hazard,pos,dt,trace,shock); },
     advance(dt) { elapsed += dt; },
     hullContacts, debrisStep, fragments, snapshot, portals, gravity, warehouseItems, takeNearby,
-    ejected, syncEjected, takeEjected, setBody, microgravity,
+    ejected, syncEjected, takeEjected, setBody, microgravity, forming,
     hasChunk(x, y, z) { return chunks.has([x, y, z].join(',')); },
     tutorial,
     solid,
