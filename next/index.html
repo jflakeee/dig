@@ -102,10 +102,11 @@
           <output id="portal-preview"></output>
           <button id="build-portal" hidden>포탈 제작</button>
           <ul id="research-list"></ul>
-          <details id="memory-book" hidden>
-            <summary>관측 기록</summary>
-            <ul id="memory-list"></ul>
-          </details>
+        </details>
+        <!-- Observation records: a top-level record, not nested inside research. -->
+        <details id="memory-book" data-tab="record" hidden>
+          <summary>관측 기록</summary>
+          <ul id="memory-list"></ul>
         </details>
         <details id="self-book" data-tab="record" hidden>
           <summary>자기 기억 <span id="self-count"></span></summary>
