@@ -6,6 +6,7 @@
 // Called with the same state object as view.js; game logic is untouched.
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { identify } from './chunk-terrain.js';
 import { stoneCount, stoneVariant, stonePlanes } from './rock-shapes.js';
 import { mineralTint } from './minerals.js';
@@ -53,28 +54,58 @@ export function createView3d(canvas) {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(theme.void);
-  scene.fog = new THREE.Fog(theme.void, 6, reach + 4);
+  // Exponential fog in a very dark dust colour: distance fades, never a wall.
+  scene.fog = new THREE.FogExp2(0x07090a, 0.075);
   const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 60);
   scene.add(camera, new THREE.AmbientLight(0xb8c4d0, 0.02));
 
-  // Work lamps: two wide floods and the core beam, which casts shadows.
-  const lamp = (angle, penumbra, shadow) => {
-    const l = new THREE.SpotLight(theme.lamp, 0, reach + 6, angle, penumbra, 1.4);
-    l.castShadow = shadow;
-    if (shadow) {
-      l.shadow.mapSize.set(512, 512);
-      l.shadow.bias = -0.0015;
-      l.shadow.camera.near = 0.2;
-    }
-    scene.add(l, l.target);
-    return l;
-  };
-  const lamps = [lamp(0.75, 0.9, false), lamp(0.7, 0.9, false), lamp(0.32, 0.55, true)];
+  // The work lamp: one wide spotlight that casts shadows, so nothing behind rock
+  // is lit. A cookie keeps the old look: a bright core beam inside dimmer
+  // floods. The three intro stages (left, right, core) fade in as its brightness.
+  const cookie = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d'), grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, '#fff');
+    grad.addColorStop(0.3, '#fff');
+    grad.addColorStop(0.46, '#3c3c3c');
+    grad.addColorStop(0.8, '#161616');
+    grad.addColorStop(1, '#000');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  const workLamp = new THREE.SpotLight(theme.lamp, 0, reach + 8, 0.75, 0.35, 1.4);
+  workLamp.map = cookie;
+  workLamp.castShadow = true;
+  workLamp.shadow.mapSize.set(512, 512);
+  workLamp.shadow.bias = -0.0015;
+  workLamp.shadow.camera.near = 0.2;
+  scene.add(workLamp, workLamp.target);
+  // A faint additive cone shows the beam in the dust; it stops short of the walls.
+  const beam = new THREE.Mesh(new THREE.ConeGeometry(1.1, 3.2, 24, 1, true).translate(0, -1.6, 0).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({color: theme.lamp, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false}));
+  scene.add(beam);
+  const lavaLight = new THREE.PointLight(theme.lava, 0, 4, 2);
+  scene.add(lavaLight);
   const heatLight = new THREE.PointLight(theme.heat, 0, 4, 1.6);
   scene.add(heatLight);
 
   // Terrain: one instanced mesh per stone variant, only cells that face open air.
   const stoneMaterial = new THREE.MeshStandardMaterial({roughness: 0.93, metalness: 0.02, flatShading: true});
+  // Fine colour grain on every stone, from its world position: cheap detail without textures.
+  stoneMaterial.onBeforeCompile = shader => {
+    shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vStoneWorld;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvStoneWorld = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>
+      varying vec3 vStoneWorld;
+      float stoneHash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+      vec3 grain = floor(vStoneWorld * 9.0);
+      diffuseColor.rgb *= 0.86 + 0.28 * stoneHash(grain) + 0.06 * stoneHash(floor(vStoneWorld * 2.5));`);
+  };
   const stones = Array.from({length: stoneCount}, (_, v) => {
     const mesh = new THREE.InstancedMesh(stoneGeometry(v), stoneMaterial, 256);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -150,7 +181,9 @@ export function createView3d(canvas) {
         float rim = exp(-8.0 * abs(dist - 2.48)) * 85.0;
         float value = (e.y > ridge ? 30.0 + e.y * 13.0 : 15.0 + 10.0 * sin(e.y * 15.0 + e.x * 3.0 + time)) + rim;
         vec3 tint = era < 0.5 ? vec3(0.75, 1.29, 1.36) : era < 1.5 ? vec3(1.42, 1.03, 0.73) : vec3(0.81, 1.1, 1.53);
-        gl_FragColor = vec4(value * tint / 255.0, 1.0);
+        gl_FragColor = vec4(pow(value * tint / 255.0, vec3(2.2)), 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
       }`,
   });
   const eraTint = [[0.75 / 1.36, 1.29 / 1.36, 1], [1, 1.03 / 1.42, 0.73 / 1.42], [0.81 / 1.53, 1.1 / 1.53, 1]];
@@ -186,6 +219,12 @@ export function createView3d(canvas) {
   const rim = new THREE.Mesh(new THREE.TorusGeometry(1, 0.018, 6, 64), new THREE.MeshStandardMaterial({color: 0xc7d0ca, metalness: 0.8, roughness: 0.3}));
   const drillGeometry = new THREE.ConeGeometry(0.24, 0.55, 7).rotateX(Math.PI / 2).translate(0, 0, 0.275);
   const drillMaterial = new THREE.MeshStandardMaterial({color: theme.drill, metalness: 0.9, roughness: 0.32});
+  // A faint studio reflection on the machine's metal only; the scene and the rock get none.
+  const machineEnv = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+  for (const m of [drillMaterial, hull.material, rim.material]) {
+    m.envMap = machineEnv;
+    m.envMapIntensity = 0.08;
+  }
   const brokenMaterial = new THREE.MeshStandardMaterial({color: 0x4a3b33, metalness: 0.5, roughness: 0.7});
   const drills = [];
   scene.add(hull, rim);
@@ -290,16 +329,16 @@ export function createView3d(canvas) {
       built = {version: world.version, cell, at: now, world, minerals};
     }
 
-    // Lamps ride on the machine and follow the view; the core narrows with a focusing lamp.
-    const aim = [[-0.22, 0.06], [0.24, -0.1], [0, 0]];
-    lamps.forEach((l, k) => {
-      l.position.set(center[0] + up[0] * 0.3, center[1] + up[1] * 0.3, center[2] + up[2] * 0.3);
-      const [u, vv] = aim[k];
-      l.target.position.set(...center.map((n, i) => n + (d[i] + right[i] * u + up[i] * vv) * 4));
-      l.intensity = light[k] * (k === 2 ? (focus ? 70 : 40) : 16);
-    });
-    lamps[2].angle = focus ? 0.22 : 0.32;
-    lamps[2].distance = focus ? reach + 12 : reach + 6;
+    // The lamp rides on the machine and follows the view; a focusing lamp narrows it and reaches further.
+    workLamp.position.set(center[0] + up[0] * 0.3, center[1] + up[1] * 0.3, center[2] + up[2] * 0.3);
+    workLamp.target.position.set(...center.map((n, i) => n + d[i] * 4));
+    workLamp.intensity = (light[0] * 0.25 + light[1] * 0.25 + light[2] * 0.5) * (focus ? 70 : 42);
+    workLamp.angle = focus ? 0.5 : 0.75;
+    workLamp.distance = focus ? reach + 14 : reach + 8;
+    beam.position.copy(workLamp.position);
+    beam.lookAt(workLamp.target.position);
+    beam.scale.setScalar(focus ? 0.7 : 1);
+    beam.material.opacity = 0.05 * light[2];
 
     showPortals(world, center);
     portalMaterial.uniforms.time.value = now;
@@ -357,6 +396,10 @@ export function createView3d(canvas) {
       hazard.material.color.set(hz.kind === 'lava' ? theme.lava : theme.unstable);
       hazard.material.emissive.set(hz.kind === 'lava' ? theme.lava : theme.unstable);
     }
+    // Lava lights its surroundings with a short, flickering glow.
+    const lava = hazard.visible && hz.kind === 'lava';
+    lavaLight.intensity = lava ? 3 * (0.8 + 0.2 * Math.sin(now * 13) * Math.sin(now * 7.3)) : 0;
+    if (lava) lavaLight.position.set(...hz.point);
     let n = 0;
     for (const part of world.fragments()) {
       if (n >= 96) break;
@@ -409,7 +452,7 @@ export function createView3d(canvas) {
     attr.needsUpdate = true;
     dust.material.opacity = 0.45 * light[0];
 
-    const core = lamps[2];
+    const core = workLamp;
     if (core.position.distanceToSquared(lastLamp) > 1e-6 || core.target.position.distanceToSquared(lastAim) > 1e-6) {
       shadowDirty = true;
       lastLamp.copy(core.position);
