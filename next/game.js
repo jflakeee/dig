@@ -150,9 +150,13 @@ function loadWorld() {
   timer = 0;
   targetTag = '';
 }
+// A notice stays up a few seconds, longer for longer text, then fades.
+let messageUntil = 0;
 function message(text) {
   el('message').textContent = text;
+  messageUntil = age + 4 + text.length * 0.04;
 }
+const fade = (node, visible) => node.classList.toggle('shown', visible);
 function showDiscoveries() {
   const book = el('discoveries');
   const entries = save?.discoveries ?? [];
@@ -628,7 +632,7 @@ function showStory(dt) {
     storyUntil = storyClock + storySettings.showSeconds;
   }
   const visible = storyClock < storyUntil;
-  if (out.hidden === visible) out.hidden = !visible;
+  fade(out, visible);
 }
 function showResearch() {
   const box = el('research');
@@ -1101,7 +1105,8 @@ function hud() {
     );
     marker.classList.toggle('offscreen', mark.offscreen);
     marker.style.left = mark.x + 'px';
-    marker.style.top = mark.y + 'px';
+    // Kept clear of the header and quick bar above and the buttons below.
+    marker.style.top = Math.min(Math.max(mark.y, 150), canvas.clientHeight - 110) + 'px';
     marker.style.transform =
       'translate(-50%, -50%) rotate(' + mark.angle + 'rad)';
     marker.classList.toggle('exposed', true);
@@ -1769,8 +1774,9 @@ function frame(time) {
     showMicro();
     showStory(drawDt);
     if (panel && save?.front && valueCollapse(save) >= 2) showCredits();
-    el('discovery-notice').hidden = age >= discoveryNoticeUntil;
-    el('memory-line').hidden = age >= memoryUntil;
+    fade(el('discovery-notice'), age < discoveryNoticeUntil);
+    fade(el('memory-line'), age < memoryUntil);
+    fade(el('message'), age < messageUntil && !!el('message').textContent);
     const light = [0, 0.5, 1].map((delay) =>
       Math.max(0, Math.min(1, (age - delay) * 1.7)),
     );
@@ -1797,7 +1803,7 @@ function frame(time) {
       },
       time / 1000,
     );
-    el('rock-gain').hidden = age - lastRockGain >= 0.7;
+    fade(el('rock-gain'), age - lastRockGain < 0.7);
     const now = Date.now();
     const notice = save?.craftReadyAt ? (now < save.craftReadyAt-fabricationMs+950 ?
       '기본 드릴 제작 시작' : '기본 드릴 제작중') : now < installedUntil ? '기본 드릴 장착함' : '';

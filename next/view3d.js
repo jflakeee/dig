@@ -135,6 +135,7 @@ export function createView3d(canvas) {
         gl_FragColor = vec4(value * tint / 255.0, 1.0);
       }`,
   });
+  const eraTint = [[0.75 / 1.36, 1.29 / 1.36, 1], [1, 1.03 / 1.42, 0.73 / 1.42], [0.81 / 1.53, 1.1 / 1.53, 1]];
   const portalMeshes = new Map();
   const portalGlow = [new THREE.PointLight(0x9adfd0, 0, 10, 1.5), new THREE.PointLight(0x9adfd0, 0, 10, 1.5)];
   scene.add(...portalGlow);
@@ -156,6 +157,8 @@ export function createView3d(canvas) {
       const p = near[i];
       light.intensity = p && p[1] < 12 ? 2.4 * Math.min(1, p[0].radius) : 0;
       if (p) light.position.set(...p[0].point);
+      // The glow takes the colour the portal surface shows in this era.
+      light.color.setRGB(...eraTint[Math.floor(performance.now() / 3000) % 3]);
     });
   }
 
