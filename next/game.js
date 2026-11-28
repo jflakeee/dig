@@ -1760,7 +1760,9 @@ function frame(time) {
   const dt = previous ? Math.min(0.075, (time - previous) / 1000) : 0;
   previous = time;
   tick(dt);
-  if (time - lastDraw >= 33) {
+  // Draw every frame the browser offers; a fixed 33 ms gate skipped to every
+  // third frame at 60 Hz and flickered between 30 and 20 fps.
+  {
     const drawDt = Math.min(0.1, (time - lastDraw) / 1000);
     lastDraw = time;
     if (crossing) showTrainStrip();
@@ -1788,6 +1790,7 @@ function frame(time) {
         minerals: !!save?.front,
         focus: !!fittedAndWorking(save, 'lamp'),
         working,
+        dt: drawDt,
         // Once a drill is mounted the camera stands back far enough for all drills.
         body: save?.front ? {radius: bodyRadius(save), drills: drillCount(save), size: drillSize(save),
           distance: (bodyRadius(save) * 2.4 + drillSize(save) * 1.2) * zoom} : null,

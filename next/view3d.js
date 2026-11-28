@@ -219,18 +219,28 @@ export function createView3d(canvas) {
   resize();
   new ResizeObserver(resize).observe(canvas);
 
+  // Motion state carried between frames: the camera's pulled-in distance and
+  // the drills' orbit and spin, so nothing jumps when targets change.
+  const motion = {world: null, back: 0, outside: false, orbit: 0, orbitSpeed: 0.25, spin: 0, spinSpeed: 0};
+  const damp = (from, to, lambda, dt) => THREE.MathUtils.damp(from, to, lambda, dt);
   return function render(s, now) {
     const {world, pos: center, yaw, pitch, light, working, chains = [], drones: flying = [], contact, minerals, focus, body} = s;
+    const dt = Math.min(0.1, Math.max(0, s.dt ?? 1 / 60));
     const d = forward(yaw, pitch), right = [Math.cos(yaw), 0, -Math.sin(yaw)];
     const up = [-Math.sin(yaw) * Math.sin(pitch), Math.cos(pitch), -Math.cos(yaw) * Math.sin(pitch)];
     // The same third-person camera as the 2D view: straight behind, pulled in front of rock.
-    let pos = center, outside = false;
+    // The camera distance eases: quickly in when rock comes between, slowly back
+    // out. Cockpit and outside views switch at two thresholds so they don't flicker.
+    let pos = center;
+    if (motion.world !== world) Object.assign(motion, {world, back: 0, outside: false});
     if (body && body.distance > 0) {
       const wall = world.trace(center, ...d.map(n => -n), body.distance + 0.2);
-      const back = Math.max(0, Math.min(body.distance, wall ? wall.t - 0.2 : body.distance));
-      outside = back > body.radius * 1.15;
-      if (outside) pos = center.map((n, i) => n - d[i] * back);
-    }
+      const target = Math.max(0, Math.min(body.distance, wall ? wall.t - 0.2 : body.distance));
+      motion.back = target < motion.back ? damp(motion.back, target, 25, dt) : damp(motion.back, target, 4, dt);
+      motion.outside = motion.outside ? motion.back > body.radius * 1.05 : motion.back > body.radius * 1.3;
+    } else motion.outside = false;
+    const outside = motion.outside;
+    if (outside) pos = center.map((n, i) => n - d[i] * motion.back);
     const f = Math.min(w, h) * 0.82;
     camera.fov = 2 * Math.atan(h / 2 / f) * 180 / Math.PI;
     camera.updateProjectionMatrix();
@@ -279,6 +289,11 @@ export function createView3d(canvas) {
       rim.scale.setScalar(body.radius);
       rim.lookAt(center[0] + d[0], center[1] + d[1], center[2] + d[2]);
     }
+    // Orbit and spin speeds ease toward their targets and the angles accumulate.
+    motion.orbitSpeed = damp(motion.orbitSpeed, working ? 1.2 : 0.25, 4, dt);
+    motion.spinSpeed = damp(motion.spinSpeed, working ? 19 : 0, 6, dt);
+    motion.orbit = (motion.orbit + motion.orbitSpeed * dt) % (Math.PI * 2);
+    motion.spin = (motion.spin + motion.spinSpeed * dt) % (Math.PI * 2);
     while (drills.length < (body?.drills ?? 0)) {
       const m = new THREE.Mesh(drillGeometry, drillMaterial);
       m.castShadow = true;
@@ -288,12 +303,12 @@ export function createView3d(canvas) {
     drills.forEach((m, k) => {
       m.visible = outside && k < body.drills;
       if (!m.visible) return;
-      const angle = (k / body.drills) * Math.PI * 2 + 0.6 + now * (working ? 1.2 : 0.25);
+      const angle = (k / body.drills) * Math.PI * 2 + 0.6 + motion.orbit;
       const ring = body.radius * 0.62;
       const base = center.map((n, i) => n + d[i] * body.radius * 0.75 + (right[i] * Math.cos(angle) + up[i] * Math.sin(angle)) * ring);
       m.position.set(...base);
       m.lookAt(base[0] + d[0], base[1] + d[1], base[2] + d[2]);
-      m.rotateZ(working ? now * 19 : 0);
+      m.rotateZ(motion.spin);
       m.scale.setScalar(body.size);
       m.material = s.mounted ? drillMaterial : brokenMaterial;
     });
