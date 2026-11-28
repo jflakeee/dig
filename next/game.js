@@ -18,6 +18,7 @@ import { endingById, endings, epilogue, allEndingsSeen, playable, endingCount } 
 import { portalCost, researchProgress } from './portal.js';
 import { createDirector, settings as storySettings } from './story.js';
 import { energyCap, energyCost } from './energy.js';
+import { turn, upright, edgeRate, edge, turnKeys } from './look.js';
 import { parts, partIds, partsOf, mechanical, shardsPerCeramic, plateHull, partsPerMaintain, partCount } from './parts.js';
 // Whether the buffer covers an operation's energy, and a short reason when not.
 const powered = type => (save?.energy ?? energyCap) >= (energyCost[type] ?? 0);
@@ -1518,6 +1519,7 @@ let pinch = 0;
 // A double click or double tap brings the camera back to the default view.
 function defaultView() {
   setZoom(1);
+  [yaw, pitch] = upright(yaw, pitch);
   message('기본 시야');
 }
 canvas.addEventListener('dblclick', defaultView);
@@ -1542,7 +1544,7 @@ canvas.onpointerdown = (e) => {
     pinch = Math.hypot(...[...touches.values()].reduce((a, b) => [a[0] - b[0], a[1] - b[1]]));
     return;
   }
-  if (touches.size === 1) pointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  if (touches.size === 1) pointer = { id: e.pointerId, x: e.clientX, y: e.clientY, travel: 0 };
 };
 canvas.onpointermove = (e) => {
   if (touches.has(e.pointerId)) touches.set(e.pointerId, [e.clientX, e.clientY]);
@@ -1553,14 +1555,31 @@ canvas.onpointermove = (e) => {
     return;
   }
   if (!pointer || pointer.id !== e.pointerId) return;
-  yaw += (e.clientX - pointer.x) * 0.008;
-  pitch = Math.max(
-    -1.48,
-    Math.min(1.48, pitch - (e.clientY - pointer.y) * 0.008),
-  );
+  [yaw, pitch] = turn(yaw, pitch, (e.clientX - pointer.x) * 0.008, -(e.clientY - pointer.y) * 0.008);
+  pointer.travel += Math.abs(e.clientX - pointer.x) + Math.abs(e.clientY - pointer.y);
   pointer.x = e.clientX;
   pointer.y = e.clientY;
 };
+// Continuous turning: a drag held in the screen's edge band, or arrow keys.
+const heldKeys = new Set();
+window.addEventListener('keydown', e => {
+  if (!turnKeys[e.key] || e.target.closest?.('input, select, textarea, #panel')) return;
+  heldKeys.add(e.key);
+  e.preventDefault();
+});
+window.addEventListener('keyup', e => heldKeys.delete(e.key));
+window.addEventListener('blur', () => heldKeys.clear());
+function keepTurning(dt) {
+  let rx = 0, ry = 0;
+  // Only a real drag turns at the edge, so a tap near the edge never spins the view.
+  if (pointer && pointer.travel > 12) {
+    const box = canvas.getBoundingClientRect();
+    [rx, ry] = edgeRate(pointer.x - box.left, pointer.y - box.top, box.width, box.height);
+    ry = -ry;
+  }
+  for (const k of heldKeys) { rx += turnKeys[k][0]; ry += turnKeys[k][1]; }
+  if (rx || ry) [yaw, pitch] = turn(yaw, pitch, rx * edge.speed * dt, ry * edge.speed * dt);
+}
 function releaseLook() {
   pointer = null;
 }
@@ -1846,6 +1865,7 @@ function frame(time) {
   // third frame at 60 Hz and flickered between 30 and 20 fps.
   {
     const drawDt = Math.min(0.1, (time - lastDraw) / 1000);
+    if (save?.front) keepTurning(drawDt);
     trauma = Math.max(0, trauma - drawDt * 1.2);
     lastDraw = time;
     if (crossing) showTrainStrip();
