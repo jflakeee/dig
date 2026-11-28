@@ -14,13 +14,14 @@
     <main aria-label="채굴 기계 시야">
       <canvas id="scene" aria-label="화면을 드래그해 채굴 방향 변경"></canvas>
       <header>
-        <output id="rock">일반 암석 <b>0</b><span id="rock-gain" class="fades" aria-hidden="true">+1</span></output
-        ><button id="menu" hidden aria-expanded="false">메뉴</button>
+        <output id="rock">일반 암석 <b>0</b><span id="rock-gain" class="fades" aria-hidden="true">+1</span></output>
       </header>
+      <!-- Status at a glance: cargo, drill and energy as gauges. -->
       <div id="quick" hidden>
-        <output id="quick-cargo"></output>
-        <button id="quick-repair" hidden></button>
-        <button id="quick-decompose"></button>
+        <output id="quick-cargo" class="sr-only"></output>
+        <div class="gauge" id="gauge-cargo"><span class="label">화물</span><span class="bar"><i></i></span><b></b></div>
+        <div class="gauge" id="gauge-drill"><span class="label">드릴</span><span class="bar"><i></i></span><b></b></div>
+        <div class="gauge" id="gauge-energy"><span class="label">에너지</span><span class="bar"><i></i></span><b></b></div>
       </div>
       <span id="sensor" role="img" aria-label="중력 포탈 방향" hidden></span>
       <aside>
@@ -30,6 +31,8 @@
         <output id="memory-line" class="fades"></output>
         <output id="micro" role="status" hidden></output>
       </aside>
+      <div class="edge top" aria-hidden="true"></div>
+      <div class="edge bottom" aria-hidden="true"></div>
       <div id="transit-fade" aria-hidden="true"></div>
       <div id="train-strip" role="img" hidden></div>
       <output id="story-line" class="fades" aria-live="polite"></output>
@@ -40,17 +43,30 @@
         <button id="capture" hidden>시료 포집</button>
         <button id="emergency" hidden>긴급 레이저 채굴 <small>1.35초</small></button>
       </footer>
-      <section id="panel" aria-label="메뉴" hidden>
-        <output id="cargo"></output>
-        <output id="materials"></output>
-        <details id="train" hidden>
+      <!-- The thumb zone: quick actions on the left, the menu on the right. -->
+      <nav id="actionbar" aria-label="빠른 조작">
+        <button id="quick-repair" hidden></button>
+        <button id="quick-decompose" hidden></button>
+        <button id="menu" hidden aria-expanded="false" aria-controls="panel">메뉴</button>
+      </nav>
+      <div id="scrim" hidden></div>
+      <section id="panel" aria-label="메뉴" data-tab="work" hidden>
+        <div id="tabs" role="tablist">
+          <button role="tab" data-tab="work" id="tab-work">작업</button>
+          <button role="tab" data-tab="record" id="tab-record">기록·연구</button>
+          <button role="tab" data-tab="trade" id="tab-trade">거래</button>
+          <button role="tab" data-tab="settings" id="tab-settings">설정</button>
+        </div>
+        <output id="cargo" data-tab="work"></output>
+        <output id="materials" data-tab="work"></output>
+        <details id="train" data-tab="work" hidden>
           <summary>화물 <span id="train-summary"></span></summary>
           <p id="train-status"></p>
           <ul id="cargo-list"></ul>
           <button id="add-wagon">화물칸 연결</button>
           <button id="remove-wagon" hidden>마지막 화물칸 분리</button>
         </details>
-        <details id="workshop" hidden>
+        <details id="workshop" data-tab="work" hidden>
           <summary>제작 <span id="craft-summary"></span></summary>
           <ul id="craft-list"></ul>
           <p>강화</p>
@@ -63,7 +79,7 @@
           <button id="fire-ceramic" hidden>세라믹 가열 <small>암석 3개</small></button>
           <button id="repair" hidden>드릴 수리 <small>세라믹 1개</small></button>
         </details>
-        <details id="decomposer" hidden>
+        <details id="decomposer" data-tab="work" hidden>
           <summary>분해기</summary>
           <label for="decompose-source">원료</label>
           <select id="decompose-source"></select>
@@ -71,7 +87,7 @@
           <button id="decompose">원료 1개 분해</button>
           <button id="salvage" hidden>부품으로 회수</button>
         </details>
-        <details id="research" hidden>
+        <details id="research" data-tab="record" hidden>
           <summary>연구 <span id="research-status"></span></summary>
           <label for="research-source">분석 대상</label>
           <select id="research-source"></select>
@@ -91,22 +107,22 @@
             <ul id="memory-list"></ul>
           </details>
         </details>
-        <details id="self-book" hidden>
+        <details id="self-book" data-tab="record" hidden>
           <summary>자기 기억 <span id="self-count"></span></summary>
           <ul id="self-list"></ul>
           <p id="endings-seen" hidden></p>
           <div id="ending-replays"></div>
           <button id="new-cycle" hidden>새 회차 · 기억을 내려놓기</button>
         </details>
-        <details id="arrival-book" hidden>
+        <details id="arrival-book" data-tab="record" hidden>
           <summary>도착 기록</summary>
           <ul id="arrival-list"></ul>
         </details>
-        <details id="element-book" hidden>
+        <details id="element-book" data-tab="record" hidden>
           <summary>원소 도감 <span id="element-count"></span></summary>
           <p id="element-list"></p>
         </details>
-        <details id="trade" hidden>
+        <details id="trade" data-tab="trade" hidden>
           <summary>거래 <span id="credits"></span></summary>
           <p id="trader"></p>
           <ul id="insight-list"></ul>
@@ -122,7 +138,7 @@
           <ul id="lot-list"></ul>
           <ul id="trade-log"></ul>
         </details>
-        <details id="gamble" hidden>
+        <details id="gamble" data-tab="trade" hidden>
           <summary>도박</summary>
           <label for="gamble-category">종류</label>
           <select id="gamble-category"></select>
@@ -134,17 +150,17 @@
           <button id="gamble-draw">추첨</button>
           <ul id="gamble-log"></ul>
         </details>
-        <details id="stored" hidden>
+        <details id="stored" data-tab="trade" hidden>
           <summary>보관 물품 <span id="stored-count"></span></summary>
           <ul id="fitted-list"></ul>
           <ul id="stored-list"></ul>
           <button id="equip-head" hidden></button>
         </details>
-        <details id="discoveries" hidden>
+        <details id="discoveries" data-tab="record" hidden>
           <summary>발견 도감</summary>
           <ul id="discovery-list"></ul>
         </details>
-        <details id="settings">
+        <details id="settings" data-tab="settings">
           <summary>설정</summary>
           <button id="motion-setting">움직임 줄이기</button>
           <button id="reset">처음부터 다시 시작</button>

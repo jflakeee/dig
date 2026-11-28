@@ -113,6 +113,7 @@ try {
   assert.ok(Math.hypot(...restored.session.pos.map((n,i) => n - checkpoint.session.pos[i])) < 3);
   assert.equal(restored.session.yaw, checkpoint.session.yaw);
   await page.locator('#menu').click();
+  await page.locator('#tab-settings').click();
   await page.locator('#settings > summary').click();
   await page.locator('#reset').click();
   const beforeConfirm = (await read()).blocksMined;
@@ -188,7 +189,9 @@ try {
   assert.ok(!owner.items.some(slot => slot.id === item.id));
   await page.reload();
   await page.locator('#menu').click();
+  await page.locator('#tab-work').click();
   await page.locator('#cargo').filter({hasText:'× 1'}).waitFor();
+  await page.locator('#tab-record').click();
   await page.getByText('발견 도감', {exact:true}).click();
   await page.locator('#discovery-list li').filter({hasText:'누적 회수 1개'}).waitFor();
   item.speed = [6,0,0];
@@ -233,6 +236,7 @@ try {
   assert.equal(await page.locator('#emergency').isVisible(),false);
   await page.locator('#menu').click();
   assert.equal(await page.locator('#repair').isVisible(),false);
+  await page.locator('#tab-work').click();
   await page.locator('#workshop summary').click();
   await page.locator('#fire-ceramic').click();
   await page.locator('#repair').waitFor();
@@ -241,6 +245,7 @@ try {
   assert.equal(fired.ceramic,1);
   await page.reload();
   await page.locator('#menu').click();
+  await page.locator('#tab-work').click();
   await page.locator('#workshop summary').click();
   await page.locator('#repair').click();
   // A repair wears the maximum by up to 3% and mends to that maximum.
