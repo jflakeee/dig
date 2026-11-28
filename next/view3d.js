@@ -7,6 +7,10 @@
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { identify } from './chunk-terrain.js';
 import { stoneCount, stoneVariant, stonePlanes } from './rock-shapes.js';
 import { mineralTint } from './minerals.js';
@@ -20,6 +24,26 @@ const theme = {
   lava: 0xda5927, unstable: 0xdfaa59, drone: 0x9aa7ab, signal: 0x9ff0c8, dust: 0xdecfae,
   items: [0xa2bdca, 0xb5a68c, 0x9c8fbd], lamp: 0xffe6c4, heat: 0xff7a35,
 };
+
+// Quality tiers: internal resolution (a share of the device pixel ratio with a
+// floor), shadows and their map size, and HDR bloom. `auto` starts at medium
+// and moves by measured frame time.
+export const tiers = {
+  low: {scale: 0.45, floor: 0.6, shadows: false, map: 256, bloom: false},
+  medium: {scale: 0.55, floor: 0.7, shadows: true, map: 512, bloom: false},
+  high: {scale: 0.8, floor: 1, shadows: true, map: 1024, bloom: true},
+};
+export const tierOrder = ['low', 'medium', 'high'];
+// Auto quality: frame time averaged over a window, after a settling pause.
+// Below `down` fps it steps down; above `up` it steps up, but never back up
+// to a tier it already left for being slow, so it does not oscillate.
+export const autoRule = {settle: 3, window: 4, down: 28, up: 57};
+export function nextAutoTier(tier, fps, slowTiers, rule = autoRule) {
+  const i = tierOrder.indexOf(tier);
+  if (fps < rule.down && i > 0) return tierOrder[i - 1];
+  if (fps > rule.up && i < tierOrder.length - 1 && !slowTiers.includes(tierOrder[i + 1])) return tierOrder[i + 1];
+  return tier;
+}
 
 // The convex stone of one variant: the unit cell cut by its corner planes.
 function stoneGeometry(variant) {
@@ -45,6 +69,7 @@ export function createView3d(canvas) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
+  renderer.info.autoReset = false;
   // A 2D layer over the WebGL canvas for dust, the laser and the cockpit drill.
   const overlay = document.createElement('canvas');
   overlay.className = 'scene-overlay';
@@ -270,17 +295,73 @@ export function createView3d(canvas) {
   const q = new THREE.Quaternion(), e = new THREE.Euler(), v3 = new THREE.Vector3(), scale = new THREE.Vector3();
 
   let lastTime = 0, w = 0, h = 0;
+  // Quality: the chosen setting (auto or a tier) and the tier in use.
+  const quality = {choice: 'auto', tier: 'medium', slow: [], since: 0, frames: 0, time: 0, last: 0};
+  let composer = null, bloom = null;
   function resize() {
     const cw = canvas.clientWidth, ch = canvas.clientHeight;
     if (!cw || !ch) return;
     // Rendered at a modest internal resolution: sharp enough, cheap on phones.
     // A floor keeps 1x screens from dropping to half resolution.
-    const ratio = Math.max(0.7, Math.min(window.devicePixelRatio || 1, 2) * 0.55);
+    const t = tiers[quality.tier];
+    const ratio = Math.max(t.floor, Math.min(window.devicePixelRatio || 1, 2) * t.scale);
     renderer.setPixelRatio(ratio);
     renderer.setSize(cw, ch, false);
+    if (composer) {
+      composer.setPixelRatio(ratio);
+      composer.setSize(cw, ch);
+    }
     w = overlay.width = Math.round(cw * ratio);
     h = overlay.height = Math.round(ch * ratio);
     camera.aspect = cw / ch;
+  }
+  // HDR bloom, made on first use: the scene renders to a half-float target,
+  // only light brighter than white blooms (lamp hotspots, lava, portals, the
+  // cut), then the output pass tone-maps as the plain renderer would.
+  function makeComposer() {
+    composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.45, 0.4, 1);
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
+  }
+  function applyTier(tier) {
+    const t = tiers[tier], before = tiers[quality.tier];
+    quality.tier = tier;
+    if (t.bloom && !composer) makeComposer();
+    if (t.shadows !== workLamp.castShadow || t.map !== workLamp.shadow.mapSize.x) {
+      workLamp.castShadow = t.shadows;
+      workLamp.shadow.mapSize.set(t.map, t.map);
+      workLamp.shadow.map?.dispose();
+      workLamp.shadow.map = null;
+      // Shadow use is part of each shader program.
+      if (t.shadows !== before.shadows) scene.traverse(o => { if (o.material) o.material.needsUpdate = true; });
+      shadowDirty = true;
+    }
+    resize();
+    Object.assign(quality, {since: 0, frames: 0, time: 0});
+  }
+  function setQuality(choice) {
+    quality.choice = tiers[choice] ? choice : 'auto';
+    quality.slow = [];
+    applyTier(quality.choice === 'auto' ? 'medium' : quality.choice);
+  }
+  // Auto quality measures real frame gaps; long gaps (a hidden tab) don't count.
+  function measure() {
+    const t = performance.now(), gap = (t - quality.last) / 1000;
+    quality.last = t;
+    if (quality.choice !== 'auto' || !(gap > 0) || gap > 0.25) return;
+    quality.since += gap;
+    if (quality.since < autoRule.settle) return;
+    quality.frames++;
+    quality.time += gap;
+    if (quality.time < autoRule.window) return;
+    const fps = quality.frames / quality.time;
+    const tier = nextAutoTier(quality.tier, fps, quality.slow);
+    if (tier !== quality.tier) {
+      if (tierOrder.indexOf(tier) < tierOrder.indexOf(quality.tier)) quality.slow.push(quality.tier);
+      applyTier(tier);
+    } else Object.assign(quality, {frames: 0, time: 0});
   }
   resize();
   new ResizeObserver(resize).observe(canvas);
@@ -302,7 +383,13 @@ export function createView3d(canvas) {
   // the drills' orbit and spin, so nothing jumps when targets change.
   const motion = {world: null, back: 0, outside: false, orbit: 0, orbitSpeed: 0.25, spin: 0, spinSpeed: 0};
   const damp = (from, to, lambda, dt) => THREE.MathUtils.damp(from, to, lambda, dt);
-  return function render(s, now) {
+  render.setQuality = setQuality;
+  render.quality = () => ({choice: quality.choice, tier: quality.tier});
+  return render;
+  function render(s, now) {
+    measure();
+    // Counted per frame, across every pass of the bloom chain.
+    renderer.info.reset();
     const {world, pos: center, yaw, pitch, light, working, chains = [], drones: flying = [], contact, minerals, focus, body} = s;
     const dt = Math.min(0.1, Math.max(0, s.dt ?? 1 / 60));
     const d = forward(yaw, pitch), right = [Math.cos(yaw), 0, -Math.sin(yaw)];
@@ -480,7 +567,8 @@ export function createView3d(canvas) {
     renderer.shadowMap.needsUpdate = shadowDirty || ++shadowFrame % 3 === 0;
     shadowDirty = false;
     const t0 = performance.now();
-    renderer.render(scene, camera);
+    if (tiers[quality.tier].bloom) composer.render(dt);
+    else renderer.render(scene, camera);
     drawOverlay(s, now, pos, outside, d, chains);
     if (perf) {
       perf.render += performance.now() - t0;
@@ -490,7 +578,8 @@ export function createView3d(canvas) {
         const info = renderer.info;
         perf.box.textContent = 'fps ' + (perf.frames * 1000 / span).toFixed(0) + ' · render ' + (perf.render / perf.frames).toFixed(1) + 'ms\n' +
           'calls ' + info.render.calls + ' · tris ' + info.render.triangles + ' · programs ' + info.programs.length + '\n' +
-          'rebuild max ' + perf.rebuild.toFixed(1) + 'ms ×' + perf.rebuilds + ' · ratio ' + renderer.getPixelRatio().toFixed(2);
+          'rebuild max ' + perf.rebuild.toFixed(1) + 'ms ×' + perf.rebuilds + ' · ratio ' + renderer.getPixelRatio().toFixed(2) +
+          '\nquality ' + quality.choice + ' · ' + quality.tier;
         Object.assign(perf, {frames: 0, render: 0, rebuild: 0, rebuilds: 0, since: performance.now()});
       }
     }
