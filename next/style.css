@@ -8,7 +8,8 @@
   --memory: #c9b8e8;
   --surface: #0b1113f2;
   --surface-2: #162022;
-  --line: #3c4848;
+  /* Sheet and control edges: at least 3:1 against the surface (WCAG 1.4.11). */
+  --line: #697574;
   --gap: 8px;
   --pad: 12px;
   --gutter-l: max(16px, env(safe-area-inset-left));
@@ -31,6 +32,8 @@ body {
   overflow: hidden;
   word-break: keep-all;
   overflow-wrap: anywhere;
+  /* No faux italics on Korean glyphs; faux bold stays for fonts without a bold face. */
+  font-synthesis: weight;
 }
 main {
   height: 100dvh;
@@ -70,7 +73,6 @@ header button {
 #rock {
   color: #adb9b5;
   font-size: 0.85rem;
-  letter-spacing: 0.08em;
   text-shadow: 0 1px 4px black;
 }
 #rock b {
@@ -477,7 +479,6 @@ section button {
 #ending-title {
   margin: 0;
   font-size: 1.4em;
-  letter-spacing: 0.08em;
 }
 #ending-skip {
   position: absolute;
