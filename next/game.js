@@ -47,6 +47,26 @@ function makeRenderer(canvas) {
   }
   return createView(canvas);
 }
+// Reduced motion: follows the device unless the settings menu overrides it
+// (auto / on / off, kept on this device). Every motion effect reads this flag.
+const motionKey = 'dig-reduced-motion', motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
+let motionChoice = 'auto', reducedMotion = false;
+try { motionChoice = localStorage.getItem(motionKey) ?? 'auto'; } catch { /* storage may be blocked */ }
+function applyMotion() {
+  reducedMotion = motionChoice === 'on' || (motionChoice === 'auto' && motionQuery.matches);
+  document.body.classList.toggle('reduced', reducedMotion);
+  el('motion-setting').textContent = '움직임 줄이기 · ' + {auto: '기기 설정 따름', on: '켬', off: '끔'}[motionChoice] +
+    (motionChoice === 'auto' ? (reducedMotion ? ' (켜짐)' : ' (꺼짐)') : '');
+}
+motionQuery.addEventListener('change', applyMotion);
+el('motion-setting').onclick = () => {
+  motionChoice = {auto: 'on', on: 'off', off: 'auto'}[motionChoice] ?? 'auto';
+  try { localStorage.setItem(motionKey, motionChoice); } catch { /* storage may be blocked */ }
+  applyMotion();
+};
+applyMotion();
+// Camera trauma from hits (decays over time) and the moment of the last cut.
+let trauma = 0, lastCut = -Infinity;
 let canvas = el('scene');
 const render = makeRenderer(canvas);
 canvas = el('scene');
@@ -680,7 +700,7 @@ function playEnding(id) {
   if (!ending) return;
   const box = el('ending'), canvas = el('ending-canvas'), line = el('ending-line'), title = el('ending-title');
   const ctx = canvas.getContext('2d');
-  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const still = reducedMotion;
   const lineSeconds = 4.5, start = performance.now();
   box.hidden = false;
   title.textContent = '';
@@ -1568,8 +1588,15 @@ function move(dt, speed = velocity) {
   if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) < 0) entered = false;
   if (entered && entered.sign * (pos[entered.axis] - entered.point[entered.axis]) >= bodyRadius(save) && !busy) {
     velocity = [0, 0, 0];
+    // The view dims as the machine goes through and comes back on arrival.
+    if (!reducedMotion) {
+      el('transit-fade').classList.add('on');
+      // Never left dark if the save fails.
+      setTimeout(() => el('transit-fade').classList.remove('on'), 3000);
+    }
     write({type: 'transit', radius: entered.radius, strength: entered.strength}, () => {
       loadWorld();
+      setTimeout(() => el('transit-fade').classList.remove('on'), reducedMotion ? 0 : 200);
       message('포탈 통과 완료');
       // The clock cannot tell whether this is the past or the future.
       el('memory-line').textContent = arrivalReading(save.marketSeed, save.trips).line;
@@ -1638,6 +1665,8 @@ function tick(dt) {
     [hazard.damage,hazard.blast ? 'blast' : 'lava',world.hazard?.point]]) {
     if (loss <= 0) continue;
     hull = Math.max(0,hull-loss);
+    // Collisions and blasts shake the camera in proportion to the damage; lava burns without a jolt.
+    if (cause !== 'lava') trauma = Math.min(1, trauma + loss / 15);
     if (!hull) {
       write({type:'reboot',loss:cargoLoss(cause,origin,pos,yaw,pitch)}, () => {
         age = 0;
@@ -1725,6 +1754,7 @@ function tick(dt) {
       // Every drill, and every bore level, cuts one more of the nearest blocks.
       const cut = blocks.slice(0, cellsPerStroke(save)).filter(cell => world.dig(...cell));
       if (!cut.length) return;
+      lastCut = age;
       write({type: 'drill', cell: cut[0], cells: cut}, () => {
         releaseChains();
         if (save.drillCondition === 0) message('드릴 파손 · 긴급 레이저 또는 메뉴에서 수리');
@@ -1769,6 +1799,7 @@ function frame(time) {
   // third frame at 60 Hz and flickered between 30 and 20 fps.
   {
     const drawDt = Math.min(0.1, (time - lastDraw) / 1000);
+    trauma = Math.max(0, trauma - drawDt * 1.2);
     lastDraw = time;
     if (crossing) showTrainStrip();
     showMicro();
@@ -1792,6 +1823,7 @@ function frame(time) {
         chains: chainReach(),
         drones: dronePoints(),
         contact, fracture, age,
+        trauma, sinceCut: age - lastCut, reduced: reducedMotion,
         mounted: !!save?.front && save.drillCondition !== 0,
         minerals: !!save?.front,
         focus: !!fittedAndWorking(save, 'lamp'),

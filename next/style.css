@@ -512,3 +512,23 @@ section button {
   pointer-events: none;
   z-index: 9;
 }
+
+/* Portal transit: the view dims and comes back instead of cutting. */
+#transit-fade {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease-out;
+}
+#transit-fade.on {
+  opacity: 1;
+  transition: opacity 0.2s ease-in;
+}
+/* Reduced motion, from the device or the in-game setting. */
+.reduced .fades,
+.reduced .fades.shown,
+.reduced #transit-fade {
+  transition: none;
+}

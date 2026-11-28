@@ -326,6 +326,14 @@ export function createView3d(canvas) {
     camera.position.set(...pos);
     camera.up.set(...up);
     camera.lookAt(pos[0] + d[0], pos[1] + d[1], pos[2] + d[2]);
+    // Hits shake the view: rotation grows with trauma squared, up to about 1.5°.
+    // Reduced motion keeps the camera still.
+    if (s.trauma > 0 && !s.reduced) {
+      const a = 0.026 * s.trauma * s.trauma;
+      camera.rotateX(a * Math.sin(now * 37));
+      camera.rotateY(a * Math.sin(now * 29 + 1.3));
+      camera.rotateZ(a * 0.5 * Math.sin(now * 23 + 2.1));
+    }
 
     // Terrain, rebuilt when cells open, the camera crosses a cell, or the world changes.
     const cell = pos.map(Math.floor).join();
@@ -352,7 +360,9 @@ export function createView3d(canvas) {
     portalMaterial.uniforms.era.value = Math.floor(now / 3) % 3;
 
     // Contact heat glows and lights the cut.
-    heatLight.intensity = contact ? 4 * contact.heat : 0;
+    // Each cut gives a short pulse of heat light; the drills kick forward with it.
+    const cutPulse = Math.exp(-(s.sinceCut ?? Infinity) * 14);
+    heatLight.intensity = contact ? 4 * contact.heat + 2.5 * cutPulse : 0;
     contactGlow.visible = !!contact;
     if (contact) {
       heatLight.position.set(...contact.point);
@@ -387,7 +397,8 @@ export function createView3d(canvas) {
       if (!m.visible) return;
       const angle = (k / body.drills) * Math.PI * 2 + 0.6 + motion.orbit;
       const ring = body.radius * 0.62;
-      const base = center.map((n, i) => n + d[i] * body.radius * 0.75 + (right[i] * Math.cos(angle) + up[i] * Math.sin(angle)) * ring);
+      const kick = s.reduced ? 0 : 0.07 * body.size * cutPulse;
+      const base = center.map((n, i) => n + d[i] * (body.radius * 0.75 + kick) + (right[i] * Math.cos(angle) + up[i] * Math.sin(angle)) * ring);
       m.position.set(...base);
       m.lookAt(base[0] + d[0], base[1] + d[1], base[2] + d[2]);
       m.rotateZ(motion.spin);
