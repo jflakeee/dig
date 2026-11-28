@@ -25,6 +25,87 @@ const theme = {
   items: [0xa2bdca, 0xb5a68c, 0x9c8fbd], lamp: 0xffe6c4, heat: 0xff7a35,
 };
 
+// Terrain stones, drawn one of two ways behind the same begin/add/end calls.
+// Where the GPU can draw many meshes in one call (WEBGL_multi_draw), every
+// stone of every variant is one BatchedMesh: one draw for the view and one
+// for the shadow, culled and sorted per stone. Elsewhere (Firefox) each
+// variant is an InstancedMesh, which costs a draw per visible variant but
+// never a draw per stone, as BatchedMesh would without the extension.
+export function createTerrain(renderer, scene, material, batched = renderer.extensions.has('WEBGL_multi_draw')) {
+  const geometries = Array.from({length: stoneCount}, (_, v) => stoneGeometry(v));
+  return batched ? batchedTerrain(scene, material, geometries) : instancedTerrain(scene, material, geometries);
+}
+function batchedTerrain(scene, material, geometries) {
+  const vertices = geometries.reduce((n, g) => n + g.attributes.position.count, 0);
+  let room = 2048;
+  const mesh = new THREE.BatchedMesh(room, vertices, 0, material);
+  const ids = geometries.map(g => mesh.addGeometry(g));
+  mesh.castShadow = mesh.receiveShadow = true;
+  scene.add(mesh);
+  // Instances are pooled: the first `used` show stones, the rest are hidden.
+  let made = 0, used = 0, shown = 0;
+  return {
+    kind: 'batched',
+    begin() { used = 0; },
+    add(v, matrix, color) {
+      if (used === made) {
+        if (made === room) mesh.setInstanceCount(room *= 2);
+        mesh.addInstance(ids[v]);
+        made++;
+      } else mesh.setGeometryIdAt(used, ids[v]);
+      mesh.setMatrixAt(used, matrix);
+      mesh.setColorAt(used, color);
+      if (used >= shown) mesh.setVisibleAt(used, true);
+      used++;
+    },
+    end() {
+      for (let i = used; i < shown; i++) mesh.setVisibleAt(i, false);
+      shown = used;
+      mesh.visible = used > 0;
+      if (used) mesh.computeBoundingSphere();
+    },
+    count: () => used,
+  };
+}
+function instancedTerrain(scene, material, geometries) {
+  const meshes = geometries.map(g => {
+    const mesh = new THREE.InstancedMesh(g, material, 256);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.count = 0;
+    // Every terrain mesh carries instance colours from the start, so all 64
+    // share one shader program instead of switching between draws.
+    mesh.setColorAt(0, new THREE.Color(1, 1, 1));
+    scene.add(mesh);
+    return mesh;
+  });
+  const counts = new Array(meshes.length).fill(0);
+  return {
+    kind: 'instanced',
+    begin() { counts.fill(0); },
+    add(v, matrix, color) {
+      const mesh = meshes[v];
+      // A variant past its room drops the stone, as before.
+      if (counts[v] >= mesh.instanceMatrix.count) return;
+      mesh.setMatrixAt(counts[v], matrix);
+      mesh.setColorAt(counts[v], color);
+      counts[v]++;
+    },
+    end() {
+      meshes.forEach((mesh, v) => {
+        mesh.count = counts[v];
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.instanceColor.needsUpdate = true;
+        // Bounds follow the instances, so variants off screen or outside the
+        // shadow camera are skipped in both passes.
+        if (counts[v]) mesh.computeBoundingSphere();
+        mesh.visible = counts[v] > 0;
+      });
+    },
+    count: () => counts.reduce((a, b) => a + b, 0),
+  };
+}
+
 // Quality tiers: internal resolution (a share of the device pixel ratio with a
 // floor), shadows and their map size, and HDR bloom. `auto` starts at medium
 // and moves by measured frame time.
@@ -123,7 +204,7 @@ export function createView3d(canvas) {
   // Fine colour grain on every stone, from its world position: cheap detail without textures.
   stoneMaterial.onBeforeCompile = shader => {
     shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vStoneWorld;')
-      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvStoneWorld = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;');
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvec4 stoneAt = vec4(transformed, 1.0);\n#ifdef USE_BATCHING\nstoneAt = batchingMatrix * stoneAt;\n#endif\n#ifdef USE_INSTANCING\nstoneAt = instanceMatrix * stoneAt;\n#endif\nvStoneWorld = (modelMatrix * stoneAt).xyz;');
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>
       varying vec3 vStoneWorld;
       float stoneHash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }`)
@@ -131,17 +212,7 @@ export function createView3d(canvas) {
       vec3 grain = floor(vStoneWorld * 9.0);
       diffuseColor.rgb *= 0.86 + 0.28 * stoneHash(grain) + 0.06 * stoneHash(floor(vStoneWorld * 2.5));`);
   };
-  const stones = Array.from({length: stoneCount}, (_, v) => {
-    const mesh = new THREE.InstancedMesh(stoneGeometry(v), stoneMaterial, 256);
-    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    mesh.castShadow = mesh.receiveShadow = true;
-    mesh.count = 0;
-    // Every terrain mesh carries instance colours from the start, so all 64
-    // share one shader program instead of switching between draws.
-    mesh.setColorAt(0, new THREE.Color(1, 1, 1));
-    scene.add(mesh);
-    return mesh;
-  });
+  const terrain = createTerrain(renderer, scene, stoneMaterial);
   const matrix = new THREE.Matrix4(), color = new THREE.Color();
   let built = {version: -1, cell: '', at: -Infinity, world: null, minerals: null};
   // Shadows re-render when the lamps move or the terrain changes, and otherwise
@@ -161,7 +232,7 @@ export function createView3d(canvas) {
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
   }
   function rebuild(world, around, minerals) {
-    const counts = new Array(stoneCount).fill(0);
+    terrain.begin();
     const [cx, cy, cz] = around.map(Math.floor);
     const open = (x, y, z) => !world.solid(x, y, z);
     for (let x = cx - reach; x <= cx + reach; x++)
@@ -169,27 +240,15 @@ export function createView3d(canvas) {
         for (let z = cz - reach; z <= cz + reach; z++) {
           if ((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2 > reach * reach || open(x, y, z)) continue;
           if (!open(x + 1, y, z) && !open(x - 1, y, z) && !open(x, y + 1, z) && !open(x, y - 1, z) && !open(x, y, z + 1) && !open(x, y, z - 1)) continue;
-          const v = stoneVariant(x, y, z), mesh = stones[v];
-          if (counts[v] >= mesh.instanceMatrix.count) continue;
           matrix.makeTranslation(x + 0.5, y + 0.5, z + 0.5);
-          mesh.setMatrixAt(counts[v], matrix);
           // Exposed faces show the block's base mineral once a drill is mounted.
           const found = minerals ? world.mineralAt(x, y, z) : null;
           const tint = found ? mineralTint(found.base) : [1, 1, 1];
           const g = 0.82 + 0.36 * shade(x, y, z);
           color.setRGB(theme.stone[0] * g * 1.12 * tint[0], theme.stone[1] * g * 1.01 * tint[1], theme.stone[2] * g * 0.86 * tint[2]);
-          mesh.setColorAt(counts[v], color);
-          counts[v]++;
+          terrain.add(stoneVariant(x, y, z), matrix, color);
         }
-    stones.forEach((mesh, v) => {
-      mesh.count = counts[v];
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.instanceColor.needsUpdate = true;
-      // Bounds follow the instances, so variants off screen or outside the
-      // shadow camera are skipped in both passes.
-      if (counts[v]) mesh.computeBoundingSphere();
-      mesh.visible = counts[v] > 0;
-    });
+    terrain.end();
     shadowDirty = true;
   }
 
@@ -579,7 +638,7 @@ export function createView3d(canvas) {
         perf.box.textContent = 'fps ' + (perf.frames * 1000 / span).toFixed(0) + ' · render ' + (perf.render / perf.frames).toFixed(1) + 'ms\n' +
           'calls ' + info.render.calls + ' · tris ' + info.render.triangles + ' · programs ' + info.programs.length + '\n' +
           'rebuild max ' + perf.rebuild.toFixed(1) + 'ms ×' + perf.rebuilds + ' · ratio ' + renderer.getPixelRatio().toFixed(2) +
-          '\nquality ' + quality.choice + ' · ' + quality.tier;
+          '\nquality ' + quality.choice + ' · ' + quality.tier + ' · terrain ' + terrain.kind + ' ' + terrain.count();
         Object.assign(perf, {frames: 0, render: 0, rebuild: 0, rebuilds: 0, since: performance.now()});
       }
     }
