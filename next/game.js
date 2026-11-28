@@ -70,6 +70,26 @@ let trauma = 0, lastCut = -Infinity;
 let canvas = el('scene');
 const render = makeRenderer(canvas);
 canvas = el('scene');
+// Graphics quality: auto or a fixed tier, kept on this device. The 2D view
+// has no tiers, so the setting is hidden there.
+const qualityKey = 'dig-quality', qualityNames = {auto: '자동', low: '낮음', medium: '보통', high: '높음'};
+function showQuality() {
+  const q = render.quality?.();
+  el('quality-setting').hidden = !q;
+  if (q) el('quality-setting').textContent = '화질 · ' + qualityNames[q.choice] + (q.choice === 'auto' ? ' (' + qualityNames[q.tier] + ')' : '');
+}
+if (render.setQuality) {
+  let choice = 'auto';
+  try { choice = localStorage.getItem(qualityKey) ?? 'auto'; } catch { /* storage may be blocked */ }
+  render.setQuality(choice);
+  el('quality-setting').onclick = () => {
+    const next = {auto: 'low', low: 'medium', medium: 'high', high: 'auto'}[render.quality().choice] ?? 'auto';
+    render.setQuality(next);
+    try { localStorage.setItem(qualityKey, next); } catch { /* storage may be blocked */ }
+    showQuality();
+  };
+}
+showQuality();
 let save,
   fatal = false,
   busy = false,
@@ -819,6 +839,7 @@ el('quick-decompose').onclick = () => {
 function showTrain() {
   const box = el('train');
   box.hidden = !save?.front;
+  if (panel) showQuality();
   if (!panel || box.hidden) return;
   const length = trainLength(save), next = length + 3;
   el('train-summary').textContent = '· ' + length + ' m · ' + load(save) + ' / ' + capacity(save);
