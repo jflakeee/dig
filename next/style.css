@@ -101,7 +101,8 @@ button:focus-visible {
   background: #ffce86;
 }
 aside {
-  top: 16%;
+  /* Below the quick bar, so notices never sit on its buttons. */
+  top: max(16%, calc(max(20px, env(safe-area-inset-top)) + 150px));
   left: 5%;
   right: 5%;
   text-align: center;
@@ -341,7 +342,6 @@ section {
   font-style: italic;
   text-shadow: 0 1px 3px #000;
   pointer-events: none;
-  transition: opacity 0.8s;
 }
 /* Always on screen outside the menu: cargo, drill repair and decompose all. */
 #quick {
@@ -366,6 +366,9 @@ section {
   font-size: 12px;
 }
 #cargo-list button.keep {
+  display: inline-block;
+  width: auto;
+  margin: 0 0 0 6px;
   min-height: 28px;
   padding: 2px 8px;
   font-size: 12px;
@@ -471,4 +474,28 @@ section button {
 }
 [hidden] {
   display: none !important;
+}
+
+/* Lines that come and go fade: shown by a class, never by hiding outright,
+   so the transition can run. Gone lines take no clicks and no reader time. */
+.fades {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.35s ease-in, visibility 0s linear 0.35s;
+}
+.fades.shown {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.2s ease-out;
+}
+/* Menu section headers are full touch targets. */
+#panel summary {
+  padding: 10px 0;
+  line-height: 24px;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fades, .fades.shown {
+    transition: none;
+  }
 }
