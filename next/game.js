@@ -777,11 +777,15 @@ let confirmLong = false;
 function showQuick() {
   const box = el('quick');
   box.hidden = !save?.front || panel;
+  el('quick-repair').closest('nav').classList.toggle('open', panel);
   if (box.hidden) return;
   const text = '화물 ' + load(save) + ' / ' + capacity(save) + ' · 에너지 ' + save.energy + ' · 드릴 ' + (save.drillCondition ?? 100) + '%' +
     (save.drillMax <= 0 ? ' · 수명 다함, 드릴 헤드 교체 필요' : save.drillMax < 100 ? ' / 최대 ' + save.drillMax + '%' : '');
   if (el('quick-cargo').textContent !== text) el('quick-cargo').textContent = text;
   const condition = save.drillCondition ?? 100, ceramic = save.ceramic ?? 0;
+  gauge('cargo', load(save) / Math.max(1, capacity(save)), load(save) + '/' + capacity(save), load(save) >= capacity(save));
+  gauge('drill', condition / 100, save.drillMax <= 0 ? '수명 다함' : condition + '%', condition < 30 || save.drillMax <= 0, save.drillMax / 100);
+  gauge('energy', save.energy / energyCap, String(save.energy), save.energy < energyCost.decompose);
   const canFire = save.rocks >= ceramicRocks(save) && powered('fire-ceramic');
   el('quick-repair').hidden = condition >= save.drillMax || save.drillMax <= 0;
   el('quick-repair').textContent = ceramic >= ceramicPerRepair ? '드릴 수리 · 세라믹 1' : canFire ? '드릴 수리 · 세라믹 가열부터' : '드릴 수리 · 재료 부족';
@@ -789,6 +793,17 @@ function showQuick() {
   const n = Math.min(decomposeQueue(save).length, Math.floor(save.energy / energyCost.decompose));
   el('quick-decompose').textContent = n ? '전체 분해 · ' + n + '개' : decomposeQueue(save).length ? lowPower('decompose') : '분해할 화물 없음';
   el('quick-decompose').disabled = !n;
+  el('quick-decompose').hidden = !decomposeQueue(save).length;
+}
+// One status gauge: fill 0..1, a short value, a warning tint and an optional
+// ceiling mark (the drill's shrinking maximum).
+function gauge(name, fill, value, warn, ceiling = 1) {
+  const box = el('gauge-' + name);
+  box.style.setProperty('--fill', Math.max(0, Math.min(1, fill)).toFixed(3));
+  box.style.setProperty('--ceiling', Math.max(0, Math.min(1, ceiling)).toFixed(3));
+  box.classList.toggle('warn', !!warn);
+  const b = box.lastElementChild;
+  if (b.textContent !== value) b.textContent = value;
 }
 el('quick-repair').onclick = () => {
   if ((save.ceramic ?? 0) >= ceramicPerRepair) {
@@ -1051,6 +1066,8 @@ function hud() {
   el('menu').hidden = !save?.front;
   el('menu').setAttribute('aria-expanded', String(panel));
   el('panel').hidden = !panel;
+  el('scrim').hidden = !panel;
+  document.body.classList.toggle('sheet-open', panel);
   showDiscoveries();
   showDecomposer();
   showStored();
@@ -1436,6 +1453,15 @@ el('menu').onclick = () => {
   panel = !panel;
   hud();
 };
+// Menu tabs: the panel shows only the sections of the chosen tab. The choice
+// is remembered on this device.
+function chooseTab(tab) {
+  el('panel').dataset.tab = tab;
+  for (const b of el('tabs').children) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
+  try { localStorage.setItem('dig-menu-tab', tab); } catch { /* session only */ }
+}
+for (const b of el('tabs').children) b.onclick = () => { chooseTab(b.dataset.tab); el('panel').scrollTop = 0; };
+try { chooseTab(localStorage.getItem('dig-menu-tab') || 'work'); } catch { chooseTab('work'); }
 // A click anywhere outside the menu closes it; the menu button toggles it itself.
 // Checked while capturing, before any handler can rebuild the clicked element.
 document.addEventListener('click', e => {
