@@ -80,12 +80,25 @@ export function createView3d(canvas) {
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.castShadow = mesh.receiveShadow = true;
     mesh.count = 0;
-    mesh.frustumCulled = false;
+    // Every terrain mesh carries instance colours from the start, so all 64
+    // share one shader program instead of switching between draws.
+    mesh.setColorAt(0, new THREE.Color(1, 1, 1));
     scene.add(mesh);
     return mesh;
   });
   const matrix = new THREE.Matrix4(), color = new THREE.Color();
   let built = {version: -1, cell: '', at: -Infinity, world: null, minerals: null};
+  // Shadows re-render when the lamps move or the terrain changes, and otherwise
+  // every third frame for moving debris and drills.
+  renderer.shadowMap.autoUpdate = false;
+  let shadowDirty = true, shadowFrame = 0;
+  const lastLamp = new THREE.Vector3(Infinity, 0, 0), lastAim = new THREE.Vector3();
+  // ?perf shows draw calls, triangles, programs and timings.
+  const perf = new URLSearchParams(location.search).has('perf') ? (() => {
+    const box = Object.assign(document.createElement('pre'), {className: 'perf'});
+    document.body.append(box);
+    return {box, frames: 0, render: 0, rebuild: 0, rebuilds: 0, since: performance.now()};
+  })() : null;
   function shade(x, y, z) {
     let h = Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(z, 1274126177);
     h = Math.imul(h ^ (h >>> 13), 1274126177);
@@ -115,8 +128,13 @@ export function createView3d(canvas) {
     stones.forEach((mesh, v) => {
       mesh.count = counts[v];
       mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.instanceColor.needsUpdate = true;
+      // Bounds follow the instances, so variants off screen or outside the
+      // shadow camera are skipped in both passes.
+      if (counts[v]) mesh.computeBoundingSphere();
+      mesh.visible = counts[v] > 0;
     });
+    shadowDirty = true;
   }
 
   // Portals: a shader surface on the opening and a coloured glow.
@@ -212,7 +230,8 @@ export function createView3d(canvas) {
     const cw = canvas.clientWidth, ch = canvas.clientHeight;
     if (!cw || !ch) return;
     // Rendered at a modest internal resolution: sharp enough, cheap on phones.
-    const ratio = Math.min(window.devicePixelRatio || 1, 2) * 0.55;
+    // A floor keeps 1x screens from dropping to half resolution.
+    const ratio = Math.max(0.7, Math.min(window.devicePixelRatio || 1, 2) * 0.55);
     renderer.setPixelRatio(ratio);
     renderer.setSize(cw, ch, false);
     w = overlay.width = Math.round(cw * ratio);
@@ -222,6 +241,17 @@ export function createView3d(canvas) {
   resize();
   new ResizeObserver(resize).observe(canvas);
 
+  // A lost WebGL context is let go of and, once restored, everything is rebuilt.
+  canvas.addEventListener('webglcontextlost', e => e.preventDefault());
+  canvas.addEventListener('webglcontextrestored', () => { built.version = -1; shadowDirty = true; });
+  // Compile every material once up front so the hull, drills and hazard
+  // don't stall the first frame they appear in.
+  {
+    const hidden = [];
+    scene.traverse(o => { if (!o.visible) { hidden.push(o); o.visible = true; } });
+    renderer.compile(scene, camera);
+    for (const o of hidden) o.visible = false;
+  }
   // Motion state carried between frames: the camera's pulled-in distance and
   // the drills' orbit and spin, so nothing jumps when targets change.
   const motion = {world: null, back: 0, outside: false, orbit: 0, orbitSpeed: 0.25, spin: 0, spinSpeed: 0};
@@ -254,7 +284,9 @@ export function createView3d(canvas) {
     // Terrain, rebuilt when cells open, the camera crosses a cell, or the world changes.
     const cell = pos.map(Math.floor).join();
     if ((built.world !== world || built.version !== world.version || built.cell !== cell || built.minerals !== minerals) && now - built.at >= rebuildGap) {
+      const t0 = performance.now();
       rebuild(world, pos, minerals);
+      if (perf) { perf.rebuild = Math.max(perf.rebuild, performance.now() - t0); perf.rebuilds++; }
       built = {version: world.version, cell, at: now, world, minerals};
     }
 
@@ -377,8 +409,29 @@ export function createView3d(canvas) {
     attr.needsUpdate = true;
     dust.material.opacity = 0.45 * light[0];
 
+    const core = lamps[2];
+    if (core.position.distanceToSquared(lastLamp) > 1e-6 || core.target.position.distanceToSquared(lastAim) > 1e-6) {
+      shadowDirty = true;
+      lastLamp.copy(core.position);
+      lastAim.copy(core.target.position);
+    }
+    renderer.shadowMap.needsUpdate = shadowDirty || ++shadowFrame % 3 === 0;
+    shadowDirty = false;
+    const t0 = performance.now();
     renderer.render(scene, camera);
     drawOverlay(s, now, pos, outside, d, chains);
+    if (perf) {
+      perf.render += performance.now() - t0;
+      perf.frames++;
+      const span = performance.now() - perf.since;
+      if (span > 500) {
+        const info = renderer.info;
+        perf.box.textContent = 'fps ' + (perf.frames * 1000 / span).toFixed(0) + ' · render ' + (perf.render / perf.frames).toFixed(1) + 'ms\n' +
+          'calls ' + info.render.calls + ' · tris ' + info.render.triangles + ' · programs ' + info.programs.length + '\n' +
+          'rebuild max ' + perf.rebuild.toFixed(1) + 'ms ×' + perf.rebuilds + ' · ratio ' + renderer.getPixelRatio().toFixed(2);
+        Object.assign(perf, {frames: 0, render: 0, rebuild: 0, rebuilds: 0, since: performance.now()});
+      }
+    }
   };
 
   // The 2D layer: laser and sparks, fracture grit, chains and the cockpit drill.
