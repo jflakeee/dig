@@ -219,11 +219,16 @@ export function createView3d(canvas) {
   const rim = new THREE.Mesh(new THREE.TorusGeometry(1, 0.018, 6, 64), new THREE.MeshStandardMaterial({color: 0xc7d0ca, metalness: 0.8, roughness: 0.3}));
   const drillGeometry = new THREE.ConeGeometry(0.24, 0.55, 7).rotateX(Math.PI / 2).translate(0, 0, 0.275);
   const drillMaterial = new THREE.MeshStandardMaterial({color: theme.drill, metalness: 0.9, roughness: 0.32});
-  // A faint studio reflection on the machine's metal only; the scene and the rock get none.
-  const machineEnv = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
-  for (const m of [drillMaterial, hull.material, rim.material]) {
-    m.envMap = machineEnv;
-    m.envMapIntensity = 0.08;
+  // A faint studio reflection on the machine's metal only; the scene and the rock
+  // get none. Made the first time the machine is seen from outside, not at load.
+  let machineEnv = null;
+  function reflectMachine() {
+    machineEnv = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+    for (const m of [drillMaterial, brokenMaterial, hull.material, rim.material]) {
+      m.envMap = machineEnv;
+      m.envMapIntensity = 0.08;
+      m.needsUpdate = true;
+    }
   }
   const brokenMaterial = new THREE.MeshStandardMaterial({color: 0x4a3b33, metalness: 0.5, roughness: 0.7});
   const drills = [];
@@ -283,14 +288,16 @@ export function createView3d(canvas) {
   // A lost WebGL context is let go of and, once restored, everything is rebuilt.
   canvas.addEventListener('webglcontextlost', e => e.preventDefault());
   canvas.addEventListener('webglcontextrestored', () => { built.version = -1; shadowDirty = true; });
-  // Compile every material once up front so the hull, drills and hazard
-  // don't stall the first frame they appear in.
-  {
+  // Compile every material once, after the page has loaded and gone idle, so
+  // the hull, drills and hazard don't stall the frame they first appear in
+  // and loading itself stays quick.
+  const warm = () => {
     const hidden = [];
     scene.traverse(o => { if (!o.visible) { hidden.push(o); o.visible = true; } });
     renderer.compile(scene, camera);
     for (const o of hidden) o.visible = false;
-  }
+  };
+  (window.requestIdleCallback ?? (f => setTimeout(f, 1500)))(warm, {timeout: 4000});
   // Motion state carried between frames: the camera's pulled-in distance and
   // the drills' orbit and spin, so nothing jumps when targets change.
   const motion = {world: null, back: 0, outside: false, orbit: 0, orbitSpeed: 0.25, spin: 0, spinSpeed: 0};
@@ -356,6 +363,7 @@ export function createView3d(canvas) {
 
     // Machine and drills from outside; drills orbit off the centre and spin while cutting.
     hull.visible = rim.visible = outside;
+    if (outside && !machineEnv) reflectMachine();
     if (outside) {
       hull.position.set(...center);
       hull.scale.setScalar(body.radius);
